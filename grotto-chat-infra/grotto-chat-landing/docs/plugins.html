@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plugin Development — MobulaDock Docs</title>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+  <button class="sidebar-toggle" aria-label="Toggle navigation">&#9776;</button>
+  <div class="sidebar-overlay"></div>
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <a href="../index.html" class="sidebar-logo"><span>MobulaDock</span></a>
+      <div class="sidebar-label">Documentation</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Guides</div>
+      <a href="index.html">Home</a>
+      <a href="server.html">Server</a>
+      <a href="infrastructure.html">Infrastructure</a>
+      <a href="desktop.html">Desktop Client</a>
+      <a href="android.html">Android Client</a>
+      <a href="plugins.html" class="active">Plugin Development</a>
+    </nav>
+    <div class="sidebar-toc">
+      <div class="nav-section">On this page</div>
+      <a href="#introduction">Introduction</a>
+      <a href="#quickstart">Quick Start</a>
+      <a href="#types">Plugin Types</a>
+      <a href="#plugin-json">plugin.json Reference</a>
+      <a href="#api-common">API: Common</a>
+      <a href="#api-bot">API: Bot</a>
+      <a href="#api-client">API: Client Extension</a>
+      <a href="#api-server">API: Server Extension</a>
+      <a href="#permissions">Permissions</a>
+      <a href="#events">Events</a>
+      <a href="#file-structure">File Structure</a>
+      <a href="#hot-reload">Hot Reload</a>
+      <a href="#sandbox">Sandbox &amp; Limits</a>
+      <a href="#examples">More Examples</a>
+    </div>
+    <div class="sidebar-footer">
+      <a href="../index.html">&larr; Back to MobulaDock</a>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+
+      <h1>Plugin Development Guide</h1>
+      <p class="page-subtitle">
+        Build bots, client extensions, and server extensions for MobulaDock using JavaScript (ES2023). Plugins run in a sandboxed QuickJS runtime.
+      </p>
+
+      <!-- ============================================================ -->
+      <!-- INTRODUCTION -->
+      <!-- ============================================================ -->
+      <h2 id="introduction">Introduction</h2>
+
+      <p>
+        The MobulaDock plugin system lets you extend every layer of the platform. There are three types of plugins, each with different capabilities and constraints:
+      </p>
+
+      <ul>
+        <li><strong>Bot plugins</strong> &mdash; standalone programs that connect to the server as their own user and can participate in channels, respond to commands, and integrate with external services.</li>
+        <li><strong>Client extensions</strong> &mdash; run inside a user's client process, adding local commands, UI tweaks, and custom behavior without requiring a separate connection.</li>
+        <li><strong>Server extensions</strong> &mdash; run inside the server process and handle administrative tasks like channel management, rate limiting, and audit logging. Because of end-to-end encryption, server extensions <strong>never</strong> see message content.</li>
+      </ul>
+
+      <p>
+        All plugins are written in JavaScript (ES2023) and execute in a sandboxed <a href="https://bellard.org/quickjs/" target="_blank">QuickJS</a> runtime. Each plugin gets its own isolated heap with strict resource limits, so a misbehaving plugin cannot crash the host or interfere with other plugins.
+      </p>
+
+      <div class="callout info">
+        <div class="callout-title">E2E Encryption Principle</div>
+        <p>The MobulaDock server is a relay &mdash; it never decrypts messages. This means server extensions can only access metadata (who sent a message, to which channel, timestamps), never the actual content. Bot plugins and client extensions <em>can</em> see content because they operate on the client side of the encryption boundary.</p>
+      </div>
+
+      <div class="diagram">
+        <div class="diagram-title">Plugin Architecture</div>
+        <div class="diagram-row">
+          <div class="diagram-box accent">Bot Plugin<small>Own client process</small></div>
+          <div class="diagram-arrow">&rarr;</div>
+          <div class="diagram-box success">Server (Relay)<small>TLS, metadata only</small></div>
+          <div class="diagram-arrow">&larr;</div>
+          <div class="diagram-box accent">User Client<small>Desktop / Android</small></div>
+        </div>
+        <div class="diagram-arrow-down">&darr;</div>
+        <div class="diagram-row">
+          <div class="diagram-box warning">Client Extension<small>Runs in user's process</small></div>
+        </div>
+        <div class="diagram-arrow-down">&darr;</div>
+        <div class="diagram-row">
+          <div class="diagram-box muted">Server Extension<small>Runs in server process, metadata only</small></div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- QUICK START -->
+      <!-- ============================================================ -->
+      <h2 id="quickstart">Quick Start: Your First Bot</h2>
+
+      <p>
+        This walkthrough creates a complete DiceBot that responds to <code>/roll</code> commands. By the end you will have a working bot that rolls dice and reports results in any channel it joins.
+      </p>
+
+      <h3>Step 1: Create the Plugin Directory</h3>
+
+      <p>Create a folder for your plugin. The bot host scans subdirectories of its plugins path for <code>plugin.json</code> files.</p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+        </div>
+        <pre><code>mkdir -p ~/.config/mobuladock/plugins/dicebot/</code></pre>
+      </div>
+
+      <h3>Step 2: Create plugin.json</h3>
+
+      <p>Every plugin requires a <code>plugin.json</code> manifest. This tells the host what to load, what permissions the plugin needs, and what commands it registers.</p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">json</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>{
+  "name": "dicebot",
+  "display_name": "Dice Bot",
+  "version": "1.0.0",
+  "type": "bot",
+  "entry": "main.js",
+  "description": "Roll dice with /roll command",
+  "min_host_version": "0.1.0",
+  "bot": {
+    "user_id": "DiceBot",
+    "auto_join_channels": ["#general"]
+  },
+  "commands": [
+    {
+      "name": "/roll",
+      "description": "Roll dice (e.g. /roll 2d6)",
+      "usage": "/roll [NdN | N]"
+    }
+  ],
+  "permissions": ["read_messages", "send_messages", "register_commands"]
+}</code></pre>
+      </div>
+
+      <h3>Step 3: Create main.js</h3>
+
+      <p>The entry point script. The <code>mobuladock</code> global object provides all the APIs you need to interact with the server and handle commands.</p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>// DiceBot — simple dice roller
+
+function parseDice(input) {
+    if (!input) return { count: 1, sides: 6 };
+    var match = input.match(/^(\d+)d(\d+)$/i);
+    if (!match) {
+        var n = parseInt(input);
+        if (!isNaN(n) && n >= 1 && n <= 100) return { count: 1, sides: n };
+        return null;
+    }
+    var count = parseInt(match[1]);
+    var sides = parseInt(match[2]);
+    if (count < 1 || count > 20 || sides < 2 || sides > 1000) return null;
+    return { count: count, sides: sides };
+}
+
+function rollDice(count, sides) {
+    var rolls = [];
+    for (var i = 0; i < count; i++) {
+        rolls.push(Math.floor(Math.random() * sides) + 1);
+    }
+    return rolls;
+}
+
+mobuladock.onCommand("/roll", {
+    description: "Roll NdN dice",
+    usage: "/roll [NdN]"
+}, function(ctx) {
+    var dice = parseDice(ctx.args[0]);
+    if (!dice) {
+        mobuladock.sendMessage(ctx.channel,
+            ctx.sender + ": Invalid format. Usage: /roll 2d6");
+        return;
+    }
+    var rolls = rollDice(dice.count, dice.sides);
+    var total = 0;
+    for (var i = 0; i < rolls.length; i++) total += rolls[i];
+    if (dice.count === 1) {
+        mobuladock.sendMessage(ctx.channel,
+            ctx.sender + ": d" + dice.sides + " = " + total);
+    } else {
+        mobuladock.sendMessage(ctx.channel,
+            ctx.sender + ": " + dice.count + "d" + dice.sides
+            + " = " + rolls.join(" + ") + " = " + total);
+    }
+});
+
+mobuladock.log.info("DiceBot loaded!");</code></pre>
+      </div>
+
+      <h3>Step 4: Launch the Bot Host</h3>
+
+      <p>Start the bot host process, pointing it at your plugins directory. The bot host manages connections, encryption, and plugin lifecycles.</p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+        </div>
+        <pre><code>mobuladock-bot-host --config bot-host.toml --plugins ./plugins/</code></pre>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-title">Hot Reload During Development</div>
+        <p>Use hot reload during development &mdash; edit your JS and the bot reloads without disconnecting. See the <a href="#hot-reload">Hot Reload</a> section for details.</p>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- PLUGIN TYPES -->
+      <!-- ============================================================ -->
+      <h2 id="types">Plugin Types</h2>
+
+      <p>
+        The three plugin types serve different purposes and operate at different layers. Choose the type that matches your use case.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Bot</th>
+            <th>Client Extension</th>
+            <th>Server Extension</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Runs in</strong></td>
+            <td>Own process</td>
+            <td>User's client</td>
+            <td>Server</td>
+          </tr>
+          <tr>
+            <td><strong>Has network connection</strong></td>
+            <td><span class="check">Yes</span> (own)</td>
+            <td><span class="cross">No</span> (uses host)</td>
+            <td><span class="cross">No</span> (uses host)</td>
+          </tr>
+          <tr>
+            <td><strong>Sees message content</strong></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="cross">No</span> (E2E)</td>
+          </tr>
+          <tr>
+            <td><strong>Can send messages</strong></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="cross">No</span></td>
+          </tr>
+          <tr>
+            <td><strong>Can manage channels</strong></td>
+            <td><span class="cross">No</span></td>
+            <td><span class="cross">No</span></td>
+            <td><span class="check">Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Can kick/ban users</strong></td>
+            <td><span class="cross">No</span></td>
+            <td><span class="cross">No</span></td>
+            <td><span class="check">Yes</span></td>
+          </tr>
+          <tr>
+            <td><strong>Active when</strong></td>
+            <td>Bot host runs</td>
+            <td>User is online</td>
+            <td>Server runs</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Bot Plugins</h3>
+      <p>
+        Bots connect to the server as their own user identity. They are ideal for interactive commands, FAQ bots, and integrations with external services like weather APIs, RSS feeds, or CI/CD pipelines. A bot participates in channels just like a regular user and can read and send encrypted messages.
+      </p>
+
+      <h3>Client Extensions</h3>
+      <p>
+        Client extensions run inside the user's own client process. They can add local slash commands (like <code>/clear</code> or <code>/theme</code>), modify how messages are displayed, add syntax highlighting, or trigger desktop notifications. Client extensions do not create additional server connections.
+      </p>
+
+      <h3>Server Extensions</h3>
+      <p>
+        Server extensions run inside the server process and have access to administrative functions: creating and deleting channels, kicking and banning users, rate limiting, and audit logging. Because MobulaDock uses end-to-end encryption, server extensions only see metadata &mdash; they cannot read message content.
+      </p>
+
+      <!-- ============================================================ -->
+      <!-- PLUGIN.JSON REFERENCE -->
+      <!-- ============================================================ -->
+      <h2 id="plugin-json">plugin.json Reference</h2>
+
+      <p>
+        The <code>plugin.json</code> manifest is the only required configuration file. It tells the plugin host how to load, identify, and sandbox your plugin.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>name</code></td>
+            <td>string</td>
+            <td><span class="check">Yes</span></td>
+            <td>Unique plugin identifier, lowercase alphanumeric and hyphens only.</td>
+          </tr>
+          <tr>
+            <td><code>display_name</code></td>
+            <td>string</td>
+            <td>No</td>
+            <td>Human-readable name shown in UI and logs.</td>
+          </tr>
+          <tr>
+            <td><code>version</code></td>
+            <td>string</td>
+            <td><span class="check">Yes</span></td>
+            <td>Semantic version (e.g. <code>"1.0.0"</code>).</td>
+          </tr>
+          <tr>
+            <td><code>type</code></td>
+            <td>string</td>
+            <td><span class="check">Yes</span></td>
+            <td>One of <code>"bot"</code>, <code>"client_extension"</code>, or <code>"server_extension"</code>.</td>
+          </tr>
+          <tr>
+            <td><code>entry</code></td>
+            <td>string</td>
+            <td><span class="check">Yes</span></td>
+            <td>Path to the main JavaScript file, relative to the plugin directory.</td>
+          </tr>
+          <tr>
+            <td><code>description</code></td>
+            <td>string</td>
+            <td>No</td>
+            <td>Short description of what the plugin does.</td>
+          </tr>
+          <tr>
+            <td><code>min_host_version</code></td>
+            <td>string</td>
+            <td>No</td>
+            <td>Minimum required version of the host (bot host, client, or server).</td>
+          </tr>
+          <tr>
+            <td><code>bot</code></td>
+            <td>object</td>
+            <td>No</td>
+            <td>Bot-specific settings. Only used when <code>type</code> is <code>"bot"</code>.</td>
+          </tr>
+          <tr>
+            <td><code>bot.user_id</code></td>
+            <td>string</td>
+            <td>No</td>
+            <td>The username the bot will use when connecting to the server.</td>
+          </tr>
+          <tr>
+            <td><code>bot.auto_join_channels</code></td>
+            <td>string[]</td>
+            <td>No</td>
+            <td>List of channels to join automatically on startup.</td>
+          </tr>
+          <tr>
+            <td><code>commands</code></td>
+            <td>array</td>
+            <td>No</td>
+            <td>List of slash commands the plugin registers.</td>
+          </tr>
+          <tr>
+            <td><code>commands[].name</code></td>
+            <td>string</td>
+            <td>No</td>
+            <td>Command name including the leading slash (e.g. <code>"/roll"</code>).</td>
+          </tr>
+          <tr>
+            <td><code>commands[].description</code></td>
+            <td>string</td>
+            <td>No</td>
+            <td>Short description shown in help/autocomplete.</td>
+          </tr>
+          <tr>
+            <td><code>commands[].usage</code></td>
+            <td>string</td>
+            <td>No</td>
+            <td>Usage syntax (e.g. <code>"/roll [NdN]"</code>).</td>
+          </tr>
+          <tr>
+            <td><code>permissions</code></td>
+            <td>string[]</td>
+            <td>No</td>
+            <td>List of permissions the plugin requires. See <a href="#permissions">Permissions</a>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============================================================ -->
+      <!-- API: COMMON -->
+      <!-- ============================================================ -->
+      <h2 id="api-common">JavaScript API: Common</h2>
+
+      <p>
+        The <code>mobuladock</code> global object is injected into every plugin's runtime. The following functions are available to all plugin types.
+      </p>
+
+      <h3>mobuladock.on(event_name, callback)</h3>
+      <p>Register a handler for a named event. See <a href="#events">Events</a> for the full list.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.on("message", function(event) {
+    mobuladock.log.info("Message from " + event.sender + ": " + event.text);
+});</code></pre>
+      </div>
+
+      <h3>mobuladock.onCommand(name, options, callback)</h3>
+      <p>Register a slash command. The <code>options</code> object accepts <code>description</code> and <code>usage</code> strings. The callback receives a context object with <code>channel</code>, <code>sender</code>, and <code>args</code> (an array of arguments).</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.onCommand("/ping", {
+    description: "Check if the bot is alive",
+    usage: "/ping"
+}, function(ctx) {
+    mobuladock.sendMessage(ctx.channel, ctx.sender + ": Pong!");
+});</code></pre>
+      </div>
+
+      <h3>mobuladock.sendMessage(channel, text)</h3>
+      <p>Send a message to a channel or user. For channels, prefix with <code>#</code>. For direct messages, use the user ID.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.sendMessage("#general", "Hello, world!");
+mobuladock.sendMessage("alice", "This is a direct message.");</code></pre>
+      </div>
+
+      <h3>mobuladock.getConfig()</h3>
+      <p>Returns the contents of the plugin's <code>config.toml</code> file as a JavaScript object. Returns an empty object if no config file exists.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>var config = mobuladock.getConfig();
+var apiKey = config.api_key || "default-key";</code></pre>
+      </div>
+
+      <h3>mobuladock.getPluginDir()</h3>
+      <p>Returns the absolute path to the plugin's root directory.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>var dir = mobuladock.getPluginDir();
+mobuladock.log.info("Running from: " + dir);</code></pre>
+      </div>
+
+      <h3>mobuladock.getDataDir()</h3>
+      <p>Returns the absolute path to the plugin's <code>data/</code> directory. This is the only location where file I/O is allowed.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>var dataDir = mobuladock.getDataDir();
+// dataDir === "/home/user/.config/mobuladock/plugins/mybot/data/"</code></pre>
+      </div>
+
+      <h3>mobuladock.log.info / warn / error / debug(msg)</h3>
+      <p>Structured logging with severity levels. Log output is tagged with the plugin name and written to the host's log stream.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.log.info("Bot started successfully");
+mobuladock.log.warn("Config file missing, using defaults");
+mobuladock.log.error("Failed to fetch API data");
+mobuladock.log.debug("Received event: " + JSON.stringify(event));</code></pre>
+      </div>
+
+      <h3>mobuladock.setTimeout / setInterval / clearTimeout / clearInterval</h3>
+      <p>Standard timer functions. Intervals and timeouts are automatically cleaned up when a plugin is unloaded.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>var timerId = mobuladock.setInterval(function() {
+    mobuladock.sendMessage("#general", "Hourly reminder: stay hydrated!");
+}, 3600000);
+
+// Cancel when no longer needed
+mobuladock.clearInterval(timerId);</code></pre>
+      </div>
+
+      <h3>mobuladock.http.get(url, options) / mobuladock.http.post(url, body, options)</h3>
+      <p>Make HTTP requests. Requires the <code>http_request</code> permission. Returns a Promise that resolves with <code>{ status, body, headers }</code>. Subject to rate limiting and timeout restrictions (see <a href="#sandbox">Sandbox</a>).</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.http.get("https://api.example.com/data", {
+    headers: { "Authorization": "Bearer " + token }
+}).then(function(res) {
+    var data = JSON.parse(res.body);
+    mobuladock.log.info("Got " + data.items.length + " items");
+}).catch(function(err) {
+    mobuladock.log.error("HTTP request failed: " + err.message);
+});
+
+mobuladock.http.post("https://api.example.com/webhook",
+    JSON.stringify({ text: "Hello" }),
+    { headers: { "Content-Type": "application/json" } }
+);</code></pre>
+      </div>
+
+      <h3>mobuladock.fs.readFile(path) / mobuladock.fs.writeFile(path, content)</h3>
+      <p>Read and write files within the plugin's <code>data/</code> directory. Paths are relative to <code>data/</code>. Requires <code>file_read</code> or <code>file_write</code> permission respectively. Files are limited to 1 MB.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>// Save state
+var state = { lastRun: Date.now(), counter: 42 };
+mobuladock.fs.writeFile("state.json", JSON.stringify(state));
+
+// Load state
+var raw = mobuladock.fs.readFile("state.json");
+if (raw) {
+    var loaded = JSON.parse(raw);
+    mobuladock.log.info("Counter: " + loaded.counter);
+}</code></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- API: BOT -->
+      <!-- ============================================================ -->
+      <h2 id="api-bot">JavaScript API: Bot</h2>
+
+      <p>
+        The following functions are available only to bot plugins (type <code>"bot"</code>). They provide control over the bot's identity and presence on the server.
+      </p>
+
+      <h3>mobuladock.bot.userId</h3>
+      <p>Read-only property containing the bot's user ID string, as configured in <code>plugin.json</code>.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.log.info("Running as: " + mobuladock.bot.userId);</code></pre>
+      </div>
+
+      <h3>mobuladock.bot.joinChannel(channel)</h3>
+      <p>Join a channel at runtime. The bot will begin receiving messages from the channel.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.bot.joinChannel("#support");</code></pre>
+      </div>
+
+      <h3>mobuladock.bot.leaveChannel(channel)</h3>
+      <p>Leave a channel. The bot will stop receiving messages from the channel.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.bot.leaveChannel("#old-channel");</code></pre>
+      </div>
+
+      <h3>mobuladock.bot.setPresence(status)</h3>
+      <p>Set the bot's presence status. Valid values are <code>"online"</code> and <code>"away"</code>.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>// Go away during maintenance
+mobuladock.bot.setPresence("away");
+
+// Come back
+mobuladock.bot.setPresence("online");</code></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- API: CLIENT EXTENSION -->
+      <!-- ============================================================ -->
+      <h2 id="api-client">JavaScript API: Client Extension</h2>
+
+      <p>
+        The following functions are available only to client extensions (type <code>"client_extension"</code>). They provide read access to the client's current state and the ability to show notifications.
+      </p>
+
+      <h3>mobuladock.client.activeChannel()</h3>
+      <p>Returns the name of the channel the user currently has focused.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>var channel = mobuladock.client.activeChannel();
+mobuladock.log.info("User is viewing: " + channel);</code></pre>
+      </div>
+
+      <h3>mobuladock.client.onlineUsers()</h3>
+      <p>Returns an array of user ID strings for all currently online users.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>var users = mobuladock.client.onlineUsers();
+mobuladock.log.info(users.length + " users online");</code></pre>
+      </div>
+
+      <h3>mobuladock.client.channels()</h3>
+      <p>Returns an array of channel name strings the user has joined.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>var channels = mobuladock.client.channels();
+// ["#general", "#dev", "#random"]</code></pre>
+      </div>
+
+      <h3>mobuladock.client.notify(text)</h3>
+      <p>Display a notification in the client's status bar. Useful for transient alerts that should not be stored in chat history.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.client.notify("Theme changed to dark mode");</code></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- API: SERVER EXTENSION -->
+      <!-- ============================================================ -->
+      <h2 id="api-server">JavaScript API: Server Extension</h2>
+
+      <p>
+        The following functions are available only to server extensions (type <code>"server_extension"</code>). These provide administrative control over the server.
+      </p>
+
+      <div class="callout danger">
+        <div class="callout-title">No Message Content Access</div>
+        <p>Server extensions <strong>never</strong> have access to message content. This is enforced at the protocol level &mdash; the server only relays encrypted payloads. Server extension event handlers receive metadata (sender, channel, timestamp) but the <code>text</code> field is always empty.</p>
+      </div>
+
+      <h3>mobuladock.server.kickUser(user_id, reason)</h3>
+      <p>Disconnect a user from the server with an optional reason message.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.server.kickUser("spammer123", "Flooding the channel");</code></pre>
+      </div>
+
+      <h3>mobuladock.server.banUser(user_id, reason)</h3>
+      <p>Ban a user from the server. Banned users cannot reconnect until the ban is lifted.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.server.banUser("spammer123", "Repeated violations");</code></pre>
+      </div>
+
+      <h3>mobuladock.server.createChannel(channel_id)</h3>
+      <p>Create a new channel on the server. Channel IDs must start with <code>#</code>.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.server.createChannel("#project-alpha");</code></pre>
+      </div>
+
+      <h3>mobuladock.server.deleteChannel(channel_id)</h3>
+      <p>Delete a channel from the server. All members are removed.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.server.deleteChannel("#archived-project");</code></pre>
+      </div>
+
+      <h3>mobuladock.server.onlineUsers()</h3>
+      <p>Returns an array of user ID strings for all currently connected users.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>var users = mobuladock.server.onlineUsers();
+mobuladock.log.info("Connected users: " + users.length);</code></pre>
+      </div>
+
+      <h3>mobuladock.server.channelMembers(channel_id)</h3>
+      <p>Returns an array of user ID strings for all members of a given channel.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>var members = mobuladock.server.channelMembers("#general");
+mobuladock.log.info("#general has " + members.length + " members");</code></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- PERMISSIONS -->
+      <!-- ============================================================ -->
+      <h2 id="permissions">Permissions</h2>
+
+      <p>
+        Plugins must declare the permissions they require in <code>plugin.json</code>. The host will refuse to load a plugin that uses APIs it has not declared permissions for. Not all permissions are available to all plugin types.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Permission</th>
+            <th>Bot</th>
+            <th>Client Ext</th>
+            <th>Server Ext</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>read_messages</code></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="cross">No</span></td>
+            <td>Receive and read message content.</td>
+          </tr>
+          <tr>
+            <td><code>send_messages</code></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="cross">No</span></td>
+            <td>Send messages to channels and users.</td>
+          </tr>
+          <tr>
+            <td><code>register_commands</code></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="cross">No</span></td>
+            <td>Register slash commands.</td>
+          </tr>
+          <tr>
+            <td><code>manage_channels</code></td>
+            <td><span class="cross">No</span></td>
+            <td><span class="cross">No</span></td>
+            <td><span class="check">Yes</span></td>
+            <td>Create and delete channels.</td>
+          </tr>
+          <tr>
+            <td><code>manage_users</code></td>
+            <td><span class="cross">No</span></td>
+            <td><span class="cross">No</span></td>
+            <td><span class="check">Yes</span></td>
+            <td>Kick and ban users.</td>
+          </tr>
+          <tr>
+            <td><code>http_request</code></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td>Make outbound HTTP requests.</td>
+          </tr>
+          <tr>
+            <td><code>file_read</code></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td>Read files from the plugin's data directory.</td>
+          </tr>
+          <tr>
+            <td><code>file_write</code></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td><span class="check">Yes</span></td>
+            <td>Write files to the plugin's data directory.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============================================================ -->
+      <!-- EVENTS -->
+      <!-- ============================================================ -->
+      <h2 id="events">Events</h2>
+
+      <p>
+        Events are the primary way plugins receive information from the host. Use <code>mobuladock.on(event_name, callback)</code> to register handlers. A plugin can register multiple handlers for the same event.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Available To</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>message</code></td>
+            <td>Bot, Client Ext</td>
+            <td>A message was sent in a channel the plugin is watching.</td>
+          </tr>
+          <tr>
+            <td><code>user_joined</code></td>
+            <td>All</td>
+            <td>A user joined a channel.</td>
+          </tr>
+          <tr>
+            <td><code>user_left</code></td>
+            <td>All</td>
+            <td>A user left a channel.</td>
+          </tr>
+          <tr>
+            <td><code>presence_changed</code></td>
+            <td>All</td>
+            <td>A user's presence status changed (online/away).</td>
+          </tr>
+          <tr>
+            <td><code>channel_created</code></td>
+            <td>All</td>
+            <td>A new channel was created on the server.</td>
+          </tr>
+          <tr>
+            <td><code>channel_deleted</code></td>
+            <td>All</td>
+            <td>A channel was deleted from the server.</td>
+          </tr>
+          <tr>
+            <td><code>connection_established</code></td>
+            <td>Server Ext</td>
+            <td>A new client connected to the server.</td>
+          </tr>
+          <tr>
+            <td><code>connection_dropped</code></td>
+            <td>Server Ext</td>
+            <td>A client disconnected from the server.</td>
+          </tr>
+          <tr>
+            <td><code>voice_room_joined</code></td>
+            <td>All</td>
+            <td>A user joined a voice room.</td>
+          </tr>
+          <tr>
+            <td><code>voice_room_left</code></td>
+            <td>All</td>
+            <td>A user left a voice room.</td>
+          </tr>
+          <tr>
+            <td><code>auth_success</code></td>
+            <td>Server Ext</td>
+            <td>A user successfully authenticated.</td>
+          </tr>
+          <tr>
+            <td><code>auth_failure</code></td>
+            <td>Server Ext</td>
+            <td>An authentication attempt failed.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Event Callback Object</h3>
+      <p>
+        Every event callback receives a single object with the following fields. Not all fields are populated for every event type.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>type</code></td>
+            <td>string</td>
+            <td>The event type name (e.g. <code>"message"</code>, <code>"user_joined"</code>).</td>
+          </tr>
+          <tr>
+            <td><code>channel</code></td>
+            <td>string</td>
+            <td>The channel where the event occurred, if applicable.</td>
+          </tr>
+          <tr>
+            <td><code>sender</code></td>
+            <td>string</td>
+            <td>The user ID of the user who triggered the event.</td>
+          </tr>
+          <tr>
+            <td><code>text</code></td>
+            <td>string</td>
+            <td>Message content (only for <code>message</code> events, empty in server extensions).</td>
+          </tr>
+          <tr>
+            <td><code>timestamp</code></td>
+            <td>number</td>
+            <td>Unix timestamp in milliseconds.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.on("message", function(event) {
+    mobuladock.log.info("[" + event.channel + "] " + event.sender + ": " + event.text);
+});
+
+mobuladock.on("user_joined", function(event) {
+    mobuladock.log.info(event.sender + " joined " + event.channel
+        + " at " + new Date(event.timestamp).toISOString());
+});
+
+mobuladock.on("presence_changed", function(event) {
+    mobuladock.log.info(event.sender + " is now " + event.text);
+});</code></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- FILE STRUCTURE -->
+      <!-- ============================================================ -->
+      <h2 id="file-structure">File Structure</h2>
+
+      <p>
+        A plugin directory follows this layout. Only <code>plugin.json</code> and the entry point script are required; everything else is optional.
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">text</span>
+        </div>
+        <pre><code>my-plugin/
+├── plugin.json        — required: metadata and configuration
+├── main.js            — required: entry point script
+├── config.toml        — optional: plugin configuration file
+├── lib/               — optional: additional JS modules
+│   └── utils.js
+└── data/              — runtime: persistent plugin data (auto-created)
+    └── state.json</code></pre>
+      </div>
+
+      <p>Key points about the file structure:</p>
+      <ul>
+        <li><strong>plugin.json</strong> must be at the root of the plugin directory. The host scans for this file to discover plugins.</li>
+        <li><strong>Entry point</strong> (usually <code>main.js</code>) is loaded and executed when the plugin starts. The filename is configured via the <code>entry</code> field in <code>plugin.json</code>.</li>
+        <li><strong>config.toml</strong> is parsed and made available via <code>mobuladock.getConfig()</code>. Use it for API keys, thresholds, and other tunable settings so users can customize behavior without editing code.</li>
+        <li><strong>lib/</strong> contains additional JavaScript modules. Use <code>require("./lib/utils.js")</code> to load them.</li>
+        <li><strong>data/</strong> is the only directory where <code>mobuladock.fs</code> can read and write files. It is created automatically on first write. File I/O is sandboxed to this directory &mdash; attempts to access paths outside it will fail.</li>
+      </ul>
+
+      <!-- ============================================================ -->
+      <!-- HOT RELOAD -->
+      <!-- ============================================================ -->
+      <h2 id="hot-reload">Hot Reload</h2>
+
+      <p>
+        During development, you can edit your plugin's JavaScript files and the host will automatically reload the plugin without dropping the bot's server connection. This provides a fast edit-test cycle.
+      </p>
+
+      <p>How hot reload works:</p>
+      <ol>
+        <li>You save a change to any <code>.js</code> file in the plugin directory.</li>
+        <li>The plugin manager detects the file change via filesystem watch.</li>
+        <li>The current plugin instance's <code>onShutdown</code> handler is called (if registered).</li>
+        <li>The QuickJS runtime is destroyed and a fresh one is created.</li>
+        <li>The entry point script is re-executed in the new runtime.</li>
+        <li>All event handlers and commands are re-registered from scratch.</li>
+      </ol>
+
+      <p>The bot's connection to the server stays alive throughout this process. Channel memberships, the bot's user identity, and the <code>data/</code> directory are all preserved.</p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>// Handle graceful shutdown (called before hot reload or unload)
+mobuladock.on("shutdown", function() {
+    // Save any in-memory state before reload
+    var state = { counter: messageCount, lastActive: Date.now() };
+    mobuladock.fs.writeFile("state.json", JSON.stringify(state));
+    mobuladock.log.info("State saved before reload");
+});
+
+// Restore state on startup
+var saved = mobuladock.fs.readFile("state.json");
+var messageCount = 0;
+if (saved) {
+    var state = JSON.parse(saved);
+    messageCount = state.counter || 0;
+    mobuladock.log.info("Restored counter: " + messageCount);
+}</code></pre>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-title">Development Workflow</div>
+        <p>Keep a terminal open with the bot host running and your editor side by side. Every time you save, the plugin reloads instantly. Check the bot host's log output for any errors during reload.</p>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SANDBOX & LIMITS -->
+      <!-- ============================================================ -->
+      <h2 id="sandbox">Sandbox &amp; Limits</h2>
+
+      <p>
+        Each plugin runs in an isolated QuickJS runtime with strict resource limits. These limits protect the host process and other plugins from resource exhaustion or runaway code.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Resource</th>
+            <th>Limit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Memory (JS heap)</strong></td>
+            <td>16 MB per plugin</td>
+          </tr>
+          <tr>
+            <td><strong>Stack size</strong></td>
+            <td>1 MB</td>
+          </tr>
+          <tr>
+            <td><strong>Max errors per hour</strong></td>
+            <td>50 (auto-unload on exceed)</td>
+          </tr>
+          <tr>
+            <td><strong>HTTP request timeout</strong></td>
+            <td>10 seconds</td>
+          </tr>
+          <tr>
+            <td><strong>HTTP rate limit</strong></td>
+            <td>30 requests per minute</td>
+          </tr>
+          <tr>
+            <td><strong>File size limit</strong></td>
+            <td>1 MB per file</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warning">
+        <div class="callout-title">Automatic Unloading</div>
+        <p>Exceeding the error limit (50 errors per hour) will cause your plugin to be automatically unloaded. The host logs the reason for unloading. Fix the errors and reload the plugin manually, or restart the host to retry.</p>
+      </div>
+
+      <p>Additional sandbox restrictions:</p>
+      <ul>
+        <li>No access to the host's filesystem outside the plugin's <code>data/</code> directory.</li>
+        <li>No access to environment variables or system commands.</li>
+        <li>No raw socket access &mdash; only the provided HTTP client is available for network calls.</li>
+        <li>No spawning child processes.</li>
+        <li>No access to other plugins' runtimes or data.</li>
+        <li>The <code>eval()</code> function is disabled.</li>
+      </ul>
+
+      <!-- ============================================================ -->
+      <!-- MORE EXAMPLES -->
+      <!-- ============================================================ -->
+      <h2 id="examples">More Examples</h2>
+
+      <h3>WelcomeBot</h3>
+      <p>A simple bot that greets users when they join a channel.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.on("user_joined", function(event) {
+    mobuladock.sendMessage(event.channel,
+        "Welcome to " + event.channel + ", " + event.sender + "!");
+});
+
+mobuladock.log.info("WelcomeBot loaded!");</code></pre>
+      </div>
+
+      <h3>Channel Logger (Server Extension)</h3>
+      <p>A server extension that logs join and leave events to an audit file. Because this is a server extension, it only sees metadata &mdash; no message content.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.on("user_joined", function(event) {
+    var line = new Date(event.timestamp).toISOString()
+        + " JOIN " + event.sender + " " + event.channel + "\n";
+    mobuladock.fs.writeFile("audit.log", line);
+});
+
+mobuladock.on("user_left", function(event) {
+    var line = new Date(event.timestamp).toISOString()
+        + " PART " + event.sender + " " + event.channel + "\n";
+    mobuladock.fs.writeFile("audit.log", line);
+});
+
+mobuladock.log.info("Channel Logger loaded!");</code></pre>
+      </div>
+
+      <h3>Weather Bot</h3>
+      <p>A bot that fetches current weather data from an external API. Requires the <code>http_request</code> permission.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">javascript</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>mobuladock.onCommand("/weather", {
+    description: "Get current weather",
+    usage: "/weather [city]"
+}, function(ctx) {
+    var city = ctx.args.join(" ") || "Helsinki";
+    mobuladock.http.get("https://wttr.in/" + encodeURIComponent(city) + "?format=3")
+        .then(function(res) {
+            mobuladock.sendMessage(ctx.channel, res.body);
+        })
+        .catch(function(err) {
+            mobuladock.sendMessage(ctx.channel, "Could not fetch weather: " + err.message);
+        });
+});
+
+mobuladock.log.info("WeatherBot loaded!");</code></pre>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">Contributing Examples</div>
+        <p>Have a useful plugin? Contributions are welcome. Check the <a href="https://github.com/hittoSepi/mobuladock" target="_blank">GitHub repository</a> for contribution guidelines.</p>
+      </div>
+
+      <div class="docs-footer">
+        <p>MobulaDock &mdash; Open source, encrypted messaging. &bull;
+          <a href="https://github.com/hittoSepi/mobuladock" target="_blank">GitHub</a> &bull;
+          <a href="../index.html">Homepage</a>
+        </p>
+      </div>
+    </div>
+  </main>
+  <script src="docs.js"></script>
+</body>
+</html>

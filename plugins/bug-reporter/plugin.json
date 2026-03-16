@@ -1,0 +1,26 @@
+{
+  "name": "bug-reporter",
+  "display_name": "Bug Reporter",
+  "version": "1.0.0",
+  "type": "bot",
+  "entry": "main.js",
+  "description": "Collect bug reports via /bug command",
+  "min_host_version": "0.1.0",
+  "bot": {
+    "user_id": "BugBot",
+    "auto_join_channels": ["#general"]
+  },
+  "commands": [
+    {
+      "name": "/bug",
+      "description": "Report a bug",
+      "usage": "/bug <description>"
+    }
+  ],
+  "permissions": [
+    "read_messages",
+    "send_messages",
+    "register_commands",
+    "file_write"
+  ]
+}

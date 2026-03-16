@@ -1,0 +1,303 @@
+#include "user_store.hpp"
+
+#include <spdlog/spdlog.h>
+#include <sodium.h>
+
+#include <chrono>
+#include <stdexcept>
+
+namespace grotto::db {
+
+namespace {
+int64_t now_unix() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+} // anonymous namespace
+
+std::string UserStore::validate_user_id(const std::string& user_id,
+                                        const std::vector<std::string>& additional_reserved) {
+    // Check minimum length
+    if (user_id.length() < 2) {
+        return "User ID must be at least 2 characters";
+    }
+    
+    // Check maximum length
+    if (user_id.length() > 32) {
+        return "User ID must be at most 32 characters";
+    }
+    
+    // Check valid characters (alphanumeric, underscore, hyphen)
+    for (char c : user_id) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-') {
+            return "User ID can only contain letters, numbers, underscores, and hyphens";
+        }
+    }
+    
+    // Check reserved names
+    if (ReservedIdentity::is_reserved(user_id, additional_reserved)) {
+        return "This user ID is reserved and cannot be used";
+    }
+    
+    // Check for unicode homoglyphs
+    if (ReservedIdentity::contains_unicode_homoglyphs(user_id)) {
+        return "User ID contains unsupported characters";
+    }
+    
+    // Valid
+    return "";
+}
+
+UserStore::UserStore(Database& db)
+    : db_(db)
+{}
+
+std::optional<User> UserStore::find_by_id(const std::string& user_id) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    try {
+        SQLite::Statement q(db_.get(),
+            "SELECT user_id, identity_pub, created_at FROM users WHERE user_id = ?");
+        q.bind(1, user_id);
+        if (q.executeStep()) {
+            User u;
+            u.user_id   = q.getColumn(0).getString();
+            auto blob   = q.getColumn(1);
+            const uint8_t* data = reinterpret_cast<const uint8_t*>(blob.getBlob());
+            u.identity_pub.assign(data, data + blob.getBytes());
+            u.created_at = q.getColumn(2).getInt64();
+            return u;
+        }
+        return std::nullopt;
+    } catch (const SQLite::Exception& e) {
+        spdlog::error("UserStore::find_by_id failed: {}", e.what());
+        return std::nullopt;
+    }
+}
+
+void UserStore::insert(const User& user) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    SQLite::Statement q(db_.get(),
+        "INSERT INTO users (user_id, identity_pub, created_at) VALUES (?, ?, ?)");
+    q.bind(1, user.user_id);
+    q.bind(2, user.identity_pub.data(), static_cast<int>(user.identity_pub.size()));
+    q.bind(3, user.created_at);
+    q.exec();
+    spdlog::debug("UserStore: inserted user {}", user.user_id);
+}
+
+void UserStore::update_identity_key(const std::string& user_id,
+                                     const std::vector<uint8_t>& new_identity_pub) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    SQLite::Statement q(db_.get(),
+        "UPDATE users SET identity_pub = ? WHERE user_id = ?");
+    q.bind(1, new_identity_pub.data(), static_cast<int>(new_identity_pub.size()));
+    q.bind(2, user_id);
+    q.exec();
+    spdlog::info("UserStore: identity key updated for user {}", user_id);
+}
+
+void UserStore::clear_key_material(const std::string& user_id) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+
+    SQLite::Statement clear_spk(db_.get(),
+        "DELETE FROM signed_prekeys WHERE user_id = ?");
+    clear_spk.bind(1, user_id);
+    clear_spk.exec();
+
+    SQLite::Statement clear_opk(db_.get(),
+        "DELETE FROM one_time_prekeys WHERE user_id = ?");
+    clear_opk.bind(1, user_id);
+    clear_opk.exec();
+
+    spdlog::info("UserStore: cleared key material for user {}", user_id);
+}
+
+void UserStore::upsert_signed_prekey(const std::string& user_id,
+                                      const std::vector<uint8_t>& spk_pub,
+                                      const std::vector<uint8_t>& spk_sig) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    SQLite::Statement q(db_.get(),
+        "INSERT OR REPLACE INTO signed_prekeys (user_id, spk_pub, spk_sig, uploaded_at)"
+        " VALUES (?, ?, ?, ?)");
+    q.bind(1, user_id);
+    q.bind(2, spk_pub.data(), static_cast<int>(spk_pub.size()));
+    q.bind(3, spk_sig.data(), static_cast<int>(spk_sig.size()));
+    q.bind(4, now_unix());
+    q.exec();
+    spdlog::debug("UserStore: upserted SPK for user {}", user_id);
+}
+
+std::optional<SignedPrekey> UserStore::get_signed_prekey(const std::string& user_id) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    try {
+        SQLite::Statement q(db_.get(),
+            "SELECT spk_pub, spk_sig FROM signed_prekeys WHERE user_id = ?");
+        q.bind(1, user_id);
+        if (q.executeStep()) {
+            SignedPrekey spk;
+            auto pub = q.getColumn(0);
+            auto sig = q.getColumn(1);
+            const uint8_t* pub_data = reinterpret_cast<const uint8_t*>(pub.getBlob());
+            const uint8_t* sig_data = reinterpret_cast<const uint8_t*>(sig.getBlob());
+            spk.spk_pub.assign(pub_data, pub_data + pub.getBytes());
+            spk.spk_sig.assign(sig_data, sig_data + sig.getBytes());
+            return spk;
+        }
+        return std::nullopt;
+    } catch (const SQLite::Exception& e) {
+        spdlog::error("UserStore::get_signed_prekey failed: {}", e.what());
+        return std::nullopt;
+    }
+}
+
+void UserStore::store_opk(const std::string& user_id, const std::vector<uint8_t>& opk_pub) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    SQLite::Statement q(db_.get(),
+        "INSERT INTO one_time_prekeys (user_id, opk_pub, used) VALUES (?, ?, 0)");
+    q.bind(1, user_id);
+    q.bind(2, opk_pub.data(), static_cast<int>(opk_pub.size()));
+    q.exec();
+}
+
+std::vector<uint8_t> UserStore::consume_opk(const std::string& user_id) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    try {
+        SQLite::Statement q(db_.get(),
+            "SELECT id, opk_pub FROM one_time_prekeys"
+            " WHERE user_id = ? AND used = 0 LIMIT 1");
+        q.bind(1, user_id);
+        if (!q.executeStep()) {
+            return {};
+        }
+        int64_t id = q.getColumn(0).getInt64();
+        auto blob  = q.getColumn(1);
+        const uint8_t* data = reinterpret_cast<const uint8_t*>(blob.getBlob());
+        std::vector<uint8_t> opk(data, data + blob.getBytes());
+
+        SQLite::Statement upd(db_.get(),
+            "UPDATE one_time_prekeys SET used = 1 WHERE id = ?");
+        upd.bind(1, static_cast<int64_t>(id));
+        upd.exec();
+
+        return opk;
+    } catch (const SQLite::Exception& e) {
+        spdlog::error("UserStore::consume_opk failed: {}", e.what());
+        return {};
+    }
+}
+
+// ============================================================================
+// Password Authentication (Argon2id via libsodium)
+// ============================================================================
+
+bool UserStore::set_password(const std::string& user_id, const std::string& password) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    
+    try {
+        // Generate random salt
+        std::vector<uint8_t> salt(crypto_pwhash_SALTBYTES);
+        randombytes_buf(salt.data(), salt.size());
+        
+        // Hash password with Argon2id
+        std::vector<uint8_t> hash(crypto_pwhash_STRBYTES);
+        
+        if (crypto_pwhash_str(
+                reinterpret_cast<char*>(hash.data()),
+                password.c_str(),
+                password.length(),
+                crypto_pwhash_OPSLIMIT_INTERACTIVE,
+                crypto_pwhash_MEMLIMIT_INTERACTIVE) != 0) {
+            spdlog::error("UserStore::set_password: crypto_pwhash_str failed (out of memory)");
+            return false;
+        }
+        
+        // Store hash in database
+        SQLite::Statement q(db_.get(),
+            "UPDATE users SET password_hash = ? WHERE user_id = ?");
+        q.bind(1, hash.data(), static_cast<int>(hash.size()));
+        q.bind(2, user_id);
+        q.exec();
+        
+        spdlog::info("UserStore: password set for user {}", user_id);
+        return true;
+        
+    } catch (const SQLite::Exception& e) {
+        spdlog::error("UserStore::set_password failed: {}", e.what());
+        return false;
+    }
+}
+
+bool UserStore::verify_password(const std::string& user_id, const std::string& password) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    
+    try {
+        // Get stored hash
+        SQLite::Statement q(db_.get(),
+            "SELECT password_hash FROM users WHERE user_id = ?");
+        q.bind(1, user_id);
+        
+        if (!q.executeStep()) {
+            spdlog::warn("UserStore::verify_password: user {} not found", user_id);
+            return false;
+        }
+        
+        auto blob = q.getColumn(0);
+        if (blob.isNull() || blob.getBytes() == 0) {
+            spdlog::warn("UserStore::verify_password: no password set for user {}", user_id);
+            return false;
+        }
+        
+        const char* stored_hash = reinterpret_cast<const char*>(blob.getBlob());
+        
+        // Verify password
+        int result = crypto_pwhash_str_verify(stored_hash, password.c_str(), password.length());
+        
+        if (result == 0) {
+            spdlog::debug("UserStore: password verified for user {}", user_id);
+            return true;
+        } else {
+            spdlog::warn("UserStore: password verification failed for user {}", user_id);
+            return false;
+        }
+        
+    } catch (const SQLite::Exception& e) {
+        spdlog::error("UserStore::verify_password failed: {}", e.what());
+        return false;
+    }
+}
+
+bool UserStore::update_password(const std::string& user_id,
+                                const std::string& old_password,
+                                const std::string& new_password) {
+    // Verify old password first
+    if (!verify_password(user_id, old_password)) {
+        spdlog::warn("UserStore::update_password: old password incorrect for user {}", user_id);
+        return false;
+    }
+    
+    // Set new password
+    return set_password(user_id, new_password);
+}
+
+bool UserStore::has_password(const std::string& user_id) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    
+    try {
+        SQLite::Statement q(db_.get(),
+            "SELECT password_hash FROM users WHERE user_id = ?");
+        q.bind(1, user_id);
+        
+        if (!q.executeStep()) {
+            return false;
+        }
+        
+        auto blob = q.getColumn(0);
+        return !blob.isNull() && blob.getBytes() > 0;
+        
+    } catch (const SQLite::Exception& e) {
+        spdlog::error("UserStore::has_password failed: {}", e.what());
+        return false;
+    }
+}
+
+} // namespace grotto::db

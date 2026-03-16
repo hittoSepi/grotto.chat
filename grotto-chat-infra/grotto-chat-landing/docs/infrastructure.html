@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Infrastructure &mdash; MobulaDock Docs</title>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+  <button class="sidebar-toggle" aria-label="Toggle navigation">&#9776;</button>
+  <div class="sidebar-overlay"></div>
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <a href="../index.html" class="sidebar-logo"><span>MobulaDock</span></a>
+      <div class="sidebar-label">Documentation</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Guides</div>
+      <a href="index.html">Home</a>
+      <a href="server.html">Server</a>
+      <a href="infrastructure.html" class="active">Infrastructure</a>
+      <a href="desktop.html">Desktop Client</a>
+      <a href="android.html">Android Client</a>
+      <a href="plugins.html">Plugin Development</a>
+    </nav>
+    <div class="sidebar-toc">
+      <div class="nav-section">On this page</div>
+      <a href="#overview">Overview</a>
+      <a href="#requirements">System Requirements</a>
+      <a href="#tls">TLS Setup</a>
+      <a href="#directory">Public Server Directory</a>
+      <a href="#firewall">Firewall &amp; Networking</a>
+      <a href="#monitoring">Monitoring &amp; Logs</a>
+      <a href="#protocol-handler">Protocol Handler</a>
+      <a href="#backup">Backup &amp; Recovery</a>
+    </div>
+    <div class="sidebar-footer">
+      <a href="../index.html">&larr; Back to MobulaDock</a>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+
+      <h1>Infrastructure &amp; Self-Hosting</h1>
+      <p class="page-subtitle">
+        Everything you need to run your own MobulaDock server &mdash; from a Raspberry Pi to a cloud VPS.
+      </p>
+
+      <!-- ===== OVERVIEW ===== -->
+      <h2 id="overview">Overview</h2>
+
+      <p>
+        Running your own MobulaDock server gives you full control over your messaging infrastructure. The server is a lightweight C++20 binary that relays encrypted messages between clients without ever seeing their content. To get started, you need three things:
+      </p>
+
+      <ul>
+        <li><strong>A Linux machine</strong> &mdash; physical or virtual, aarch64 or x64</li>
+        <li><strong>A domain name</strong> (optional) &mdash; makes it easier for others to connect</li>
+        <li><strong>A TLS certificate</strong> &mdash; all connections require TLS 1.3</li>
+      </ul>
+
+      <p>Here is a typical deployment topology:</p>
+
+      <div class="diagram">
+        <div class="diagram-title">Deployment Architecture</div>
+        <div class="diagram-row">
+          <div class="diagram-box accent">Internet<small>Clients connect here</small></div>
+          <div class="diagram-arrow">&rarr;</div>
+          <div class="diagram-box warning">Firewall<small>Port 6697</small></div>
+          <div class="diagram-arrow">&rarr;</div>
+          <div class="diagram-box muted">Reverse Proxy<small>(optional) nginx</small></div>
+          <div class="diagram-arrow">&rarr;</div>
+          <div class="diagram-box success">MobulaDock Server<small>TLS Relay</small></div>
+        </div>
+        <div class="diagram-arrow-down">&darr;</div>
+        <div class="diagram-row">
+          <div class="diagram-box muted">SQLite DB<small>Metadata &amp; offline msgs</small></div>
+        </div>
+      </div>
+
+      <p>
+        The reverse proxy layer is optional. If you terminate TLS directly at the MobulaDock server (the common setup), you can skip it entirely. A reverse proxy is useful if you are hosting multiple services on the same machine or need advanced load balancing.
+      </p>
+
+      <!-- ===== REQUIREMENTS ===== -->
+      <h2 id="requirements">System Requirements</h2>
+
+      <p>
+        MobulaDock is designed to be lightweight. The server binary is statically linked and has minimal dependencies beyond the OS kernel.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Resource</th>
+            <th>Minimum</th>
+            <th>Recommended</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>CPU</strong></td>
+            <td>1 core</td>
+            <td>2+ cores</td>
+          </tr>
+          <tr>
+            <td><strong>RAM</strong></td>
+            <td>256 MB</td>
+            <td>512 MB+</td>
+          </tr>
+          <tr>
+            <td><strong>Storage</strong></td>
+            <td>100 MB + database</td>
+            <td>1 GB+ (room for logs and backups)</td>
+          </tr>
+          <tr>
+            <td><strong>OS</strong></td>
+            <td colspan="2">Linux (aarch64 or x86_64)</td>
+          </tr>
+          <tr>
+            <td><strong>Network</strong></td>
+            <td colspan="2">Stable connection, static IP or DDNS</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout tip">
+        <div class="callout-title">Raspberry Pi Friendly</div>
+        <p>MobulaDock runs great on a Raspberry Pi 4 or newer. The aarch64 build is a first-class target, and the low resource footprint means you can run it alongside other services without issue.</p>
+      </div>
+
+      <!-- ===== TLS ===== -->
+      <h2 id="tls">TLS Setup</h2>
+
+      <p>
+        All MobulaDock connections use TLS 1.3. This is not optional &mdash; the server will not accept plaintext connections. TLS protects the metadata layer (who is talking to whom) while the Signal Protocol protects message content end-to-end.
+      </p>
+
+      <h3>Option A: Let's Encrypt (recommended)</h3>
+
+      <p>
+        If you have a domain name pointing to your server, Let's Encrypt provides free, automatically renewing certificates. Install <code>certbot</code> and run the standalone challenge:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># Install certbot
+sudo apt update
+sudo apt install certbot
+
+# Obtain certificate (stop any service on port 80 first)
+sudo certbot certonly --standalone -d your-domain.com
+
+# Certificates are saved to:
+#   /etc/letsencrypt/live/your-domain.com/fullchain.pem
+#   /etc/letsencrypt/live/your-domain.com/privkey.pem</code></pre>
+      </div>
+
+      <p>
+        Point your <code>server.toml</code> at the generated files:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">toml</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>[tls]
+cert = "/etc/letsencrypt/live/your-domain.com/fullchain.pem"
+key  = "/etc/letsencrypt/live/your-domain.com/privkey.pem"</code></pre>
+      </div>
+
+      <p>
+        Certbot sets up automatic renewal by default. Restart the MobulaDock server after each renewal to pick up the new certificate, or use a post-renewal hook:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># /etc/letsencrypt/renewal-hooks/post/restart-mobuladock.sh
+#!/bin/bash
+systemctl restart mobuladock</code></pre>
+      </div>
+
+      <h3>Option B: Self-Signed Certificate</h3>
+
+      <p>
+        For testing or private networks where you control all clients, a self-signed certificate works fine.
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># Generate a self-signed certificate valid for 365 days
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+  -keyout server.key -out server.crt -days 365 -nodes \
+  -subj "/CN=mobuladock-server"
+
+# Move to a permanent location
+sudo mkdir -p /etc/mobuladock/tls
+sudo mv server.crt server.key /etc/mobuladock/tls/
+sudo chmod 600 /etc/mobuladock/tls/server.key</code></pre>
+      </div>
+
+      <div class="callout warning">
+        <div class="callout-title">Trust Warnings</div>
+        <p>Clients connecting to a server with a self-signed certificate will see trust warnings. Each user will need to manually accept the certificate or install it as a trusted root on their device. For public-facing servers, use Let's Encrypt instead.</p>
+      </div>
+
+      <!-- ===== DIRECTORY ===== -->
+      <h2 id="directory">Public Server Directory</h2>
+
+      <p>
+        MobulaDock includes an optional public server directory &mdash; a central Node.js service where servers can register themselves so users can discover and connect to them from within their client. Listing your server is entirely optional; private servers work perfectly without it.
+      </p>
+
+      <h3>How It Works</h3>
+
+      <p>
+        When directory registration is enabled, your server periodically sends a heartbeat to the directory service. The directory maintains a list of active servers along with basic metadata (name, description, user count). Clients can browse this list to find servers to join.
+      </p>
+
+      <h3>Configuration</h3>
+
+      <p>
+        Add a <code>[directory]</code> section to your <code>server.toml</code>:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">toml</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>[directory]
+enabled     = true
+url         = "https://directory.mobuladock.org"
+name        = "My MobulaDock Server"
+description = "A friendly community server"
+public_host = "mobuladock.example.com"
+public_port = 6697</code></pre>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">Private Servers</div>
+        <p>If you omit the <code>[directory]</code> section or set <code>enabled = false</code>, your server will not appear in any public listing. Users can still connect directly by entering your hostname and port. This is the default behavior.</p>
+      </div>
+
+      <!-- ===== FIREWALL ===== -->
+      <h2 id="firewall">Firewall &amp; Networking</h2>
+
+      <p>
+        The MobulaDock server listens on port <strong>6697</strong> by default (the standard IRC-over-TLS port). You need to allow inbound TCP traffic on this port.
+      </p>
+
+      <h3>UFW (Uncomplicated Firewall)</h3>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># Allow MobulaDock traffic
+sudo ufw allow 6697/tcp comment "MobulaDock"
+
+# Verify the rule
+sudo ufw status
+
+# If you also need certbot HTTP challenge
+sudo ufw allow 80/tcp comment "Certbot"</code></pre>
+      </div>
+
+      <h3>Reverse Proxy with nginx</h3>
+
+      <p>
+        If you want to put MobulaDock behind nginx (for example, to share port 443 with a website), you can use a TCP stream proxy. Note that this is a <code>stream</code> block, not an <code>http</code> block, because MobulaDock uses raw TLS sockets rather than HTTPS.
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">nginx</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># /etc/nginx/nginx.conf (or a file in stream.d/)
+stream {
+    upstream mobuladock_backend {
+        server 127.0.0.1:6697;
+    }
+
+    server {
+        listen 6698 ssl;
+        proxy_pass mobuladock_backend;
+
+        ssl_certificate     /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+        ssl_protocols       TLSv1.3;
+    }
+}</code></pre>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-title">NAT / Home Networks</div>
+        <p>If your server is behind a home router (NAT), you will need to set up port forwarding. Forward external port 6697 (TCP) to your server's local IP address. Consider using a DDNS service if your public IP changes frequently.</p>
+      </div>
+
+      <!-- ===== MONITORING ===== -->
+      <h2 id="monitoring">Monitoring &amp; Logs</h2>
+
+      <p>
+        The MobulaDock server logs to <strong>stdout</strong> by default, making it easy to integrate with any log management solution. For production deployments, running the server as a systemd service is recommended.
+      </p>
+
+      <h3>systemd Service File</h3>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">ini</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># /etc/systemd/system/mobuladock.service
+[Unit]
+Description=MobulaDock Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mobuladock
+Group=mobuladock
+WorkingDirectory=/opt/mobuladock
+ExecStart=/opt/mobuladock/mobuladock-server --config /etc/mobuladock/server.toml
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mobuladock
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># Enable and start the service
+sudo systemctl daemon-reload
+sudo systemctl enable mobuladock
+sudo systemctl start mobuladock
+
+# View logs
+sudo journalctl -u mobuladock -f</code></pre>
+      </div>
+
+      <h3>Version Verification</h3>
+
+      <p>
+        Use the <code>--version</code> flag to check which build is deployed. The output includes the git commit hash and build timestamp, which helps verify that the correct version is running after a deployment.
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>$ ./mobuladock-server --version
+mobuladock-server v0.15.0 (abc1234, built 2026-03-13T10:30:00Z)</code></pre>
+      </div>
+
+      <h3>Log Levels</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Level</th>
+            <th>What It Shows</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>error</strong></td>
+            <td>Critical failures: TLS errors, bind failures, database corruption</td>
+          </tr>
+          <tr>
+            <td><strong>warn</strong></td>
+            <td>Recoverable issues: client disconnects, malformed messages, auth failures</td>
+          </tr>
+          <tr>
+            <td><strong>info</strong></td>
+            <td>Normal operation: connections, joins, parts, server start/stop (default)</td>
+          </tr>
+          <tr>
+            <td><strong>debug</strong></td>
+            <td>Verbose output: message routing, session state, protocol details</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ===== PROTOCOL HANDLER ===== -->
+      <h2 id="protocol-handler">Protocol Handler</h2>
+
+      <p>
+        MobulaDock supports the <code>ircord://</code> URI scheme, allowing users to click a link and connect directly to a server. The format is:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">text</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>ircord://hostname:port</code></pre>
+      </div>
+
+      <p>
+        For example: <code>ircord://chat.example.com:6697</code>
+      </p>
+
+      <h3>Registering on Desktop (Linux)</h3>
+
+      <p>
+        Create a <code>.desktop</code> file for the protocol handler:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">ini</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># ~/.local/share/applications/mobuladock-handler.desktop
+[Desktop Entry]
+Name=MobulaDock
+Exec=/usr/local/bin/mobuladock-client --connect %u
+Type=Application
+MimeType=x-scheme-handler/mobuladock;
+NoDisplay=true</code></pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># Register the handler
+xdg-mime default mobuladock-handler.desktop x-scheme-handler/mobuladock</code></pre>
+      </div>
+
+      <h3>Registering on Desktop (Windows)</h3>
+
+      <p>
+        The Windows installer registers the protocol handler automatically. For manual registration, add a registry key:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">text</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>HKEY_CLASSES_ROOT\mobuladock
+  (Default) = "URL:MobulaDock Protocol"
+  "URL Protocol" = ""
+  shell\open\command
+    (Default) = "C:\Program Files\MobulaDock\mobuladock-client.exe" "--connect" "%1"</code></pre>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">Android Support</div>
+        <p>The Android client handles <code>ircord://</code> links natively through intent filters. No additional setup is required on mobile devices.</p>
+      </div>
+
+      <!-- ===== BACKUP ===== -->
+      <h2 id="backup">Backup &amp; Recovery</h2>
+
+      <p>
+        MobulaDock stores all persistent data in a small number of files, making backups straightforward. Here is what you should back up:
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Location</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Configuration</strong></td>
+            <td><code>/etc/mobuladock/server.toml</code></td>
+            <td>Server settings, directory config</td>
+          </tr>
+          <tr>
+            <td><strong>TLS Certificates</strong></td>
+            <td><code>/etc/mobuladock/tls/</code> or Let's Encrypt path</td>
+            <td>Can be regenerated, but saves downtime</td>
+          </tr>
+          <tr>
+            <td><strong>Database</strong></td>
+            <td><code>/var/lib/mobuladock/mobuladock.db</code></td>
+            <td>SQLite file &mdash; user accounts, offline messages, metadata</td>
+          </tr>
+          <tr>
+            <td><strong>Plugin Data</strong></td>
+            <td><code>/var/lib/mobuladock/plugins/</code></td>
+            <td>Plugin configurations and persistent storage</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Backup Script</h3>
+
+      <p>
+        The database is a single SQLite file, so a simple file copy is all you need. Here is a basic backup script you can run via cron:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code>#!/bin/bash
+# /opt/mobuladock/backup.sh — run daily via cron
+set -euo pipefail
+
+BACKUP_DIR="/var/backups/mobuladock"
+DATE=$(date +%Y-%m-%d)
+DEST="${BACKUP_DIR}/${DATE}"
+
+mkdir -p "${DEST}"
+
+# Back up configuration
+cp /etc/mobuladock/server.toml "${DEST}/"
+
+# Back up database (use sqlite3 .backup for consistency)
+sqlite3 /var/lib/mobuladock/mobuladock.db ".backup '${DEST}/mobuladock.db'"
+
+# Back up plugin data
+if [ -d /var/lib/mobuladock/plugins ]; then
+    cp -r /var/lib/mobuladock/plugins "${DEST}/"
+fi
+
+# Remove backups older than 30 days
+find "${BACKUP_DIR}" -maxdepth 1 -type d -mtime +30 -exec rm -rf {} \;
+
+echo "Backup complete: ${DEST}"</code></pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+        <pre><code># Add to crontab — run daily at 3 AM
+sudo crontab -e
+# Add this line:
+0 3 * * * /opt/mobuladock/backup.sh >> /var/log/mobuladock-backup.log 2>&1</code></pre>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-title">Recovery</div>
+        <p>To restore from a backup, stop the server, copy the backed-up files to their original locations, and restart. The SQLite database requires no special import process &mdash; just replace the file.</p>
+      </div>
+
+      <div class="docs-footer">
+        <p>MobulaDock &mdash; Open source, encrypted messaging. &bull;
+          <a href="https://github.com/hittoSepi/mobuladock" target="_blank">GitHub</a> &bull;
+          <a href="../index.html">Homepage</a>
+        </p>
+      </div>
+    </div>
+  </main>
+  <script src="docs.js"></script>
+</body>
+</html>

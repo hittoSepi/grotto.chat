@@ -1,0 +1,16 @@
+{
+  "name": "grotto-server",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "boost-asio",
+    "boost-system",
+    "boost-endian",
+    "openssl",
+    "protobuf",
+    "toml11",
+    "spdlog",
+    "libsodium",
+    "sqlitecpp",
+    "nlohmann-json"
+  ]
+}

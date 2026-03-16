@@ -1,0 +1,18 @@
+appId: fi.ircord.android
+name: android-docs-setup
+tags:
+  - docs
+---
+- killApp
+- launchApp:
+    stopApp: false
+    arguments:
+      ircord_screenshot_scene: "setup"
+      ircord_screenshot_dark_theme: "true"
+      ircord_screenshot_font_scale: "1.0"
+- extendedWaitUntil:
+    visible: "Generate Keys & Join"
+    timeout: 45000
+- assertVisible: "Generate Keys & Join"
+- takeScreenshot:
+    path: screenshots/android/setup-login

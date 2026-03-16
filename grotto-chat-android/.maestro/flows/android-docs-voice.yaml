@@ -1,0 +1,18 @@
+appId: fi.ircord.android
+name: android-docs-voice
+tags:
+  - docs
+---
+- killApp
+- launchApp:
+    stopApp: false
+    arguments:
+      ircord_screenshot_scene: "voice"
+      ircord_screenshot_dark_theme: "true"
+      ircord_screenshot_font_scale: "1.0"
+- extendedWaitUntil:
+    visible: "Encrypted voice session active"
+    timeout: 45000
+- assertVisible: "Encrypted voice session active"
+- takeScreenshot:
+    path: screenshots/android/voice-room

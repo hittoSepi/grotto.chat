@@ -1,0 +1,19 @@
+{
+  "name": "bug-reporter-client",
+  "display_name": "Bug Reporter (Client)",
+  "version": "1.0.0",
+  "type": "client_extension",
+  "entry": "main.js",
+  "description": "Client-side bug reporting via /bug command",
+  "min_host_version": "0.1.0",
+  "commands": [
+    {
+      "name": "/bug",
+      "description": "Report a bug",
+      "usage": "/bug <description>"
+    }
+  ],
+  "permissions": [
+    "register_commands"
+  ]
+}

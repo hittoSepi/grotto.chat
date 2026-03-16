@@ -1,0 +1,18 @@
+appId: fi.ircord.android
+name: android-docs-settings
+tags:
+  - docs
+---
+- killApp
+- launchApp:
+    stopApp: false
+    arguments:
+      ircord_screenshot_scene: "settings"
+      ircord_screenshot_dark_theme: "true"
+      ircord_screenshot_font_scale: "1.0"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 45000
+- assertVisible: "Settings"
+- takeScreenshot:
+    path: screenshots/android/settings

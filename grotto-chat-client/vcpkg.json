@@ -1,0 +1,23 @@
+{
+  "name": "grotto-client",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "boost-asio",
+    "boost-system",
+    "openssl",
+    "protobuf",
+    {
+      "name": "sqlite3",
+      "features": ["fts5"]
+    },
+    "sqlitecpp",
+    "libsodium",
+    "libdatachannel",
+    "opus",
+    "curl",
+    "toml11",
+    "spdlog",
+    "catch2",
+    "ftxui"
+  ]
+}

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MobulaDock Documentation</title>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+  <button class="sidebar-toggle" aria-label="Toggle navigation">&#9776;</button>
+  <div class="sidebar-overlay"></div>
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <a href="../index.html" class="sidebar-logo">
+        <span>MobulaDock</span>
+      </a>
+      <div class="sidebar-label">Documentation</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Guides</div>
+      <a href="index.html" class="active">Home</a>
+      <a href="server.html">Server</a>
+      <a href="infrastructure.html">Infrastructure</a>
+      <a href="desktop.html">Desktop Client</a>
+      <a href="android.html">Android Client</a>
+      <a href="plugins.html">Plugin Development</a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="../index.html">&larr; Back to MobulaDock</a>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+
+      <h1>MobulaDock Documentation</h1>
+      <p class="page-subtitle">
+        Everything you need to get started with MobulaDock &mdash; from setting up your first server to building custom plugins.
+      </p>
+
+      <div class="docs-grid">
+
+        <a href="server.html" class="docs-card">
+          <div class="docs-card-icon">&#9881;</div>
+          <h3>Server</h3>
+          <p>Set up and configure an MobulaDock server. Commands, channels, moderation, and more.</p>
+          <div class="card-arrow">Read guide &rarr;</div>
+        </a>
+
+        <a href="infrastructure.html" class="docs-card">
+          <div class="docs-card-icon">&#9729;</div>
+          <h3>Infrastructure</h3>
+          <p>Self-hosting guide: TLS certificates, firewalls, reverse proxies, and public directory listing.</p>
+          <div class="card-arrow">Read guide &rarr;</div>
+        </a>
+
+        <a href="desktop.html" class="docs-card">
+          <div class="docs-card-icon">&#9000;</div>
+          <h3>Desktop Client</h3>
+          <p>Terminal-based client for Windows and Linux. Keyboard shortcuts, mouse controls, and configuration.</p>
+          <div class="card-arrow">Read guide &rarr;</div>
+        </a>
+
+        <a href="android.html" class="docs-card">
+          <div class="docs-card-icon">&#128241;</div>
+          <h3>Android Client</h3>
+          <p>Mobile client with native encryption. Push notifications, biometric auth, and voice calls.</p>
+          <div class="card-arrow">Read guide &rarr;</div>
+        </a>
+
+        <a href="plugins.html" class="docs-card">
+          <div class="docs-card-icon">&#128268;</div>
+          <h3>Plugin Development</h3>
+          <p>Build bots and extensions with JavaScript. Full API reference, examples, and sandbox details.</p>
+          <div class="card-arrow">Read guide &rarr;</div>
+        </a>
+
+      </div>
+
+      <hr>
+
+      <h2>Quick Overview</h2>
+
+      <p>
+        MobulaDock is an open-source, end-to-end encrypted messaging platform that combines the simplicity of IRC with modern security. The server <strong>never sees your message content</strong> &mdash; all encryption happens on your device.
+      </p>
+
+      <div class="diagram">
+        <div class="diagram-title">How MobulaDock Works</div>
+        <div class="diagram-row">
+          <div class="diagram-box accent">Desktop Client<small>Windows / Linux</small></div>
+          <div class="diagram-arrow">&harr;</div>
+          <div class="diagram-box success">MobulaDock Server<small>TLS Relay Only</small></div>
+          <div class="diagram-arrow">&harr;</div>
+          <div class="diagram-box accent">Android Client<small>Native Crypto</small></div>
+        </div>
+        <div class="diagram-arrow-down">&uarr; &darr;</div>
+        <div class="diagram-row">
+          <div class="diagram-box muted">Encrypted on device</div>
+          <div class="diagram-arrow">&rarr;</div>
+          <div class="diagram-box muted">Server sees only metadata</div>
+          <div class="diagram-arrow">&rarr;</div>
+          <div class="diagram-box muted">Decrypted on device</div>
+        </div>
+      </div>
+
+      <h2>Key Features</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>E2E Encryption</strong></td>
+            <td>Signal Protocol for DMs, Sender Keys for channels</td>
+          </tr>
+          <tr>
+            <td><strong>Voice Rooms</strong></td>
+            <td>Push-to-talk and voice activation with WebRTC</td>
+          </tr>
+          <tr>
+            <td><strong>Channels &amp; DMs</strong></td>
+            <td>IRC-style channels with modern encrypted direct messages</td>
+          </tr>
+          <tr>
+            <td><strong>Plugin System</strong></td>
+            <td>JavaScript plugins: bots, client extensions, and server extensions</td>
+          </tr>
+          <tr>
+            <td><strong>Cross-Platform</strong></td>
+            <td>Windows, Linux (TUI), and Android (native)</td>
+          </tr>
+          <tr>
+            <td><strong>Self-Hostable</strong></td>
+            <td>Run your own server on a Raspberry Pi or VPS</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout tip">
+        <div class="callout-title">Getting Started</div>
+        <p>New to MobulaDock? Start with the <a href="desktop.html">Desktop Client</a> or <a href="android.html">Android Client</a> guide to connect to an existing server, or check the <a href="infrastructure.html">Infrastructure</a> guide to host your own.</p>
+      </div>
+
+      <div class="docs-footer">
+        <p>
+          MobulaDock &mdash; Open source, encrypted messaging. &bull;
+          <a href="https://github.com/hittoSepi/mobuladock" target="_blank">GitHub</a> &bull;
+          <a href="../index.html">Homepage</a>
+        </p>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="docs.js"></script>
+</body>
+</html>

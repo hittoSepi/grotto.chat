@@ -1,0 +1,530 @@
+[ {
+  "command" : {
+    "applyConfigurationCommand" : {
+      "config" : {
+        "appId" : "fi.grotto.android",
+        "name" : "android-docs-setup",
+        "tags" : [ "docs" ]
+      },
+      "optional" : false
+    }
+  },
+  "metadata" : {
+    "status" : "COMPLETED",
+    "timestamp" : 1773469828260,
+    "duration" : 0,
+    "sequenceNumber" : 0
+  }
+}, {
+  "command" : {
+    "launchAppCommand" : {
+      "appId" : "fi.grotto.android",
+      "clearState" : true,
+      "launchArguments" : {
+        "grotto_screenshot_scene" : "setup",
+        "grotto_screenshot_dark_theme" : "true",
+        "grotto_screenshot_font_scale" : "1.0"
+      },
+      "optional" : false
+    }
+  },
+  "metadata" : {
+    "status" : "FAILED",
+    "timestamp" : 1773469828261,
+    "duration" : 69,
+    "error" : {
+      "message" : "Unable to clear state for app fi.grotto.android: pm clear fi.grotto.android: \nException occurred while executing 'clear':\njava.lang.SecurityException: PID 9667 does not have permission android.permission.CLEAR_APP_USER_DATA to clear data of package fi.grotto.android\n\tat com.android.server.am.ActivityManagerService.clearApplicationUserData(ActivityManagerService.java:4523)\n\tat com.android.server.pm.PackageManagerShellCommand.runClear(PackageManagerShellCommand.java:2113)\n\tat com.android.server.pm.PackageManagerShellCommand.onCommand(PackageManagerShellCommand.java:229)\n\tat android.os.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:98)\n\tat android.os.ShellCommand.exec(ShellCommand.java:44)\n\tat com.android.server.pm.PackageManagerService.onShellCommand(PackageManagerService.java:22341)\n\tat android.os.Binder.shellCommand(Binder.java:929)\n\tat android.os.Binder.onTransact(Binder.java:813)\n\tat android.content.pm.IPackageManager$Stub.onTransact(IPackageManager.java:4687)\n\tat com.android.server.pm.PackageManagerService.onTransact(PackageManagerService.java:4475)\n\tat android.os.Binder.execTransactInternal(Binder.java:1159)\n\tat android.os.Binder.execTransact(Binder.java:1123)\n",
+      "cause" : {
+        "stackTrace" : [ {
+          "classLoaderName" : "app",
+          "methodName" : "shell",
+          "fileName" : "AndroidDriver.kt",
+          "lineNumber" : 1242,
+          "className" : "maestro.drivers.AndroidDriver",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "clearAppState$lambda$10",
+          "fileName" : "AndroidDriver.kt",
+          "lineNumber" : 268,
+          "className" : "maestro.drivers.AndroidDriver",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "measured",
+          "fileName" : "Metrics.kt",
+          "lineNumber" : 48,
+          "className" : "maestro.utils.Metrics",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "clearAppState",
+          "fileName" : "AndroidDriver.kt",
+          "lineNumber" : 263,
+          "className" : "maestro.drivers.AndroidDriver",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "clearAppState",
+          "fileName" : "Maestro.kt",
+          "lineNumber" : 88,
+          "className" : "maestro.Maestro",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "launchAppCommand",
+          "fileName" : "Orchestra.kt",
+          "lineNumber" : 1124,
+          "className" : "maestro.orchestra.Orchestra",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "executeCommand",
+          "fileName" : "Orchestra.kt",
+          "lineNumber" : 356,
+          "className" : "maestro.orchestra.Orchestra",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "executeCommands",
+          "fileName" : "Orchestra.kt",
+          "lineNumber" : 263,
+          "className" : "maestro.orchestra.Orchestra",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runFlow",
+          "fileName" : "Orchestra.kt",
+          "lineNumber" : 181,
+          "className" : "maestro.orchestra.Orchestra",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runFlow",
+          "fileName" : "TestSuiteInteractor.kt",
+          "lineNumber" : 243,
+          "className" : "maestro.cli.runner.TestSuiteInteractor",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runTestSuite",
+          "fileName" : "TestSuiteInteractor.kt",
+          "lineNumber" : 78,
+          "className" : "maestro.cli.runner.TestSuiteInteractor",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runMultipleFlows",
+          "fileName" : "TestCommand.kt",
+          "lineNumber" : 619,
+          "className" : "maestro.cli.command.TestCommand",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "access$runMultipleFlows",
+          "fileName" : "TestCommand.kt",
+          "lineNumber" : 80,
+          "className" : "maestro.cli.command.TestCommand",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "invokeSuspend",
+          "fileName" : "TestCommand.kt",
+          "lineNumber" : 502,
+          "className" : "maestro.cli.command.TestCommand$runShardSuite$1$1",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "resumeWith",
+          "fileName" : "ContinuationImpl.kt",
+          "lineNumber" : 34,
+          "className" : "kotlin.coroutines.jvm.internal.BaseContinuationImpl",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "run",
+          "fileName" : "DispatchedTask.kt",
+          "lineNumber" : 104,
+          "className" : "kotlinx.coroutines.DispatchedTask",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "processNextEvent",
+          "fileName" : "EventLoop.common.kt",
+          "lineNumber" : 277,
+          "className" : "kotlinx.coroutines.EventLoopImplBase",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "joinBlocking",
+          "fileName" : "Builders.kt",
+          "lineNumber" : 95,
+          "className" : "kotlinx.coroutines.BlockingCoroutine",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runBlocking",
+          "fileName" : "Builders.kt",
+          "lineNumber" : 69,
+          "className" : "kotlinx.coroutines.BuildersKt__BuildersKt",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runBlocking",
+          "lineNumber" : 1,
+          "className" : "kotlinx.coroutines.BuildersKt",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runBlocking$default",
+          "fileName" : "Builders.kt",
+          "lineNumber" : 48,
+          "className" : "kotlinx.coroutines.BuildersKt__BuildersKt",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runBlocking$default",
+          "lineNumber" : 1,
+          "className" : "kotlinx.coroutines.BuildersKt",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runShardSuite$lambda$10",
+          "fileName" : "TestCommand.kt",
+          "lineNumber" : 501,
+          "className" : "maestro.cli.command.TestCommand",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "newSession",
+          "fileName" : "MaestroSessionManager.kt",
+          "lineNumber" : 132,
+          "className" : "maestro.cli.session.MaestroSessionManager",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "newSession$default",
+          "fileName" : "MaestroSessionManager.kt",
+          "lineNumber" : 66,
+          "className" : "maestro.cli.session.MaestroSessionManager",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runShardSuite",
+          "fileName" : "TestCommand.kt",
+          "lineNumber" : 476,
+          "className" : "maestro.cli.command.TestCommand",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "access$runShardSuite",
+          "fileName" : "TestCommand.kt",
+          "lineNumber" : 80,
+          "className" : "maestro.cli.command.TestCommand",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "invokeSuspend",
+          "fileName" : "TestCommand.kt",
+          "lineNumber" : 435,
+          "className" : "maestro.cli.command.TestCommand$handleSessions$1$results$1$1",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "resumeWith",
+          "fileName" : "ContinuationImpl.kt",
+          "lineNumber" : 34,
+          "className" : "kotlin.coroutines.jvm.internal.BaseContinuationImpl",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "run",
+          "fileName" : "DispatchedTask.kt",
+          "lineNumber" : 104,
+          "className" : "kotlinx.coroutines.DispatchedTask",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "run",
+          "fileName" : "LimitedDispatcher.kt",
+          "lineNumber" : 111,
+          "className" : "kotlinx.coroutines.internal.LimitedDispatcher$Worker",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "run",
+          "fileName" : "Tasks.kt",
+          "lineNumber" : 99,
+          "className" : "kotlinx.coroutines.scheduling.TaskImpl",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runSafely",
+          "fileName" : "CoroutineScheduler.kt",
+          "lineNumber" : 585,
+          "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "executeTask",
+          "fileName" : "CoroutineScheduler.kt",
+          "lineNumber" : 802,
+          "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "runWorker",
+          "fileName" : "CoroutineScheduler.kt",
+          "lineNumber" : 706,
+          "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
+          "nativeMethod" : false
+        }, {
+          "classLoaderName" : "app",
+          "methodName" : "run",
+          "fileName" : "CoroutineScheduler.kt",
+          "lineNumber" : 693,
+          "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
+          "nativeMethod" : false
+        } ],
+        "message" : "pm clear fi.grotto.android: \nException occurred while executing 'clear':\njava.lang.SecurityException: PID 9667 does not have permission android.permission.CLEAR_APP_USER_DATA to clear data of package fi.grotto.android\n\tat com.android.server.am.ActivityManagerService.clearApplicationUserData(ActivityManagerService.java:4523)\n\tat com.android.server.pm.PackageManagerShellCommand.runClear(PackageManagerShellCommand.java:2113)\n\tat com.android.server.pm.PackageManagerShellCommand.onCommand(PackageManagerShellCommand.java:229)\n\tat android.os.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:98)\n\tat android.os.ShellCommand.exec(ShellCommand.java:44)\n\tat com.android.server.pm.PackageManagerService.onShellCommand(PackageManagerService.java:22341)\n\tat android.os.Binder.shellCommand(Binder.java:929)\n\tat android.os.Binder.onTransact(Binder.java:813)\n\tat android.content.pm.IPackageManager$Stub.onTransact(IPackageManager.java:4687)\n\tat com.android.server.pm.PackageManagerService.onTransact(PackageManagerService.java:4475)\n\tat android.os.Binder.execTransactInternal(Binder.java:1159)\n\tat android.os.Binder.execTransact(Binder.java:1123)\n",
+        "localizedMessage" : "pm clear fi.grotto.android: \nException occurred while executing 'clear':\njava.lang.SecurityException: PID 9667 does not have permission android.permission.CLEAR_APP_USER_DATA to clear data of package fi.grotto.android\n\tat com.android.server.am.ActivityManagerService.clearApplicationUserData(ActivityManagerService.java:4523)\n\tat com.android.server.pm.PackageManagerShellCommand.runClear(PackageManagerShellCommand.java:2113)\n\tat com.android.server.pm.PackageManagerShellCommand.onCommand(PackageManagerShellCommand.java:229)\n\tat android.os.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:98)\n\tat android.os.ShellCommand.exec(ShellCommand.java:44)\n\tat com.android.server.pm.PackageManagerService.onShellCommand(PackageManagerService.java:22341)\n\tat android.os.Binder.shellCommand(Binder.java:929)\n\tat android.os.Binder.onTransact(Binder.java:813)\n\tat android.content.pm.IPackageManager$Stub.onTransact(IPackageManager.java:4687)\n\tat com.android.server.pm.PackageManagerService.onTransact(PackageManagerService.java:4475)\n\tat android.os.Binder.execTransactInternal(Binder.java:1159)\n\tat android.os.Binder.execTransact(Binder.java:1123)\n"
+      },
+      "stackTrace" : [ {
+        "classLoaderName" : "app",
+        "methodName" : "launchAppCommand",
+        "fileName" : "Orchestra.kt",
+        "lineNumber" : 1128,
+        "className" : "maestro.orchestra.Orchestra",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "executeCommand",
+        "fileName" : "Orchestra.kt",
+        "lineNumber" : 356,
+        "className" : "maestro.orchestra.Orchestra",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "executeCommands",
+        "fileName" : "Orchestra.kt",
+        "lineNumber" : 263,
+        "className" : "maestro.orchestra.Orchestra",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runFlow",
+        "fileName" : "Orchestra.kt",
+        "lineNumber" : 181,
+        "className" : "maestro.orchestra.Orchestra",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runFlow",
+        "fileName" : "TestSuiteInteractor.kt",
+        "lineNumber" : 243,
+        "className" : "maestro.cli.runner.TestSuiteInteractor",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runTestSuite",
+        "fileName" : "TestSuiteInteractor.kt",
+        "lineNumber" : 78,
+        "className" : "maestro.cli.runner.TestSuiteInteractor",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runMultipleFlows",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 619,
+        "className" : "maestro.cli.command.TestCommand",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "access$runMultipleFlows",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 80,
+        "className" : "maestro.cli.command.TestCommand",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "invokeSuspend",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 502,
+        "className" : "maestro.cli.command.TestCommand$runShardSuite$1$1",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "resumeWith",
+        "fileName" : "ContinuationImpl.kt",
+        "lineNumber" : 34,
+        "className" : "kotlin.coroutines.jvm.internal.BaseContinuationImpl",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "DispatchedTask.kt",
+        "lineNumber" : 104,
+        "className" : "kotlinx.coroutines.DispatchedTask",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "processNextEvent",
+        "fileName" : "EventLoop.common.kt",
+        "lineNumber" : 277,
+        "className" : "kotlinx.coroutines.EventLoopImplBase",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "joinBlocking",
+        "fileName" : "Builders.kt",
+        "lineNumber" : 95,
+        "className" : "kotlinx.coroutines.BlockingCoroutine",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runBlocking",
+        "fileName" : "Builders.kt",
+        "lineNumber" : 69,
+        "className" : "kotlinx.coroutines.BuildersKt__BuildersKt",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runBlocking",
+        "lineNumber" : 1,
+        "className" : "kotlinx.coroutines.BuildersKt",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runBlocking$default",
+        "fileName" : "Builders.kt",
+        "lineNumber" : 48,
+        "className" : "kotlinx.coroutines.BuildersKt__BuildersKt",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runBlocking$default",
+        "lineNumber" : 1,
+        "className" : "kotlinx.coroutines.BuildersKt",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runShardSuite$lambda$10",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 501,
+        "className" : "maestro.cli.command.TestCommand",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "newSession",
+        "fileName" : "MaestroSessionManager.kt",
+        "lineNumber" : 132,
+        "className" : "maestro.cli.session.MaestroSessionManager",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "newSession$default",
+        "fileName" : "MaestroSessionManager.kt",
+        "lineNumber" : 66,
+        "className" : "maestro.cli.session.MaestroSessionManager",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runShardSuite",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 476,
+        "className" : "maestro.cli.command.TestCommand",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "access$runShardSuite",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 80,
+        "className" : "maestro.cli.command.TestCommand",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "invokeSuspend",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 435,
+        "className" : "maestro.cli.command.TestCommand$handleSessions$1$results$1$1",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "resumeWith",
+        "fileName" : "ContinuationImpl.kt",
+        "lineNumber" : 34,
+        "className" : "kotlin.coroutines.jvm.internal.BaseContinuationImpl",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "DispatchedTask.kt",
+        "lineNumber" : 104,
+        "className" : "kotlinx.coroutines.DispatchedTask",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "LimitedDispatcher.kt",
+        "lineNumber" : 111,
+        "className" : "kotlinx.coroutines.internal.LimitedDispatcher$Worker",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "Tasks.kt",
+        "lineNumber" : 99,
+        "className" : "kotlinx.coroutines.scheduling.TaskImpl",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runSafely",
+        "fileName" : "CoroutineScheduler.kt",
+        "lineNumber" : 585,
+        "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "executeTask",
+        "fileName" : "CoroutineScheduler.kt",
+        "lineNumber" : 802,
+        "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runWorker",
+        "fileName" : "CoroutineScheduler.kt",
+        "lineNumber" : 706,
+        "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "CoroutineScheduler.kt",
+        "lineNumber" : 693,
+        "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
+        "nativeMethod" : false
+      } ],
+      "localizedMessage" : "Unable to clear state for app fi.grotto.android: pm clear fi.grotto.android: \nException occurred while executing 'clear':\njava.lang.SecurityException: PID 9667 does not have permission android.permission.CLEAR_APP_USER_DATA to clear data of package fi.grotto.android\n\tat com.android.server.am.ActivityManagerService.clearApplicationUserData(ActivityManagerService.java:4523)\n\tat com.android.server.pm.PackageManagerShellCommand.runClear(PackageManagerShellCommand.java:2113)\n\tat com.android.server.pm.PackageManagerShellCommand.onCommand(PackageManagerShellCommand.java:229)\n\tat android.os.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:98)\n\tat android.os.ShellCommand.exec(ShellCommand.java:44)\n\tat com.android.server.pm.PackageManagerService.onShellCommand(PackageManagerService.java:22341)\n\tat android.os.Binder.shellCommand(Binder.java:929)\n\tat android.os.Binder.onTransact(Binder.java:813)\n\tat android.content.pm.IPackageManager$Stub.onTransact(IPackageManager.java:4687)\n\tat com.android.server.pm.PackageManagerService.onTransact(PackageManagerService.java:4475)\n\tat android.os.Binder.execTransactInternal(Binder.java:1159)\n\tat android.os.Binder.execTransact(Binder.java:1123)\n"
+    },
+    "sequenceNumber" : 0
+  }
+}, {
+  "command" : {
+    "defineVariablesCommand" : {
+      "env" : {
+        "MAESTRO_FILENAME" : "android-docs-setup",
+        "MAESTRO_DEVICE_UDID" : "pft4gyhio7s8gmvo",
+        "MAESTRO_SHARD_ID" : "1",
+        "MAESTRO_SHARD_INDEX" : "0"
+      },
+      "optional" : false
+    }
+  },
+  "metadata" : {
+    "status" : "COMPLETED",
+    "timestamp" : 1773469828255,
+    "duration" : 5,
+    "sequenceNumber" : 0
+  }
+} ]

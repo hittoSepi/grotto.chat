@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MobulaDock Invite</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="landing-live.css">
+</head>
+<body>
+  <div class="grid-overlay"></div>
+
+  <nav class="nav">
+    <div class="container nav__wrap">
+      <a href="index.html" class="brand">
+        <span class="brand__mark"></span>
+        <div>
+          MobulaDock
+          <small>invite flow</small>
+        </div>
+      </a>
+
+      <div class="nav__links">
+        <a href="index.html#servers">Servers</a>
+        <a href="index.html#download">Download</a>
+        <a href="docs/">Docs</a>
+      </div>
+
+      <div class="nav__actions">
+        <a class="btn btn--ghost btn--small" href="index.html">Back to landing</a>
+        <a class="btn btn--primary btn--small" href="index.html#download">Download</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="invite-main">
+    <section class="hero invite-hero">
+      <div class="container invite-shell">
+        <article class="invite-panel invite-panel--hero">
+          <div class="eyebrow"><span class="eyebrow__dot"></span>Public MobulaDock invite</div>
+          <h1 id="invite-title">Join MobulaDock Server</h1>
+          <p id="invite-summary" class="hero__description">Open MobulaDock directly from this invite, or fall back to manual connect and download options if the protocol handler is unavailable.</p>
+
+          <div class="invite-badges">
+            <span class="invite-badge">Public server</span>
+            <span id="invite-status-badge" class="invite-badge invite-badge--online">Online</span>
+          </div>
+
+          <div class="hero__actions">
+            <button id="invite-open-btn" class="btn btn--primary">Open in MobulaDock</button>
+            <a href="index.html#download" class="btn btn--ghost">Download client</a>
+          </div>
+
+          <div class="invite-copy-row">
+            <button id="invite-copy-address-btn" class="btn btn--ghost invite-text-action">Copy address</button>
+            <button id="invite-copy-link-btn" class="btn btn--ghost invite-text-action">Copy invite link</button>
+          </div>
+        </article>
+
+        <aside class="invite-panel">
+          <span class="invite-card-kicker">Server invite</span>
+          <h3 id="invite-server-name">Public MobulaDock Server</h3>
+          <p id="invite-server-description">A shared invite page for joining one public MobulaDock community.</p>
+
+          <div class="invite-detail-grid">
+            <div class="invite-detail-item">
+              <span class="invite-detail-label">Address</span>
+              <strong id="invite-address" class="invite-detail-value">chat.example.com:6697</strong>
+            </div>
+            <div class="invite-detail-item">
+              <span class="invite-detail-label">Region</span>
+              <strong id="invite-region" class="invite-detail-value">EU West</strong>
+            </div>
+            <div class="invite-detail-item">
+              <span class="invite-detail-label">Owner</span>
+              <strong id="invite-owner" class="invite-detail-value">Server admin</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="invite-card-grid">
+          <article class="invite-panel">
+            <span class="invite-card-kicker">What happens next</span>
+            <h3>Join flow</h3>
+            <ul class="invite-list">
+              <li><strong>1. Open client</strong> The invite tries the native <code>ircord://</code> handler first.</li>
+              <li><strong>2. Prefill server</strong> Host and port are carried into the client for quick join.</li>
+              <li><strong>3. Confirm and join</strong> User reviews the address and joins the server.</li>
+            </ul>
+          </article>
+
+          <article class="invite-panel">
+            <span class="invite-card-kicker">Fallback</span>
+            <h3>Manual connect and downloads</h3>
+            <div id="invite-manual-address" class="invite-manual-address">chat.example.com:6697</div>
+            <ul class="invite-list">
+              <li><strong>Manual address</strong> If the protocol handler does not open, paste the address into the MobulaDock client.</li>
+              <li><strong>Client downloads</strong> <a href="index.html#download">Windows, Linux and Android builds live on the landing page.</a></li>
+              <li><strong>Need help?</strong> <a href="docs/">Open the docs for installation and connection help.</a></li>
+            </ul>
+          </article>
+
+          <article class="invite-panel">
+            <span class="invite-card-kicker">Email invite</span>
+            <h3>Send a join link</h3>
+            <form id="invite-email-form" class="invite-email-form">
+              <input id="invite-email-input" class="invite-field" type="email" placeholder="recipient@example.com" autocomplete="email">
+              <div class="invite-captcha-box">
+                <span class="invite-captcha-check"></span>
+                <span>CAPTCHA placeholder</span>
+              </div>
+              <button type="submit" class="btn btn--primary btn--wide">Send invite</button>
+            </form>
+            <div id="invite-email-feedback" class="invite-status-message" aria-live="polite"></div>
+            <div class="invite-state-grid">
+              <span class="invite-state-pill">Invite sent</span>
+              <span class="invite-state-pill">Invalid email</span>
+              <span class="invite-state-pill">Captcha required</span>
+              <span class="invite-state-pill">Rate limited</span>
+              <span class="invite-state-pill">Temporary mail failure</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="invite-bottom-grid">
+          <article class="invite-panel">
+            <span class="invite-card-kicker">API contract</span>
+            <h3>Frontend and backend handshake</h3>
+            <ul class="invite-list">
+              <li><strong>Resolve invite</strong> <code>GET /api/invites/resolve?server=&lt;serverId&gt;</code></li>
+              <li><strong>Send email</strong> <code>POST /api/invites/email</code></li>
+              <li><strong>Future token flow</strong> <code>invite.html?token=&lt;token&gt;</code> stays reserved for private invites.</li>
+            </ul>
+          </article>
+
+          <aside class="invite-panel">
+            <span class="invite-card-kicker">Guard rails</span>
+            <h3>Safety and delivery</h3>
+            <ul class="invite-list">
+              <li><strong>CAPTCHA required</strong> Public email sending stays gated.</li>
+              <li><strong>Rate limited</strong> Requests should be limited by IP, server and recipient address.</li>
+              <li><strong>Secondary action</strong> Email stays optional. The primary path is still direct join.</li>
+            </ul>
+            <div class="invite-meta-foot">
+              <span>Invite mode</span>
+              <strong>Public server</strong>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="invite.js"></script>
+</body>
+</html>

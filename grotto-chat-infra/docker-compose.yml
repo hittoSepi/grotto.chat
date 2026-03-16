@@ -1,0 +1,56 @@
+services:
+  # Grotto Directory Service
+  directory:
+    build:
+      context: ./grotto-directory
+      dockerfile: Dockerfile
+    container_name: grotto-directory
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - directory-data:/app/data
+    networks:
+      - grotto-network
+
+  # Grotto Landing Page (static files)
+  landing:
+    image: nginx:alpine
+    container_name: grotto-landing
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./grotto-landing:/usr/share/nginx/html:ro
+      - ./nginx/static-site.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - grotto-network
+
+  # Grotto TURN server for WebRTC / NAT traversal
+  turn:
+    image: coturn/coturn:4.6.3
+    container_name: grotto-turn
+    restart: unless-stopped
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "5349:5349/udp"
+      - "49160-49200:49160-49200/udp"
+    volumes:
+      - ./turn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./nginx/ssl:/etc/coturn/certs:ro
+    networks:
+      - grotto-network
+
+
+volumes:
+  directory-data:
+
+networks:
+  grotto-network:
+    driver: bridge

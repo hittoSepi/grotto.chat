@@ -1,0 +1,90 @@
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.brand__mark {
+    width: 32px;
+    height: 32px;
+    display: block;
+    object-fit: contain;
+    flex: 0 0 32px;
+}
+
+.hero__header {
+    display: inline-flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.hero__logo {
+    width: 104px;
+    height: 104px;
+    flex: 0 0 104px;
+    display: block;
+    object-fit: contain;
+}
+
+.hero .eyebrow {
+    margin: 0;
+}
+
+/* breathing room tune-up */
+.hero {
+    padding-top: clamp(5rem, 8vw, 7rem);
+    padding-bottom: clamp(4rem, 7vw, 6rem);
+}
+
+.section {
+    padding-top: clamp(4.5rem, 8vw, 7rem);
+    padding-bottom: clamp(4.5rem, 8vw, 7rem);
+}
+
+.section__head {
+    max-width: 760px;
+    margin-bottom: clamp(1.75rem, 4vw, 3rem);
+}
+
+.section__head h2 {
+    margin-bottom: 0.85rem;
+}
+
+.section__head .lead,
+.section__head p {
+    max-width: 68ch;
+}
+
+.feature-grid,
+.architecture,
+.docs-grid,
+.download-grid,
+.servers-shell {
+    margin-top: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.servers-shell {
+    gap: clamp(1rem, 2vw, 1.5rem);
+}
+
+.hero__meta {
+    margin-top: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .hero {
+        padding-top: 4.5rem;
+        padding-bottom: 3.5rem;
+    }
+
+    .section {
+        padding-top: 3.5rem;
+        padding-bottom: 3.5rem;
+    }
+
+    .section__head {
+        margin-bottom: 1.5rem;
+    }
+}
+

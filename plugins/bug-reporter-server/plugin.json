@@ -1,0 +1,12 @@
+{
+  "name": "bug-reporter-server",
+  "display_name": "Bug Reporter (Server)",
+  "version": "1.0.0",
+  "type": "server_extension",
+  "entry": "main.js",
+  "description": "Server-side bug report collection",
+  "min_host_version": "0.1.0",
+  "permissions": [
+    "file_write"
+  ]
+}

@@ -1,0 +1,89 @@
+#pragma once
+#include <cstdlib>
+#include <string>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <cstdlib>
+
+
+namespace grotto {
+
+	inline const std::string &default_config_path = "./server.toml";
+	inline const std::string &__PATH__ = std::filesystem::path( "/" ).string();
+
+	inline const std::string &server_toml_template =
+		R"(# Grotto v.0.10.0  -  Server Configuration
+
+[server]
+# Server bind address (0.0.0.0 = all interfaces)
+host = "0.0.0.0"
+
+# Server port (6667 is the historical IRC port)
+port = 6697
+
+# Log level: debug, info, warn, error
+log_level = "info"
+
+# Maximum concurrent connections
+max_connections = 100
+
+# Public server - listed in the Grotto directory
+public = false
+
+[tls]
+# TLS certificate file (required)
+# Generate self-signed for testing:
+#   openssl req -x509 -newkey ed25519 -keyout server.key -out server.crt -days 365 -nodes
+cert_file = "./certs/server.crt"
+
+# TLS private key file (required)
+key_file = "./certs/server.key"
+
+[directory]
+# Directory service for public server listing
+# enabled = true    # Enable directory registration (requires public = true)
+# url = "https://directory.grotto.dev"  # Directory service URL
+# ping_interval_sec = 300  # How often to ping directory (default: 5 min)
+# server_name = "My Grotto Server"  # Display name in directory
+# description = "A friendly Grotto server"  # Short description
+
+[limits]
+# Maximum message size in bytes (64 KB default)
+max_message_bytes = 65536
+
+# Ping interval in seconds (server sends PING)
+ping_interval_sec = 30
+
+# Ping timeout in seconds (disconnect if no PONG)
+ping_timeout_sec = 60
+)";
+
+
+	inline const std::string& get_default_config_path() {
+		
+		const char *env_config = std::getenv( "GROTTO_CHAT_CONFIG" );
+		if ( env_config && env_config[0] != '\0' ) {
+			return env_config;
+		}
+		return default_config_path;
+	}
+
+	inline const bool &file_exists(const std::string& path ) {
+		return std::filesystem::exists( std::filesystem::path( path ));
+	}
+
+
+	inline static void create_config_file( const std::string filename ) {
+		
+		if ( file_exists( filename ) ) {
+			return;
+		}
+
+		std::ofstream config_file( std::filesystem::path( filename ).c_str() );
+		config_file << std::string(server_toml_template);
+		config_file.close();
+	}
+
+
+}

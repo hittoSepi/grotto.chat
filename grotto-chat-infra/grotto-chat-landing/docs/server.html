@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Server Guide — MobulaDock Docs</title>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+  <button class="sidebar-toggle" aria-label="Toggle navigation">&#9776;</button>
+  <div class="sidebar-overlay"></div>
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <a href="../index.html" class="sidebar-logo"><span>MobulaDock</span></a>
+      <div class="sidebar-label">Documentation</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Guides</div>
+      <a href="index.html">Home</a>
+      <a href="server.html" class="active">Server</a>
+      <a href="infrastructure.html">Infrastructure</a>
+      <a href="desktop.html">Desktop Client</a>
+      <a href="android.html">Android Client</a>
+      <a href="plugins.html">Plugin Development</a>
+    </nav>
+    <div class="sidebar-toc">
+      <div class="nav-section">On this page</div>
+      <a href="#overview">What is MobulaDock Server</a>
+      <a href="#getting-started">Getting Started</a>
+      <a href="#configuration">Configuration Reference</a>
+      <a href="#commands">IRC Commands</a>
+      <a href="#channels">Channel Management</a>
+      <a href="#rate-limiting">Rate Limiting</a>
+      <a href="#offline-messages">Offline Messages</a>
+      <a href="#version">Version Tracking</a>
+    </div>
+    <div class="sidebar-footer">
+      <a href="../index.html">&larr; Back to MobulaDock</a>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+
+      <h1>MobulaDock Server</h1>
+      <p class="page-subtitle">
+        Run your own encrypted relay server. The server never sees your messages &mdash; it just routes encrypted data between clients.
+      </p>
+
+      <!-- ============================================================ -->
+      <h2 id="overview">What is MobulaDock Server</h2>
+
+      <p>
+        MobulaDock Server is a lightweight relay built with <strong>C++20</strong> and <strong>Boost.Asio</strong>.
+        It accepts TLS/TCP connections, speaks a length-prefixed <strong>Protobuf</strong> wire protocol,
+        and forwards encrypted payloads between clients. The server itself has no ability to
+        decrypt message content &mdash; all cryptographic operations happen on the client side using the
+        Signal Protocol for DMs and Sender Keys for channels.
+      </p>
+      <p>
+        User accounts and public key bundles are persisted in a local <strong>SQLite</strong> database.
+        The server handles authentication, channel state, user presence, and offline message
+        queuing, but it never touches plaintext.
+      </p>
+
+      <div class="diagram">
+        <div class="diagram-title">Server Architecture</div>
+        <div class="diagram-row">
+          <div class="diagram-box accent">Desktop Client<small>TLS 1.3</small></div>
+          <div class="diagram-arrow">&rarr;</div>
+          <div class="diagram-box success">MobulaDock Server<small>Relay Only</small></div>
+          <div class="diagram-arrow">&larr;</div>
+          <div class="diagram-box accent">Android Client<small>TLS 1.3</small></div>
+        </div>
+        <div class="diagram-arrow-down">&darr;</div>
+        <div class="diagram-row">
+          <div class="diagram-box muted">Encrypted on sender device</div>
+          <div class="diagram-arrow">&rarr;</div>
+          <div class="diagram-box warning">Server forwards ciphertext</div>
+          <div class="diagram-arrow">&rarr;</div>
+          <div class="diagram-box muted">Decrypted on recipient device</div>
+        </div>
+        <div class="diagram-arrow-down">&darr;</div>
+        <div class="diagram-row">
+          <div class="diagram-box muted">Server never decrypts &mdash; zero knowledge of message content</div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="getting-started">Getting Started</h2>
+
+      <p>
+        Pre-built binaries are available for <strong>Linux aarch64</strong> (Raspberry Pi) and
+        <strong>Linux x64</strong>. Download the latest release, place the binary somewhere
+        convenient, and create a <code>server.toml</code> configuration file.
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code># Download and extract
+tar xzf mobuladock-server-linux-aarch64.tar.gz
+cd mobuladock-server
+
+# Create a minimal config (see Configuration section below)
+cp server.example.toml server.toml
+
+# Start the server
+./mobuladock-server --config server.toml</code></pre>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-title">Check your build</div>
+        <p>
+          Run <code>./mobuladock-server --version</code> to see the git commit hash and build
+          timestamp. This is useful for verifying that the correct version is deployed,
+          especially on remote machines.
+        </p>
+      </div>
+
+      <p>
+        By default the server listens on port <strong>6697</strong> (the standard IRC-over-TLS
+        port). You will need a valid TLS certificate and private key &mdash; see the
+        <a href="infrastructure.html">Infrastructure guide</a> for details on obtaining
+        certificates with Let's Encrypt.
+      </p>
+
+      <!-- ============================================================ -->
+      <h2 id="configuration">Configuration Reference</h2>
+
+      <p>
+        The server is configured through a single <code>server.toml</code> file.
+        Below is a complete reference of all available options.
+      </p>
+
+      <h3>[server]</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>host</code></td>
+            <td>string</td>
+            <td><code>"0.0.0.0"</code></td>
+            <td>Bind address. Use <code>"0.0.0.0"</code> to listen on all interfaces.</td>
+          </tr>
+          <tr>
+            <td><code>port</code></td>
+            <td>integer</td>
+            <td><code>6697</code></td>
+            <td>TCP port for TLS connections.</td>
+          </tr>
+          <tr>
+            <td><code>max_connections</code></td>
+            <td>integer</td>
+            <td><code>256</code></td>
+            <td>Maximum simultaneous client connections.</td>
+          </tr>
+          <tr>
+            <td><code>motd</code></td>
+            <td>string</td>
+            <td><code>""</code></td>
+            <td>Message of the Day, shown to clients on connect.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>[tls]</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>cert_file</code></td>
+            <td>string</td>
+            <td>&mdash;</td>
+            <td>Path to the TLS certificate file (PEM format). Required.</td>
+          </tr>
+          <tr>
+            <td><code>key_file</code></td>
+            <td>string</td>
+            <td>&mdash;</td>
+            <td>Path to the TLS private key file (PEM format). Required.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>[database]</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>path</code></td>
+            <td>string</td>
+            <td><code>"mobuladock.db"</code></td>
+            <td>Path to the SQLite database file. Created automatically if it does not exist.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>[directory]</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>enabled</code></td>
+            <td>boolean</td>
+            <td><code>false</code></td>
+            <td>Register this server with the public directory so others can discover it.</td>
+          </tr>
+          <tr>
+            <td><code>server_name</code></td>
+            <td>string</td>
+            <td><code>""</code></td>
+            <td>Display name shown in the directory listing.</td>
+          </tr>
+          <tr>
+            <td><code>description</code></td>
+            <td>string</td>
+            <td><code>""</code></td>
+            <td>Short description of the server.</td>
+          </tr>
+          <tr>
+            <td><code>directory_url</code></td>
+            <td>string</td>
+            <td><code>""</code></td>
+            <td>URL of the directory server to register with.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>[limits]</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>message_rate</code></td>
+            <td>integer</td>
+            <td><code>20</code></td>
+            <td>Maximum chat messages per second per user.</td>
+          </tr>
+          <tr>
+            <td><code>command_rate</code></td>
+            <td>integer</td>
+            <td><code>30</code></td>
+            <td>Maximum commands per minute per user.</td>
+          </tr>
+          <tr>
+            <td><code>join_rate</code></td>
+            <td>integer</td>
+            <td><code>5</code></td>
+            <td>Maximum channel joins per minute per user.</td>
+          </tr>
+          <tr>
+            <td><code>connect_rate</code></td>
+            <td>integer</td>
+            <td><code>10</code></td>
+            <td>Maximum new connections per minute per IP address.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>[offline]</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>enabled</code></td>
+            <td>boolean</td>
+            <td><code>true</code></td>
+            <td>Store messages for offline users and deliver them on reconnect.</td>
+          </tr>
+          <tr>
+            <td><code>ttl_days</code></td>
+            <td>integer</td>
+            <td><code>7</code></td>
+            <td>Number of days to retain offline messages before they expire.</td>
+          </tr>
+          <tr>
+            <td><code>max_per_user</code></td>
+            <td>integer</td>
+            <td><code>100</code></td>
+            <td>Maximum offline messages stored per recipient.</td>
+          </tr>
+          <tr>
+            <td><code>max_total</code></td>
+            <td>integer</td>
+            <td><code>100000</code></td>
+            <td>Maximum total offline messages across all users.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Example Configuration</h3>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">toml</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code>[server]
+host = "0.0.0.0"
+port = 6697
+max_connections = 256
+motd = "Welcome to my MobulaDock server!"
+
+[tls]
+cert_file = "/etc/letsencrypt/live/example.com/fullchain.pem"
+key_file  = "/etc/letsencrypt/live/example.com/privkey.pem"
+
+[database]
+path = "/var/lib/mobuladock/mobuladock.db"
+
+[directory]
+enabled      = true
+server_name  = "My MobulaDock"
+description  = "A friendly encrypted chat server"
+directory_url = "https://directory.mobuladock.org"
+
+[limits]
+message_rate = 20
+command_rate = 30
+join_rate    = 5
+connect_rate = 10
+
+[offline]
+enabled      = true
+ttl_days     = 7
+max_per_user = 100
+max_total    = 100000</code></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="commands">IRC Commands</h2>
+
+      <p>
+        MobulaDock supports a familiar set of IRC-style slash commands. Commands are processed
+        by the server (except for client-local commands like <code>/quit</code>).
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Description</th>
+            <th>Example</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/join</code></td>
+            <td>Join a channel. Creates it if it does not exist.</td>
+            <td><code>/join #general</code></td>
+          </tr>
+          <tr>
+            <td><code>/part</code></td>
+            <td>Leave the current channel.</td>
+            <td><code>/part #general</code></td>
+          </tr>
+          <tr>
+            <td><code>/nick</code></td>
+            <td>Change your display name.</td>
+            <td><code>/nick newname</code></td>
+          </tr>
+          <tr>
+            <td><code>/msg</code></td>
+            <td>Send a private (encrypted) direct message.</td>
+            <td><code>/msg alice Hey there</code></td>
+          </tr>
+          <tr>
+            <td><code>/me</code></td>
+            <td>Send an action message (third person).</td>
+            <td><code>/me waves hello</code></td>
+          </tr>
+          <tr>
+            <td><code>/whois</code></td>
+            <td>View information about a user.</td>
+            <td><code>/whois alice</code></td>
+          </tr>
+          <tr>
+            <td><code>/quit</code></td>
+            <td>Disconnect from the server.</td>
+            <td><code>/quit Goodbye!</code></td>
+          </tr>
+          <tr>
+            <td><code>/password</code></td>
+            <td>Change your account password.</td>
+            <td><code>/password oldpass newpass</code></td>
+          </tr>
+          <tr>
+            <td><code>/kick</code></td>
+            <td>Remove a user from the channel (operator only).</td>
+            <td><code>/kick bob Spamming</code></td>
+          </tr>
+          <tr>
+            <td><code>/ban</code></td>
+            <td>Ban a user from the channel (operator only).</td>
+            <td><code>/ban bob</code></td>
+          </tr>
+          <tr>
+            <td><code>/invite</code></td>
+            <td>Invite a user to an invite-only channel.</td>
+            <td><code>/invite alice #secret</code></td>
+          </tr>
+          <tr>
+            <td><code>/topic</code></td>
+            <td>View or set the channel topic.</td>
+            <td><code>/topic #general New topic text</code></td>
+          </tr>
+          <tr>
+            <td><code>/set</code></td>
+            <td>Change a channel option (operator only).</td>
+            <td><code>/set invite_only true</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============================================================ -->
+      <h2 id="channels">Channel Management</h2>
+
+      <p>
+        Channels in MobulaDock follow the IRC convention of starting with <code>#</code>.
+        The first user to join a channel automatically becomes its <strong>operator</strong>
+        and can manage settings and moderate users.
+      </p>
+
+      <h3>User Modes</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Prefix</th>
+            <th>Role</th>
+            <th>Capabilities</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>@</code></td>
+            <td>Operator</td>
+            <td>Kick, ban, invite, set topic, change channel options, grant/revoke modes.</td>
+          </tr>
+          <tr>
+            <td><code>+</code></td>
+            <td>Voiced</td>
+            <td>Can speak in moderated channels. No moderation powers.</td>
+          </tr>
+          <tr>
+            <td>(none)</td>
+            <td>Regular</td>
+            <td>Can read and send messages in normal channels. Cannot speak in moderated channels.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Channel Options</h3>
+      <p>
+        Operators can configure channel behavior with the <code>/set</code> command.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Option</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>invite_only</code></td>
+            <td>boolean</td>
+            <td><code>false</code></td>
+            <td>Only invited users may join. Use <code>/invite</code> to add users.</td>
+          </tr>
+          <tr>
+            <td><code>moderated</code></td>
+            <td>boolean</td>
+            <td><code>false</code></td>
+            <td>Only operators and voiced users can send messages.</td>
+          </tr>
+          <tr>
+            <td><code>topic_restricted</code></td>
+            <td>boolean</td>
+            <td><code>false</code></td>
+            <td>Only operators can change the channel topic.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">irc</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code>/join #private
+/set invite_only true
+/set topic_restricted true
+/topic #private Members-only discussion
+/invite alice #private</code></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="rate-limiting">Rate Limiting</h2>
+
+      <p>
+        The server enforces rate limits to prevent abuse and ensure fair resource usage.
+        These limits apply per user (or per IP for connection limits) and are configurable
+        in <code>server.toml</code>.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Default Limit</th>
+            <th>Window</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Chat messages</td>
+            <td>20</td>
+            <td>Per second</td>
+          </tr>
+          <tr>
+            <td>Commands</td>
+            <td>30</td>
+            <td>Per minute</td>
+          </tr>
+          <tr>
+            <td>Channel joins</td>
+            <td>5</td>
+            <td>Per minute</td>
+          </tr>
+          <tr>
+            <td>Connections (per IP)</td>
+            <td>10</td>
+            <td>Per minute</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        When a user exceeds a rate limit, the server drops the offending message and sends
+        a warning. After <strong>5 violations</strong> within a session, the user is
+        automatically banned for <strong>30 minutes</strong>.
+      </p>
+
+      <div class="callout warning">
+        <div class="callout-title">Automated clients and bots</div>
+        <p>
+          If you are developing a plugin or bot, be mindful of rate limits. Sending messages
+          in tight loops will trigger the auto-ban. Use delays between messages, and batch
+          operations where possible. See the <a href="plugins.html">Plugin Development</a>
+          guide for best practices.
+        </p>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="offline-messages">Offline Messages</h2>
+
+      <p>
+        When a recipient is not connected, the server stores their incoming messages and
+        delivers them automatically when they reconnect. This applies to both direct
+        messages and channel messages directed at offline users.
+      </p>
+
+      <p>Default limits for offline message storage:</p>
+      <ul>
+        <li><strong>TTL:</strong> 7 days &mdash; messages older than this are automatically purged.</li>
+        <li><strong>Per user:</strong> 100 messages maximum per recipient.</li>
+        <li><strong>Total:</strong> 100,000 messages across all users on the server.</li>
+      </ul>
+
+      <p>
+        When limits are exceeded, the oldest messages are discarded first. All limits are
+        configurable in the <code>[offline]</code> section of <code>server.toml</code>.
+      </p>
+
+      <div class="callout info">
+        <div class="callout-title">End-to-end encryption preserved</div>
+        <p>
+          Offline messages are stored in their encrypted form. The server cannot read them
+          &mdash; it simply holds the ciphertext until the recipient comes online. Your
+          messages remain private even while queued on the server.
+        </p>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="version">Version Tracking</h2>
+
+      <p>
+        The server embeds its git commit hash and build timestamp at compile time. You can
+        check the version of any running server using the <code>--version</code> flag:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code>$ ./mobuladock-server --version
+mobuladock-server v0.15.0 (commit a3f7c2e, built 2026-03-13T14:22:01Z)</code></pre>
+      </div>
+
+      <p>
+        The version is also logged on startup, making it easy to verify the correct binary
+        is running on remote machines by checking the server logs:
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">log</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code>[2026-03-13 14:22:05] [info] mobuladock-server v0.15.0 (commit a3f7c2e)
+[2026-03-13 14:22:05] [info] Listening on 0.0.0.0:6697 (TLS)
+[2026-03-13 14:22:05] [info] Database: /var/lib/mobuladock/mobuladock.db
+[2026-03-13 14:22:05] [info] Ready.</code></pre>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-title">Deployment verification</div>
+        <p>
+          After deploying a new build to a remote server, SSH in and run
+          <code>./mobuladock-server --version</code> to confirm the update took effect.
+          Compare the commit hash against your local build to ensure they match.
+        </p>
+      </div>
+
+      <div class="docs-footer">
+        <p>MobulaDock &mdash; Open source, encrypted messaging. &bull;
+          <a href="https://github.com/hittoSepi/mobuladock" target="_blank">GitHub</a> &bull;
+          <a href="../index.html">Homepage</a>
+        </p>
+      </div>
+    </div>
+  </main>
+  <script src="docs.js"></script>
+</body>
+</html>

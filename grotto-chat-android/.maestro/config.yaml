@@ -1,0 +1,13 @@
+appId: fi.ircord.android
+flows:
+  - flows/*.yaml
+includeTags:
+  - docs
+executionOrder:
+  continueOnFailure: true
+  flowsOrder:
+    - android-docs-setup
+    - android-docs-chat
+    - android-docs-settings
+    - android-docs-voice
+testOutputDir: artifacts

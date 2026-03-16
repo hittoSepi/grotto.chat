@@ -1,0 +1,136 @@
+# IRCord Server Configuration
+# Copy this file to server.toml and modify as needed
+
+[server]
+# Server bind address (0.0.0.0 = all interfaces)
+host = "0.0.0.0"
+
+# Server port (6667 is the historical IRC port)
+port = 6697
+
+# Log level: debug, info, warn, error
+log_level = "info"
+
+# Maximum concurrent connections
+max_connections = 100
+
+# Public server listing
+# Set to true to list this server in the public IRCord directory
+public = true
+
+[tls]
+# TLS certificate file (required)
+# Generate self-signed for testing:
+#   openssl req -x509 -newkey ed25519 -keyout server.key -out server.crt -days 365 -nodes
+cert_file = "./certs/server.crt"
+
+# TLS private key file (required)
+key_file = "./certs/server.key"
+
+[database]
+# SQLite database file path
+path = "./ircord.db"
+
+[limits]
+# Maximum message size in bytes (64 KB default)
+max_message_bytes = 65536
+
+# Ping interval in seconds (server sends PING)
+ping_interval_sec = 30
+
+# Ping timeout in seconds (disconnect if no PONG)
+ping_timeout_sec = 60
+
+# Maximum messages per second per authenticated user
+msg_rate_per_sec = 20
+
+# Maximum connection attempts per minute per IP address
+conn_rate_per_min = 10
+
+# Command rate limiting
+# Maximum commands per minute per user (includes all /commands)
+commands_per_min = 30
+
+# Maximum channel joins per minute per user
+joins_per_min = 5
+
+# Abuse detection
+# Number of rate limit violations before auto-ban
+abuse_threshold = 5
+
+# Time window for counting violations (minutes)
+abuse_window_min = 10
+
+# Ban duration for repeat offenders (minutes)
+ban_duration_min = 30
+
+[security]
+# Master key for file encryption at rest (64 hex characters = 32 bytes)
+# Generate a key with: openssl rand -hex 32
+# Leave empty to disable file encryption (files stored unencrypted - NOT RECOMMENDED)
+file_encryption_key = ""
+
+[antivirus]
+# ClamAV daemon (clamd) configuration for virus scanning
+# Install ClamAV: apt-get install clamav-daemon (Debian/Ubuntu)
+# 
+# Option 1: Unix socket (Linux/macOS only, faster)
+# clamav_socket = "/var/run/clamav/clamd.ctl"
+#
+# Option 2: TCP socket (cross-platform)
+# clamav_host = "127.0.0.1"
+# clamav_port = 3310
+#
+# Leave empty/disabled to skip virus scanning
+clamav_socket = ""
+clamav_host = "127.0.0.1"
+clamav_port = 0
+
+[directory]
+# Directory service for public server listing
+# Only used when [server].public = true
+
+# Enable directory registration
+enabled = true
+
+# Directory service URL
+url = "https://directory.ircord.dev"
+
+# How often to ping the directory (seconds)
+ping_interval_sec = 300
+
+# Display name for this server in the directory
+server_name = "Rausku IRCord Server"
+
+# Short description (max ~100 characters)
+description = "A friendly IRCord encrypted chat server"
+
+[http_api]
+# HTTP API server for external integrations (REST API)
+enabled = false
+port = 8080
+bind_address = "127.0.0.1"  # Use 0.0.0.0 for public access
+
+# API key authentication (empty = no auth, NOT recommended for production)
+# Generate secure key: openssl rand -hex 32
+api_keys = []
+
+# CORS for web clients
+cors_enabled = true
+
+# Rate limiting
+rate_limit_enabled = true
+rate_limit_requests = 60  # requests per minute per IP
+
+[admin]
+# Server owner/admin configuration
+enabled = true                          # Enable reserved admin identity
+key_file = "./keys/admin.ed25519"       # Path to Ed25519 key file
+auto_join_channels = ["#general"]       # Channels admin auto-joins
+
+# Additional reserved nicknames/patterns (regex)
+# These prevent users from registering names similar to admin
+additional_reserved = []
+
+# TUI (admin interface) socket path
+tui_socket = "/run/ircord/admin.sock"

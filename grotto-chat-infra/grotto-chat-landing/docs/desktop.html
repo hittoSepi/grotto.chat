@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Desktop Client — MobulaDock Docs</title>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+  <button class="sidebar-toggle" aria-label="Toggle navigation">&#9776;</button>
+  <div class="sidebar-overlay"></div>
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <a href="../index.html" class="sidebar-logo"><span>MobulaDock</span></a>
+      <div class="sidebar-label">Documentation</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Guides</div>
+      <a href="index.html">Home</a>
+      <a href="server.html">Server</a>
+      <a href="infrastructure.html">Infrastructure</a>
+      <a href="desktop.html" class="active">Desktop Client</a>
+      <a href="android.html">Android Client</a>
+      <a href="plugins.html">Plugin Development</a>
+    </nav>
+    <div class="sidebar-toc">
+      <div class="nav-section">On this page</div>
+      <a href="#overview">Overview</a>
+      <a href="#installation">Installation</a>
+      <a href="#first-connection">First Connection</a>
+      <a href="#channels">Using Channels</a>
+      <a href="#direct-messages">Direct Messages</a>
+      <a href="#voice">Voice Rooms</a>
+      <a href="#shortcuts">Keyboard Shortcuts</a>
+      <a href="#mouse">Mouse Controls</a>
+      <a href="#configuration">Configuration</a>
+      <a href="#settings-ui">Settings UI</a>
+    </div>
+    <div class="sidebar-footer">
+      <a href="../index.html">&larr; Back to MobulaDock</a>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+
+      <h1>Desktop Client</h1>
+      <p class="page-subtitle">A terminal-based chat client built with FTXUI. Lightweight, fast, and fully encrypted.</p>
+
+      <!-- Overview -->
+      <h2 id="overview">Overview</h2>
+      <p>
+        The MobulaDock desktop client is a modern C++20 terminal user interface (TUI) application powered by
+        <a href="https://github.com/ArthurSonzogni/FTXUI" target="_blank">FTXUI</a>. It runs natively on
+        Windows (x64) and Linux (x64), with no Electron, no browser engine, and no unnecessary overhead.
+      </p>
+      <p>
+        All messages are end-to-end encrypted using the Signal Protocol. The server never sees plaintext.
+        Your identity keys are generated and stored locally &mdash; they never leave your device.
+      </p>
+      <p>Core features include:</p>
+      <ul>
+        <li><strong>Channels</strong> &mdash; group conversations with Sender Key encryption</li>
+        <li><strong>Direct messages</strong> &mdash; private 1-on-1 chats with full forward secrecy</li>
+        <li><strong>Voice rooms</strong> &mdash; push-to-talk and voice-activated audio</li>
+        <li><strong>File transfer</strong> &mdash; encrypted peer-to-peer file sharing</li>
+        <li><strong>Message search</strong> &mdash; search through your local message history</li>
+      </ul>
+
+      <div class="screenshot-showcase">
+        <img src="img/general_chat_desktop.jpg" alt="MobulaDock Desktop — Chat view with channels, messages and user list" class="screenshot-full">
+        <p class="screenshot-caption">The main chat interface — channel tabs at the top, messages in the center, user list on the right, and input at the bottom.</p>
+      </div>
+
+      <!-- Installation -->
+      <h2 id="installation">Installation</h2>
+
+      <h3>Windows</h3>
+      <p>Download the latest release archive, extract it, and run the executable.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">PowerShell</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code># Extract the release archive
+Expand-Archive mobuladock-client-win-x64.zip -DestinationPath C:\mobuladock
+
+# Run the client
+C:\mobuladock\mobuladock-client.exe</code></pre>
+      </div>
+
+      <h3>Linux</h3>
+      <p>Download the tarball, extract it, make it executable, and run.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">Bash</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code># Extract
+tar xzf mobuladock-client-linux-x64.tar.gz
+
+# Make executable
+chmod +x mobuladock-client/mobuladock-client
+
+# Run
+./mobuladock-client/mobuladock-client</code></pre>
+      </div>
+
+      <div class="callout tip">
+        <strong>Tip:</strong> For the best visual experience on Windows, use
+        <a href="https://aka.ms/terminal" target="_blank">Windows Terminal</a> or another modern terminal
+        emulator that supports 24-bit color and Unicode rendering.
+      </div>
+
+      <!-- First Connection -->
+      <h2 id="first-connection">First Connection</h2>
+      <p>
+        When you launch the client for the first time, you will be guided through the connection and
+        authentication process step by step.
+      </p>
+      <ol>
+        <li><strong>Launch</strong> the client from your terminal.</li>
+        <li><strong>Enter the server address</strong> when prompted (e.g., <code>mobuladock.example.com</code>).</li>
+        <li><strong>Register or log in.</strong> New users create an account; returning users authenticate with their existing credentials.</li>
+      </ol>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">Terminal</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code>$ ./mobuladock-client
+MobulaDock Desktop Client v0.15
+
+Server address: mobuladock.example.com
+Port [6697]:
+
+Connecting to mobuladock.example.com:6697 (TLS 1.3)...
+Connected.
+
+Username: alice
+Password: ********
+
+Generating Ed25519 identity key...
+Uploading public keys...
+Authenticated as alice. Welcome to MobulaDock.</code></pre>
+      </div>
+
+      <p>
+        During registration, an Ed25519 identity key pair is generated on your machine. The public key
+        is uploaded to the server so other users can establish encrypted sessions with you. The private
+        key is stored locally and is never transmitted.
+      </p>
+
+      <div class="callout info">
+        <strong>Note:</strong> Your identity key is generated locally and never leaves your device.
+        The server only receives your public key, which other users need in order to send you
+        encrypted messages.
+      </div>
+
+      <!-- Channels -->
+      <h2 id="channels">Using Channels</h2>
+      <p>
+        Channels are group conversations, similar to IRC channels. All channel names begin with
+        <code>#</code>.
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">Commands</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code>/join #general       Join a channel
+/part #general       Leave a channel</code></pre>
+      </div>
+
+      <p>
+        Joined channels appear in the sidebar on the left. You can switch between channels by clicking
+        the channel tab or by using keyboard shortcuts. The active channel is highlighted.
+      </p>
+      <p>
+        Channel messages are end-to-end encrypted using <strong>Sender Keys</strong>. When you first
+        send a message in a channel, a Sender Key Distribution Message (SKDM) is broadcast so that
+        other participants can decrypt your messages. This happens automatically &mdash; no manual
+        key management is required.
+      </p>
+
+      <!-- Direct Messages -->
+      <h2 id="direct-messages">Direct Messages</h2>
+      <p>
+        Direct messages (DMs) provide private, one-on-one conversations with another user.
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">Commands</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code>/msg bob Hey, are you around?</code></pre>
+      </div>
+
+      <p>
+        When you send a DM for the first time, the client performs an
+        <strong>X3DH key exchange</strong> (Extended Triple Diffie-Hellman) using the Signal Protocol.
+        This establishes a shared session with the recipient. From that point forward, every message
+        uses a new encryption key derived via the Double Ratchet algorithm, providing
+        <strong>forward secrecy</strong> &mdash; even if a key is compromised, past messages remain
+        protected.
+      </p>
+
+      <div class="callout tip">
+        <strong>Tip:</strong> DMs use the strongest encryption available, with per-message forward
+        secrecy. Each message is encrypted with a unique key that is discarded after use.
+      </div>
+
+      <!-- Voice Rooms -->
+      <h2 id="voice">Voice Rooms</h2>
+      <p>
+        Voice rooms let you have real-time audio conversations within a channel.
+      </p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">Commands</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code>/voice join #general     Join the voice room for #general
+/voice leave             Leave the current voice room</code></pre>
+      </div>
+
+      <p>Voice supports two input modes:</p>
+      <ul>
+        <li><strong>Push-to-Talk (PTT)</strong> &mdash; hold a configured key to transmit audio.</li>
+        <li><strong>Voice Activation (VOX)</strong> &mdash; audio is transmitted automatically when you speak above the threshold.</li>
+      </ul>
+      <p>
+        While in a voice room, you can mute your microphone or deafen (mute all incoming audio).
+        The user list displays speaking indicators next to participants who are currently transmitting.
+        The status bar at the bottom of the interface shows your current voice state, including the
+        room name and mute/deafen status.
+      </p>
+
+      <div class="screenshot-showcase">
+        <img src="img/general_chat_notification_settings.jpg" alt="MobulaDock Desktop — Voice room active with user in VOX mode" class="screenshot-full">
+        <p class="screenshot-caption">Voice room active — the status bar shows the room name, user count, and current voice mode (VOX).</p>
+      </div>
+
+      <!-- Keyboard Shortcuts -->
+      <h2 id="shortcuts">Keyboard Shortcuts</h2>
+      <p>The client is designed for efficient keyboard-driven navigation.</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><kbd>F1</kbd></td>
+            <td>Toggle Push-to-Talk (PTT)</td>
+          </tr>
+          <tr>
+            <td><kbd>F12</kbd></td>
+            <td>Open Settings</td>
+          </tr>
+          <tr>
+            <td><kbd>Alt</kbd>+<kbd>1</kbd>&ndash;<kbd>9</kbd></td>
+            <td>Switch to channel 1&ndash;9</td>
+          </tr>
+          <tr>
+            <td><kbd>Alt</kbd>+<kbd>Left</kbd> / <kbd>Right</kbd></td>
+            <td>Switch to previous / next channel</td>
+          </tr>
+          <tr>
+            <td><kbd>Enter</kbd></td>
+            <td>Send the current message</td>
+          </tr>
+          <tr>
+            <td><kbd>Up</kbd> / <kbd>Down</kbd></td>
+            <td>Scroll through input history</td>
+          </tr>
+          <tr>
+            <td><kbd>Page Up</kbd> / <kbd>Page Down</kbd></td>
+            <td>Scroll messages in the chat view</td>
+          </tr>
+          <tr>
+            <td><kbd>Ctrl</kbd>+<kbd>L</kbd></td>
+            <td>Clear the chat view</td>
+          </tr>
+          <tr>
+            <td><kbd>Ctrl</kbd>+<kbd>U</kbd></td>
+            <td>Clear the input line</td>
+          </tr>
+          <tr>
+            <td><kbd>Ctrl</kbd>+<kbd>Q</kbd></td>
+            <td>Quit the client</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Mouse Controls -->
+      <h2 id="mouse">Mouse Controls</h2>
+      <p>
+        In addition to keyboard navigation, the client supports mouse interaction for common tasks.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Effect</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Click channel tab</td>
+            <td>Switch to that channel</td>
+          </tr>
+          <tr>
+            <td>Click user list item</td>
+            <td>Insert a mention for that user</td>
+          </tr>
+          <tr>
+            <td>Right-click</td>
+            <td>Open context menu</td>
+          </tr>
+          <tr>
+            <td>Drag user list edge</td>
+            <td>Resize the user list panel</td>
+          </tr>
+          <tr>
+            <td>Mouse wheel</td>
+            <td>Scroll messages (3 lines per tick)</td>
+          </tr>
+          <tr>
+            <td>Double-click message</td>
+            <td>Select the message text</td>
+          </tr>
+          <tr>
+            <td>Triple-click message</td>
+            <td>Select message with sender name and auto-copy to clipboard</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout info">
+        <strong>Note:</strong> Mouse support depends on your terminal emulator's capabilities.
+        Most modern terminals (Windows Terminal, iTerm2, Alacritty, kitty) provide full mouse
+        support. Older terminals or remote SSH sessions may have limited or no mouse functionality.
+      </div>
+
+      <!-- Configuration -->
+      <h2 id="configuration">Configuration</h2>
+      <p>
+        The client reads its configuration from a TOML file. The file is created automatically on
+        first launch with sensible defaults.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Platform</th>
+            <th>Config file location</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Linux</td>
+            <td><code>~/.config/mobuladock/config.toml</code></td>
+          </tr>
+          <tr>
+            <td>Windows</td>
+            <td><code>%APPDATA%\mobuladock\config.toml</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Key Settings</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Description</th>
+            <th>Default</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>server</code></td>
+            <td>Server hostname or IP address</td>
+            <td><code>""</code></td>
+          </tr>
+          <tr>
+            <td><code>port</code></td>
+            <td>Server port number</td>
+            <td><code>6697</code></td>
+          </tr>
+          <tr>
+            <td><code>username</code></td>
+            <td>Your username for authentication</td>
+            <td><code>""</code></td>
+          </tr>
+          <tr>
+            <td><code>theme</code></td>
+            <td>Color theme (<code>"dark"</code> or <code>"light"</code>)</td>
+            <td><code>"dark"</code></td>
+          </tr>
+          <tr>
+            <td><code>user_list_width</code></td>
+            <td>Width of the user list panel in columns</td>
+            <td><code>20</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Example Configuration</h3>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-block-lang">TOML</span>
+          <button class="code-copy">Copy</button>
+        </div>
+<pre><code># MobulaDock Desktop Client Configuration
+
+server = "mobuladock.example.com"
+port = 6697
+username = "alice"
+
+# Appearance
+theme = "dark"
+user_list_width = 24</code></pre>
+      </div>
+
+      <!-- Settings UI -->
+      <h2 id="settings-ui">Settings UI</h2>
+      <p>
+        Press <kbd>F12</kbd> to open the built-in settings panel. It provides a graphical interface
+        for all configuration options, organized into four tabs.
+      </p>
+
+      <div class="screenshot-grid">
+        <div class="screenshot-card">
+          <img src="img/apparance_settings.jpg" alt="Appearance settings — theme selection, timestamps, colors">
+          <h4>Appearance</h4>
+          <p>Choose from 7 color themes (including tokyo-night), toggle timestamps and username colors, set timestamp format and message buffer size.</p>
+        </div>
+        <div class="screenshot-card">
+          <img src="img/connection_settings.jpg" alt="Connection settings — reconnect, timeout, TLS">
+          <h4>Connection</h4>
+          <p>Configure auto-reconnect behavior, connection timeout, TLS certificate verification, and certificate pinning.</p>
+        </div>
+        <div class="screenshot-card">
+          <img src="img/notification_settings.jpg" alt="Notification settings — desktop alerts, sounds, mentions">
+          <h4>Notifications</h4>
+          <p>Enable desktop notifications and sound alerts, configure mention detection with custom keywords.</p>
+        </div>
+        <div class="screenshot-card">
+          <img src="img/account_settings.jpg" alt="Account settings — nickname, keys, import/export, logout">
+          <h4>Account</h4>
+          <p>Change your nickname, view your Ed25519 public key, import/export settings, or log out.</p>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <strong>Tip:</strong> Theme changes apply immediately as you browse the list. All other
+        settings take effect when you click <strong>Save</strong>.
+      </div>
+
+      <!-- Footer -->
+      <div class="docs-footer">
+        <p>MobulaDock &mdash; Open source, encrypted messaging. &bull;
+          <a href="https://github.com/hittoSepi/mobuladock" target="_blank">GitHub</a> &bull;
+          <a href="../index.html">Homepage</a>
+        </p>
+      </div>
+    </div>
+  </main>
+  <script src="docs.js"></script>
+</body>
+</html>

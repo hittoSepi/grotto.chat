@@ -1,0 +1,10 @@
+# Bug Reporter Bot Configuration
+
+# Maximum bugs to store (oldest will be removed)
+max_bugs = 1000
+
+# Notification settings
+notify_on_bug = true
+
+# Admin users who can use /bugs command (optional, currently all users can use it)
+# admins = ["admin1", "admin2"]

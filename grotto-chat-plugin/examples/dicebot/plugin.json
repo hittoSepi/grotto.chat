@@ -1,0 +1,21 @@
+{
+  "name": "dicebot",
+  "display_name": "Dice Bot",
+  "version": "1.0.0",
+  "type": "bot",
+  "entry": "main.js",
+  "description": "Roll dice with /roll command",
+  "min_host_version": "0.1.0",
+  "bot": {
+    "user_id": "DiceBot",
+    "auto_join_channels": ["#general", "#games"]
+  },
+  "commands": [
+    {
+      "name": "/roll",
+      "description": "Roll dice (e.g. /roll 2d6)",
+      "usage": "/roll [NdN | N]"
+    }
+  ],
+  "permissions": ["read_messages", "send_messages", "register_commands"]
+}
