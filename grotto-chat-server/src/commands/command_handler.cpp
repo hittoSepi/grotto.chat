@@ -41,6 +41,11 @@ std::string resolve_target_user_id(
     return it != nick_to_user_id.end() ? it->second : target;
 }
 
+std::string normalize_channel_argument(const std::string& input) {
+    const std::string channel = utils::sanitize_channel_name(input);
+    return utils::is_valid_channel_name(channel) ? channel : std::string();
+}
+
 } // namespace
 
 // Helper to create CommandResponse
@@ -140,7 +145,7 @@ ChannelState& CommandHandler::get_or_create_channel(const std::string& name) {
 
 CommandResponse CommandHandler::cmd_join(const std::vector<std::string>& args, SessionPtr session) {
     if (args.empty()) {
-        return make_response(false, "Usage: /join <#channel>", "join");
+        return make_response(false, "Usage: /join <channel>", "join");
     }
 
     // Sanitize channel name: auto-add # prefix, strip invalid chars
@@ -196,10 +201,13 @@ CommandResponse CommandHandler::cmd_part(const std::vector<std::string>& args, S
     const std::string& user_id = session->user_id();
     
     if (args.empty()) {
-        return make_response(false, "Usage: /part <#channel> [message]", "part");
+        return make_response(false, "Usage: /part <channel> [message]", "part");
     }
 
-    std::string channel = args[0];
+    std::string channel = normalize_channel_argument(args[0]);
+    if (channel.empty()) {
+        return make_response(false, "Invalid channel name", "part");
+    }
     std::string reason = args.size() > 1 ? args[1] : "Leaving";
 
     auto it = channels_.find(channel);
@@ -314,10 +322,13 @@ CommandResponse CommandHandler::cmd_me(const std::vector<std::string>& args, Ses
 
 CommandResponse CommandHandler::cmd_topic(const std::vector<std::string>& args, SessionPtr session) {
     if (args.empty()) {
-        return make_response(false, "Usage: /topic <#channel> [new_topic]", "topic");
+        return make_response(false, "Usage: /topic <channel> [new_topic]", "topic");
     }
 
-    std::string channel = args[0];
+    std::string channel = normalize_channel_argument(args[0]);
+    if (channel.empty()) {
+        return make_response(false, "Invalid channel name", "topic");
+    }
     auto it = channels_.find(channel);
     if (it == channels_.end()) {
         return make_response(false, "No such channel: " + channel, "topic");
@@ -355,10 +366,13 @@ CommandResponse CommandHandler::cmd_topic(const std::vector<std::string>& args, 
 
 CommandResponse CommandHandler::cmd_kick(const std::vector<std::string>& args, SessionPtr session) {
     if (args.size() < 2) {
-        return make_response(false, "Usage: /kick <#channel> <nick> [reason]", "kick");
+        return make_response(false, "Usage: /kick <channel> <nick> [reason]", "kick");
     }
 
-    std::string channel = args[0];
+    std::string channel = normalize_channel_argument(args[0]);
+    if (channel.empty()) {
+        return make_response(false, "Invalid channel name", "kick");
+    }
     std::string target = args[1];
     std::string reason = args.size() > 2 ? args[2] : "Kicked";
 
@@ -411,10 +425,13 @@ CommandResponse CommandHandler::cmd_kick(const std::vector<std::string>& args, S
 
 CommandResponse CommandHandler::cmd_ban(const std::vector<std::string>& args, SessionPtr session) {
     if (args.size() < 2) {
-        return make_response(false, "Usage: /ban <#channel> <nick>", "ban");
+        return make_response(false, "Usage: /ban <channel> <nick>", "ban");
     }
 
-    std::string channel = args[0];
+    std::string channel = normalize_channel_argument(args[0]);
+    if (channel.empty()) {
+        return make_response(false, "Invalid channel name", "ban");
+    }
     std::string target = args[1];
 
     auto it = channels_.find(channel);
@@ -443,10 +460,13 @@ CommandResponse CommandHandler::cmd_ban(const std::vector<std::string>& args, Se
 
 CommandResponse CommandHandler::cmd_invite(const std::vector<std::string>& args, SessionPtr session) {
     if (args.size() < 2) {
-        return make_response(false, "Usage: /invite <#channel> <nick> [message]", "invite");
+        return make_response(false, "Usage: /invite <channel> <nick> [message]", "invite");
     }
 
-    std::string channel = args[0];
+    std::string channel = normalize_channel_argument(args[0]);
+    if (channel.empty()) {
+        return make_response(false, "Invalid channel name", "invite");
+    }
     std::string target = args[1];
     std::string message = args.size() > 2 ? args[2] : "";
 
@@ -481,10 +501,13 @@ CommandResponse CommandHandler::cmd_invite(const std::vector<std::string>& args,
 
 CommandResponse CommandHandler::cmd_set(const std::vector<std::string>& args, SessionPtr session) {
     if (args.size() < 3) {
-        return make_response(false, "Usage: /set <#channel> <option> <value>", "set");
+        return make_response(false, "Usage: /set <channel> <option> <value>", "set");
     }
 
-    std::string channel = args[0];
+    std::string channel = normalize_channel_argument(args[0]);
+    if (channel.empty()) {
+        return make_response(false, "Invalid channel name", "set");
+    }
     std::string option = args[1];
     std::string value = args[2];
 
@@ -518,10 +541,13 @@ CommandResponse CommandHandler::cmd_set(const std::vector<std::string>& args, Se
 
 CommandResponse CommandHandler::cmd_mode(const std::vector<std::string>& args, SessionPtr session) {
     if (args.size() < 3) {
-        return make_response(false, "Usage: /mode <#channel> <+o|-o> <nick>", "mode");
+        return make_response(false, "Usage: /mode <channel> <+o|-o> <nick>", "mode");
     }
 
-    std::string channel = args[0];
+    std::string channel = normalize_channel_argument(args[0]);
+    if (channel.empty()) {
+        return make_response(false, "Invalid channel name", "mode");
+    }
     std::string mode = args[1];
     std::string target = args[2];
 
