@@ -1,5 +1,6 @@
 # GROTTO CHAT SERVER - COMPREHENSIVE ANALYSIS REPORT
 **Generated:** March 21, 2026  
+**Updated:** March 21, 2026  
 **Repository:** /home/hitto/Programming/grotto.chat/grotto-chat-server  
 **Status:** Recently refactored (project name change from IRCord to Grotto)
 
@@ -229,59 +230,44 @@ grotto-chat-server/
    }
    ```
 
-#### 2. **File Encryption Placeholder** ⚠️
-   - **File:** `src/crypto/file_encryptor.cpp`
-   - **Issue:** Comment at line 99 indicates **simplified placeholder implementation**
-   - **Impact:** File encryption may not use proper AES-GCM
-   - **Lines:** 99-100
-   - **Comment:** "This is a simplified placeholder - in production use OpenSSL EVP"
-   - **Risk:** File encryption may be weaker than advertised
+#### 2. **Virus Scanner Integration Still Missing** ⚠️
+   - **File:** `src/security/virus_scanner.cpp`
+   - **Issue:** The server now has working file encryption, admin commands, and tests, but ClamAV integration is still stubbed.
+   - **Impact:** Uploaded files are not actually scanned even when antivirus config exists.
+   - **Risk:** Malware scanning is advertised by configuration shape but not enforced by implementation.
 
-   ```cpp
-   // Line 99-100: Placeholder note
-   // Actually, let's implement proper AES-GCM using OpenSSL EVP API
-   // This is a simplified placeholder - in production use OpenSSL EVP
-   ```
-
-#### 3. **Incomplete Admin Commands** ⚠️
-   - **File:** `src/admin/server_owner.cpp`
-   - **Lines:** 56, 70, 219, 241, 289, 299, 309, 319
-   - **Issue:** Multiple TODO comments for incomplete features:
-     - Line 56: "TODO: Implement actual channel message sending"
-     - Line 70: "TODO: Implement actual DM sending"
-     - Line 219: "TODO: Broadcast to all channels"
-     - Line 241: "TODO: Add user to ban list and kick if online"
-     - Line 289: "TODO: Kick user from current channel or all channels"
-     - Line 299: "TODO: Schedule shutdown"
-     - Line 309: "TODO: Schedule restart"
-     - Line 319: "TODO: Add actual stats when available"
-   - **Impact:** Server admin features may not work properly
-   - **Risk:** Admins cannot manage server effectively
-
-#### 4. **File Checksum Not Calculated** ⚠️
+#### 3. **File Checksum Not Calculated** ⚠️
    - **File:** `src/net/session.cpp`
-   - **Issue:** "TODO: Calculate full file checksum" (line ~933)
-   - **Impact:** File integrity verification missing
-   - **Risk:** Corrupted files may not be detected
+   - **Issue:** "TODO: Calculate full file checksum" remains in the upload path.
+   - **Impact:** File integrity verification is still incomplete.
+   - **Risk:** Corrupted files may not be detected.
 
-#### 5. **Statistics Not Implemented** ⚠️
+#### 4. **Statistics Coverage Is Partial** ⚠️
    - **File:** `src/server.cpp`
-   - **Lines:** Comments in handle_admin_command()
-   - **Issue:** "TODO: Add actual stats when available"
-   - **Lines:** Multiple TODOs for bug report storage
-   - **Impact:** Server statistics unavailable to admins
+   - **Issue:** Some admin-facing stats and bug report persistence TODOs still remain in the main server path even though `ServerOwner::cmd_status()` now reports real runtime stats.
+   - **Impact:** Operational visibility is improved but not complete.
 
-   ```cpp
-   // Line ~500: In server.cpp admin handler
-   // TODO: Store bug report in database
-   // TODO: Add actual stats when available
-   ```
-
-#### 6. **Command Handler Missing Identity Fingerprint** ⚠️
+#### 5. **Command Handler Missing Identity Fingerprint** ⚠️
    - **File:** `src/commands/command_handler.cpp`
    - **Issue:** "TODO: Add identity fingerprint from database" (whois command)
-   - **Impact:** WHOIS responses incomplete
-   - **Risk:** Users cannot verify identity keys
+   - **Impact:** WHOIS responses remain incomplete for key verification.
+   - **Risk:** Users cannot verify identity keys easily.
+
+### Resolved During Follow-up Work
+
+#### 1. **File Encryption Placeholder** ✅
+   - **File:** `src/crypto/file_encryptor.cpp`
+   - **Status:** Replaced with OpenSSL EVP AES-256-GCM implementation.
+   - **Impact:** File encryption at rest now matches the documented cipher/mode.
+
+#### 2. **Incomplete Admin Commands** ✅
+   - **File:** `src/admin/server_owner.cpp`
+   - **Status:** Channel messaging, DM sending, announce, kick, ban, shutdown, restart, and status paths were implemented.
+   - **Impact:** ServerOwner is now operational instead of mostly placeholder logic.
+
+#### 3. **No Automated Tests** ✅
+   - **Status:** A Catch2-based `tests/` directory now exists with `test_file_encryptor.cpp` and `test_reserved_identity.cpp`.
+   - **Impact:** Basic crypto and reserved-name regression coverage is now present.
 
 ### Medium Priority Issues
 
@@ -382,29 +368,26 @@ grotto-chat-server/
 ## 5. TEST COVERAGE
 
 ### Tests Status
-❌ **NO TESTS FOUND** in grotto-chat-server directory
+🟡 **Basic tests now exist** in `grotto-chat-server/tests/`
 
-**Issue:** This is a critical gap
-- No unit tests found
-- No integration tests found
-- No test framework (Catch2 mentioned in README but not implemented)
-- No `_test.cpp` files
-- No `tests/` directory
-- No CTest configuration in CMakeLists.txt
+**Current coverage:**
+- Catch2 is wired into `CMakeLists.txt`
+- `test_file_encryptor.cpp`
+- `test_reserved_identity.cpp`
+- `ctest --test-dir build --output-on-failure` passes for the server build
 
-**Impact:**
-- No regression detection
-- No CI/CD validation
-- Manual testing required
-- Risk of silent failures
-- Code quality assurance missing
+**Remaining gaps:**
+- No database tests yet
+- No protocol/session tests yet
+- No command handler tests yet
+- No integration tests for file transfer or admin flows
 
-**Recommendation:** Implement at minimum:
-1. Unit tests for crypto (file_encryptor)
-2. Database tests (user_store, offline_store, file_store)
-3. Protocol parsing tests (protobuf message handling)
-4. Command handler tests
-5. Rate limiter tests
+**Recommended next additions:**
+1. Database tests (`user_store`, `offline_store`, `file_store`)
+2. Protocol/session tests
+3. Command handler tests
+4. File upload/checksum tests
+5. Virus scanner behavior tests once implemented
 
 ---
 
@@ -435,9 +418,9 @@ Date:   Mon Mar 16 14:42:36 2026 +0200
 **Status:** Fresh import/rename from previous project
 
 ### Version Information
-- **Server Version:** 0.1.0 (in vcpkg.json and config template)
-- **Protocol Version:** 1 (hardcoded in session.hpp)
-- **Last Stable Commit:** a9c8760 (most recent)
+- **Server Version:** 0.1.0 (in `vcpkg.json` and config template)
+- **Protocol Version:** 1 (hardcoded in `session.hpp`)
+- **Recent follow-up work:** build fixes, AES-256-GCM migration, admin command completion, and server tests were added after the initial rename/import
 
 ---
 
@@ -447,7 +430,7 @@ Date:   Mon Mar 16 14:42:36 2026 +0200
 ✅ Ed25519 digital signatures for authentication  
 ✅ Signal Protocol pre-key bundle support  
 ✅ Password-based identity key recovery (Argon2id)  
-✅ File encryption at rest support (XChaCha20-Poly1305 via libsodium)  
+✅ File encryption at rest support (AES-256-GCM via OpenSSL EVP)  
 ✅ TLS/TCP for in-transit encryption  
 ✅ Rate limiting for DOS protection  
 ✅ SQLite password verification (Argon2id)  
@@ -455,10 +438,8 @@ Date:   Mon Mar 16 14:42:36 2026 +0200
 
 ### Gaps & Risks
 ❌ Virus scanner completely non-functional (stubs only)  
-❌ File encryption uses placeholder implementation  
 ❌ No input validation documentation  
 ❌ No security audit trail/logging for admin actions  
-❌ Admin commands partially implemented  
 ❌ No identity fingerprint verification in WHOIS  
 ❌ Fail-open virus scanning (returns clean if unavailable)  
 ⚠️ File encryption key must be manually configured  
@@ -478,9 +459,9 @@ Date:   Mon Mar 16 14:42:36 2026 +0200
    - Database error recovery
 
 ❌ **Issues Found:**
-   - No validation for commented-out virus scanning (just returns false)
-   - Admin commands only log, don't execute
-   - Statistics not collected
+   - Virus scanning still returns stubbed results
+   - File checksum verification is still incomplete
+   - Statistics/bug-report plumbing is still partial in some server paths
    - No panic/assert defensive patterns found (0 occurrences)
    - Limited recovery mechanisms for transient failures
 
@@ -669,18 +650,17 @@ Handshake → Hello → AuthPending → Established → Dead
 🟡 **BETA QUALITY** - Core features functional but incomplete
 
 ### Critical Issues Requiring Attention
-1. **Virus scanner is non-functional** - All methods are stubs
-2. **File encryption is placeholder** - May not use proper AES-GCM
-3. **Admin commands partially implemented** - Multiple TODOs incomplete
-4. **No automated tests** - Zero test coverage
-5. **Statistics not implemented** - Server metrics unavailable
+1. **Virus scanner is non-functional** - All methods are still stubs
+2. **File checksum verification is incomplete** - upload path still has checksum TODOs
+3. **Statistics/bug report plumbing is partial** - not all operational paths are wired
+4. **Test coverage is still narrow** - core server logic still lacks broad regression coverage
+5. **WHOIS/key fingerprint reporting is incomplete** - identity verification UX remains partial
 
 ### Before Production Deployment
 - [ ] Implement actual ClamAV integration (virus_scanner.cpp)
-- [ ] Complete file encryption implementation with proper OpenSSL EVP
-- [ ] Complete admin command implementations
-- [ ] Add comprehensive unit tests (minimum 70% coverage)
-- [ ] Implement server statistics collection
+- [ ] Complete full file checksum calculation and verification
+- [ ] Expand automated test coverage beyond crypto/reserved names
+- [ ] Complete remaining server statistics and bug report persistence
 - [ ] Security audit of crypto operations
 - [ ] Load testing and performance profiling
 - [ ] Documentation for operational procedures
@@ -696,9 +676,9 @@ Handshake → Hello → AuthPending → Established → Dead
 
 ### Code Quality
 - Lines of Code: 7,052 (manageable)
-- Test Coverage: 0% (critical gap)
+- Test Coverage: low but no longer zero
 - Documentation: Excellent (3,000+ lines)
-- TODO Items Found: 13 issues (5 high-priority)
+- TODO Items Found: several remain, but major crypto/admin/test gaps were reduced
 - Error Handling: Adequate but incomplete
 
 ---
@@ -706,13 +686,11 @@ Handshake → Hello → AuthPending → Established → Dead
 ## FILES REQUIRING ATTENTION (Priority Order)
 
 1. **CRITICAL:** `src/security/virus_scanner.cpp` - Complete stub implementation
-2. **CRITICAL:** `src/crypto/file_encryptor.cpp` - Placeholder comment at line 99
-3. **HIGH:** `src/admin/server_owner.cpp` - 8 incomplete TODOs
-4. **HIGH:** `src/server.cpp` - 3 incomplete TODOs
-5. **MEDIUM:** `src/commands/command_handler.cpp` - Missing fingerprint feature
-6. **MEDIUM:** `src/net/session.cpp` - File checksum not calculated
-7. **MEDIUM:** Add comprehensive test suite (currently missing)
-8. **LOW:** Documentation updates for incomplete features
+2. **HIGH:** `src/net/session.cpp` - File checksum not calculated
+3. **HIGH:** `src/server.cpp` - Remaining stats / bug report TODOs
+4. **MEDIUM:** `src/commands/command_handler.cpp` - Missing fingerprint feature
+5. **MEDIUM:** Expand `tests/` beyond current crypto/admin coverage
+6. **LOW:** Documentation updates for incomplete features
 
 ---
 
@@ -723,8 +701,8 @@ Handshake → Hello → AuthPending → Established → Dead
 | Total Source Files | 40 (*.cpp + *.hpp) |
 | Total Lines of Code | ~7,052 |
 | Documentation Lines | ~3,000+ |
-| Test Coverage | 0% |
-| High Priority TODOs | 5 |
+| Test Coverage | Low, but present |
+| High Priority TODOs | Reduced from original audit |
 | Medium Priority Issues | 5 |
 | Low Priority Issues | 3 |
 | Dependencies | 10 (via vcpkg) |
@@ -732,4 +710,3 @@ Handshake → Hello → AuthPending → Established → Dead
 | Database Tables (via schema) | 5+ |
 | Command Handlers | 13+ |
 | Max Message Size | 64 KB |
-

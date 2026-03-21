@@ -35,6 +35,7 @@ CTestTestfile.cmake
 
 .claude/
 memory/
+.opencode/
 AGENTS.md
 CLAUDE.md
 
