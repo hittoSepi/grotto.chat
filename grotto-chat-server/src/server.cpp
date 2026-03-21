@@ -427,7 +427,7 @@ void Server::setup_http_api_routes() {
         int channels = 0;
 
         if (listener_) {
-            online_users = listener_->active_connection_count();
+            online_users = static_cast<int>(listener_->get_online_users().size());
 
             if (auto* command_handler = listener_->command_handler()) {
                 channels = static_cast<int>(command_handler->channel_count());

@@ -4,6 +4,7 @@
 #include "db/user_store.hpp"
 #include "db/offline_store.hpp"
 #include "utils/channel_utils.hpp"
+#include "utils/nickname_utils.hpp"
 #include <spdlog/spdlog.h>
 #include <sodium.h>
 #include <algorithm>
@@ -259,7 +260,14 @@ CommandResponse CommandHandler::cmd_whois(const std::vector<std::string>& args, 
     if (nick_to_user_id_.count(target)) {
         target_id = nick_to_user_id_[target];
     } else {
-        target_id = target; // Assume it's a user_id
+        const auto it = std::find_if(
+            nick_to_user_id_.begin(),
+            nick_to_user_id_.end(),
+            [&target](const auto& entry) {
+                return utils::nicknames_equal(entry.first, target);
+            });
+
+        target_id = it != nick_to_user_id_.end() ? it->second : target;
     }
 
     UserInfo info;
