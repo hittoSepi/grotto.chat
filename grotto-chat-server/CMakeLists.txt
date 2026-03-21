@@ -323,3 +323,15 @@ target_link_libraries(test-reserved-identity PRIVATE
     spdlog::spdlog
 )
 add_test(NAME reserved-identity-tests COMMAND test-reserved-identity)
+
+add_executable(test-channel-utils
+    tests/test_channel_utils.cpp
+)
+target_include_directories(test-channel-utils PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(test-channel-utils PRIVATE
+    Catch2::Catch2WithMain
+)
+add_test(NAME channel-utils-tests COMMAND test-channel-utils)
