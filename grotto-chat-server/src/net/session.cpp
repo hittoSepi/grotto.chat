@@ -963,8 +963,8 @@ void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& /
             }
         }
         
-        // TODO: Calculate full file checksum
-        std::vector<uint8_t> checksum;
+        std::vector<uint8_t> checksum(crypto_hash_sha256_BYTES);
+        crypto_hash_sha256(checksum.data(), assembled_file.data(), assembled_file.size());
         file_store.markComplete(chunk.file_id(), checksum);
         
         // Notify completion

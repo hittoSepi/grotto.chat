@@ -5,9 +5,25 @@
 #include "db/offline_store.hpp"
 #include "utils/channel_utils.hpp"
 #include <spdlog/spdlog.h>
+#include <sodium.h>
 #include <algorithm>
 
 namespace grotto::commands {
+
+namespace {
+
+std::string format_identity_fingerprint(const std::vector<uint8_t>& identity_pub) {
+    if (identity_pub.empty()) {
+        return {};
+    }
+
+    std::string fingerprint(identity_pub.size() * 2 + 1, '\0');
+    sodium_bin2hex(fingerprint.data(), fingerprint.size(), identity_pub.data(), identity_pub.size());
+    fingerprint.pop_back();
+    return fingerprint;
+}
+
+} // namespace
 
 // Helper to create CommandResponse
 inline CommandResponse make_response(bool success, const std::string& message, const std::string& command) {
@@ -258,7 +274,9 @@ CommandResponse CommandHandler::cmd_whois(const std::vector<std::string>& args, 
         }
     }
 
-    // TODO: Add identity fingerprint from database
+    if (auto user = user_store_.find_by_id(target_id)) {
+        info.set_identity_fingerprint(format_identity_fingerprint(user->identity_pub));
+    }
 
     return make_response(true, info.SerializeAsString(), "whois");
 }

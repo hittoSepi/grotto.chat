@@ -24,6 +24,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -39,6 +41,7 @@ fun SafetyNumberScreen(
     viewModel: SafetyNumberViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
+    val clipboardManager = LocalClipboardManager.current
     
     LaunchedEffect(peerId) {
         viewModel.loadSafetyNumber(peerId)
@@ -120,7 +123,9 @@ fun SafetyNumberScreen(
                 Spacer(Modifier.height(GrottoSpacing.md))
 
                 OutlinedButton(
-                    onClick = { /* TODO: copy to clipboard */ },
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(state.safetyNumber))
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Copy to Clipboard")

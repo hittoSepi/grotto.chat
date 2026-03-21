@@ -405,10 +405,20 @@ void Server::setup_http_api_routes() {
     
     // User count endpoint
     http_api_server_->get("/api/v1/stats", [this](const auto& req) {
-        // TODO: Add actual stats when available
+        int online_users = 0;
+        int channels = 0;
+
+        if (listener_) {
+            online_users = listener_->active_connection_count();
+
+            if (auto* command_handler = listener_->command_handler()) {
+                channels = static_cast<int>(command_handler->channel_count());
+            }
+        }
+
         return grotto::api::Response::ok({
-            {"online_users", 0},
-            {"channels", 0}
+            {"online_users", online_users},
+            {"channels", channels}
         });
     });
     
