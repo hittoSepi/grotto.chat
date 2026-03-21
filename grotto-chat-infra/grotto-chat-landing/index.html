@@ -3,381 +3,227 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MantaLink</title>
-  <link rel="icon" type="image/png" sizes="16x16" href="images/mantalink-logo-16.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="images/mantalink-logo-32.png">
-  <link rel="icon" type="image/png" sizes="64x64" href="images/mantalink-logo-64.png">
-  <link rel="apple-touch-icon" href="images/mantalink-logo-256.png">
+  <title>GROTTO.chat</title>
+  <meta name="description" content="Private encrypted chat and voice for friend groups.">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/landing-live.css">
-  <link rel="stylesheet" href="css/brand.css">
-  
 </head>
 <body>
-  <div class="grid-overlay"></div>
+  <div class="bg-grain" aria-hidden="true"></div>
 
-  <nav class="nav">
-    <div class="container nav__wrap">
-      <a href="#top" class="brand">
-        <img
-          class="brand__mark"
-          src="images/mantalink-logo-64.png"
-          srcset="images/mantalink-logo-32.png 32w, images/mantalink-logo-64.png 64w, images/mantalink-logo-128.png 128w"
-          sizes="32px"
-          width="32"
-          height="32"
-          alt="MantaLink logo"
-        >
-        <div>
-          MantaLink
-          <small>private group chat, voice and self-hosting</small>
-        </div>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#top" class="brand" aria-label="GROTTO.chat home">
+        <img src="images/grotto-chat-label.png" alt="GROTTO.chat wordmark">
       </a>
-
-      <div class="nav__links">
+      <nav class="nav-links" aria-label="Primary navigation">
         <a href="#features">Features</a>
-        <a href="#docs">Docs</a>
-        <a href="#download">Download</a>
-        <a href="#servers">Servers</a>
-        <a href="invite.html">Invite</a>
-      </div>
-
-      <div class="nav__actions">
-        <a class="btn btn--ghost btn--small" href="#architecture">Self-host</a>
-        <a class="btn btn--primary btn--small" href="#download">Download</a>
-      </div>
-    </div> 
-  </nav>
-
-  <section class="hero" id="top">
-  <div class="container hero__content">
-      <div class="hero__wrap">
-    <div>
-      <div class="hero__header">
-<img class="hero__logo" src="images/mantalink-logo-128.png" srcset="
-    images/mantalink-logo-64.png 64w,
-    images/mantalink-logo-128.png 128w,
-    images/mantalink-logo-256.png 256w
-  " sizes="72px" width="72" height="72" alt="MantaLink logo">
-        <div class="eyebrow">
-          <span class="eyebrow__dot"></span>
-          MantaLink / private group chat + voice
-        </div>
-      </div>
-    
-      <h1 class="hero__title">Quiet group chat.<br>Private by default.</h1>
-        <p class="hero__description">MantaLink is a private chat and voice application for friend groups. It keeps the fast, readable rhythm of terminal-first clients while adding modern encryption, voice rooms, file transfers, previews and self-hostable infrastructure.</p>
-
-        <div class="hero__actions">
-          <a class="btn btn--primary" href="#download">Download</a>
-          <a class="btn btn--ghost" href="docs/">Read Docs</a>
-          <a class="btn btn--ghost" href="#servers">Browse servers</a>
-        </div>
-
-        <div class="hero__note">
-          <span class="hero__note-dot">*</span> Native client · lightweight runtime · no Electron · supports legacy <code>ircord://</code> links
-        </div>
-
-        <div class="hero__meta">
-          <div class="meta-card">
-            <strong>Signal Protocol</strong>
-            <span>Private by default with real end-to-end encryption for direct and group conversations.</span>
-          </div>
-          <div class="meta-card">
-            <strong>Voice rooms</strong>
-            <span>Small-group voice chat without a massive mode switch or ad-tech UI baggage.</span>
-          </div>
-          <div class="meta-card">
-            <strong>Self-hostable</strong>
-            <span>Run your own server when outsourcing trust to random third parties feels avoidable.</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="terminal" aria-label="MantaLink desktop client preview">
-        <div class="terminal__top">
-          <div class="lights"><span class="light"></span><span class="light"></span><span class="light"></span></div>
-          <span>Windows PowerShell / MantaLink desktop client</span>
-          <span class="terminal__status">E2EE connected</span>
-        </div>
-
-        <div class="terminal__body">
-          <div class="cli-layout">
-            <div>
-              <div class="chatlog">
-                <div class="line"><span class="time">09:20</span><span class="nick--green">&lt;rausku&gt;</span><span>Switched to #general</span></div>
-                <div class="line"><span class="time">09:21</span><span class="nick--cyan">&lt;hitto&gt;</span><span>hello</span></div>
-                <div class="line"><span class="time">09:22</span><span class="nick--green">&lt;rausku&gt;</span><span>/voice</span></div>
-                <div class="line"><span class="time">09:23</span><span class="nick--system">***</span><span class="msg--system">Commands: /join /part /msg /call /accept /hangup /voice /mute /deafen</span></div>
-                <div class="line"><span class="time">09:23</span><span class="nick--system">***</span><span class="msg--system">Joining voice room: #general...</span></div>
-                <div class="line"><span class="time">09:24</span><span class="nick--cyan">&lt;hitto&gt;</span><span>almost works</span></div>
-                <div class="line"><span class="time">09:25</span><span class="nick--green">&lt;rausku&gt;</span><span>good enough for tonight</span></div>
-              </div>
-
-              <div class="inputbar">
-                <span><code>hitto</code> | <code>#general</code> | <code>[VOX]</code></span>
-                <span>Press <code>/</code> for commands</span>
-              </div>
-            </div>
-
-            <aside class="sidebar">
-              <div class="sidebar-box">
-                <div class="sidebar-box__title">USERS: 2</div>
-                <div class="user-list">
-                  <span>hitto</span>
-                  <span>rausku</span>
-                </div>
-              </div>
-              <div class="sidebar-box">
-                <div class="sidebar-box__title">VOICE: 1</div>
-                <div class="voice-list">
-                  <span>hitto</span>
-                </div>
-              </div>
-            </aside>
-          </div>
-        </div>
+        <a href="#security">Security</a>
+        <a href="#hosting">Host a server</a>
+        <a href="docs/">Docs</a>
+        <a href="#cta">Download</a>
+      </nav>
+      <div class="header-cta">
+        <a class="btn btn-ghost" href="#hosting">Host a server</a>
+        <a class="btn btn-primary" href="#cta">Download client</a>
       </div>
     </div>
-  </section>
+  </header>
 
-  <section class="section" id="features">
-    <div class="container">
-      <div class="section__head">
-        <span class="kicker">features</span>
-        <h2>Built for friend groups, not engagement farming</h2>
-        <p class="lead">MantaLink keeps the interface compact and readable while still covering the things people actually use: private messaging, persistent rooms, voice, files, previews and self-hosting.</p>
-      </div>
-
-      <div class="cards-4">
-        <article class="card"><h3>/encrypt</h3><p>Signal-based end-to-end encryption for private messages and group conversations.</p></article>
-        <article class="card"><h3>/voice</h3><p>Jump into voice rooms directly from chat without a giant UI mode switch.</p></article>
-        <article class="card"><h3>/send</h3><p>Share files, screenshots and media inside the same clean terminal-first workflow.</p></article>
-        <article class="card"><h3>/preview</h3><p>Modern link previews without turning the client into visual soup.</p></article>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="demo">
-    <div class="container">
-      <div class="section__head">
-        <span class="kicker">live demo</span>
-        <h2>A CLI soul with modern convenience</h2>
-        <p class="lead">The desktop client keeps a fast text-first rhythm: timestamps, nick colors, command-driven actions, side panels for presence and quick switching between chat and voice.</p>
-      </div>
-
-      <div class="demo-grid">
-        <div class="demo-panel">
-          <div class="demo-panel__head"><span>chat / #general</span><span>desktop client</span></div>
-          <div class="demo-chat">
-            <div class="row"><span class="time">09:20</span><span class="nick--green">&lt;rausku&gt;</span><span>Switched to #general</span></div>
-            <div class="row"><span class="time">09:22</span><span class="nick--green">&lt;rausku&gt;</span><span>/call hitto</span></div>
-            <div class="row"><span class="time">09:23</span><span class="nick--system">***</span><span class="msg--system">Calling rausku...</span></div>
-            <div class="row"><span class="time">09:24</span><span class="nick--cyan">&lt;hitto&gt;</span><span>the android voice client almost works</span></div>
-            <div class="row"><span class="time">09:25</span><span class="nick--green">&lt;rausku&gt;</span><span>that is dangerously close to success</span></div>
+  <main id="top">
+    <section class="hero section">
+      <div class="container hero-grid">
+        <div>
+          <p class="mono-tag">secure tunnel ready</p>
+          <h1>Private encrypted chat and voice for friend groups.</h1>
+          <p class="lede">GROTTO.chat combines irssi-like terminal aesthetics with modern end-to-end encryption, voice rooms, file transfers, and self-hosted servers.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="#cta">Download client</a>
+            <a class="btn btn-ghost" href="#hosting">Host a server</a>
           </div>
+          <p class="support-copy">Signal Protocol, voice rooms, file transfer, search, themes, and an admin TUI.</p>
         </div>
-
-        <div class="demo-panel">
-          <div class="demo-panel__head"><span>voice / #general</span><span>latency 28ms</span></div>
-          <div class="voice-room">
-            <div class="voice-room__top"><span>room active</span><span>2 connected</span></div>
-            <div class="wave">
-              <span style="--h:30px"></span><span style="--h:14px"></span><span style="--h:34px"></span><span style="--h:18px"></span>
-              <span style="--h:28px"></span><span style="--h:12px"></span><span style="--h:36px"></span><span style="--h:20px"></span>
-              <span style="--h:24px"></span><span style="--h:16px"></span><span style="--h:32px"></span><span style="--h:12px"></span>
-              <span style="--h:38px"></span><span style="--h:19px"></span><span style="--h:30px"></span><span style="--h:16px"></span>
-              <span style="--h:26px"></span><span style="--h:14px"></span><span style="--h:34px"></span><span style="--h:12px"></span>
-              <span style="--h:28px"></span><span style="--h:18px"></span>
-            </div>
-            <div class="voice-users">
-              <span class="pill">hitto</span>
-              <span class="pill">rausku</span>
-            </div>
+        <div class="hero-side">
+          <img class="hero-art" src="images/grotto-cave-512.png" alt="GROTTO cave atmosphere artwork">
+          <div class="terminal-panel">
+            <p>[ secure tunnel ready ]</p>
+            <p>[ voice caverns online ]</p>
+            <p>[ file transfer active ]</p>
+            <p>[ admin tui available ]</p>
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section" id="architecture">
-    <div class="container">
-      <div class="section__head">
-        <span class="kicker">architecture</span>
-        <h2>Simple enough to understand, modern enough to matter</h2>
-        <p class="lead">MantaLink separates client, transport and trust boundaries cleanly. The server coordinates delivery and presence, while encrypted message content stays on the client side.</p>
-      </div>
-
-      <div class="architecture">
-        <div class="node">
-          <small>client</small>
-          <strong>Desktop / CLI</strong>
-          <span>Fast terminal-style interaction, command shortcuts, room navigation, local encryption and voice controls.</span>
-        </div>
-        <div class="arrow">-&gt;</div>
-        <div class="node">
-          <small>transport</small>
-          <strong>MantaLink Server</strong>
-          <span>Presence, room membership, routing, signaling, file metadata and session coordination.</span>
-        </div>
-        <div class="arrow">-&gt;</div>
-        <div class="node">
-          <small>trust boundary</small>
-          <strong>Encrypted Payloads</strong>
-          <span>Messages are encrypted before transport. Server operators get metadata and routing, not your plaintext conversations.</span>
+    <section class="section" id="why">
+      <div class="container">
+        <h2>Built for smaller circles.</h2>
+        <p class="lede">GROTTO.chat is for friend groups, private communities, and people who want a quieter place to talk. Not an engagement machine. Not a work dashboard. Just encrypted chat, voice, files, and servers for groups that prefer their own cave.</p>
+        <div class="card-grid thirds">
+          <article class="card">
+            <h3>Private by design</h3>
+            <p>End-to-end encrypted messaging and calls, certificate pinning with TOFU, and platform-specific key protection where available.</p>
+          </article>
+          <article class="card">
+            <h3>Built for real groups</h3>
+            <p>Group chats, private calls, voice rooms, file transfer, search, and server discovery without turning your conversations into a product funnel.</p>
+          </article>
+          <article class="card">
+            <h3>Terminal soul, modern comfort</h3>
+            <p>Inspired by irssi and classic terminal clients, with modern usability features like themes, mouse support, notifications, and mobile security features.</p>
+          </article>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section" id="docs">
-    <div class="container">
-      <div class="section__head">
-        <span class="kicker">documentation</span>
-        <h2>Developer documentation without archaeology</h2>
-        <p class="lead">Read the hosted docs for server setup, infrastructure, desktop usage, Android status and plugin development.</p>
-      </div>
-
-      <div class="cards-4">
-        <article class="card">
-          <h3>Getting Started</h3>
-          <p>Install the client, connect to a server and understand the MantaLink room model in a few minutes.</p>
-          <br>
-          <a class="btn btn--small btn--ghost" href="docs/">Open guide</a>
-        </article>
-        <article class="card">
-          <h3>Server Setup</h3>
-          <p>Run your own MantaLink server, configure routing, TLS and deployment options for private groups.</p>
-          <br>
-          <a class="btn btn--small btn--ghost" href="docs/server.html">Server docs</a>
-        </article>
-        <article class="card">
-          <h3>Infrastructure</h3>
-          <p>Deploy the landing, directory and reverse-proxy pieces without guessing the moving parts.</p>
-          <br>
-          <a class="btn btn--small btn--ghost" href="docs/infrastructure.html">Infra docs</a>
-        </article>
-        <article class="card">
-          <h3>Desktop + Android</h3>
-          <p>Commands, shortcuts, screenshots and current platform coverage in one place.</p>
-          <br>
-          <a class="btn btn--small btn--ghost" href="docs/desktop.html">Client docs</a>
-        </article>
-      </div>
-
-      <div class="docs__actions">
-        <a class="btn btn--primary" href="docs/">Open full documentation</a>
-        <a class="btn btn--ghost" href="docs/plugins.html">Plugin guide</a>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="download">
-    <div class="container">
-      <div class="section__head">
-        <span class="kicker">download</span>
-        <h2>Choose your client</h2>
-        <p class="lead">Desktop first, CLI at heart, and flexible enough to support the kind of platform spread every small project eventually accumulates.</p>
-      </div>
-
-      <div class="matrix">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Platform</th>
-              <th>Client</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Windows</td>
-              <td>Desktop CLI</td>
-              <td><span class="badge badge--good">Recommended</span></td>
-              <td><a class="btn btn--small btn--primary" href="https://files.rausku.com/mobuladock-latest.zip">Download</a></td>
-            </tr>
-            <tr>
-              <td>Linux</td>
-              <td>Desktop / terminal build</td>
-              <td><span class="badge badge--good">Available</span></td>
-              <td><a class="btn btn--small btn--ghost" href="#">Packages</a></td>
-            </tr>
-            <tr>
-              <td>Android</td>
-              <td>Mobile prototype</td>
-              <td><span class="badge badge--beta">Beta</span></td>
-              <td><a class="btn btn--small btn--ghost" href="https://files.rausku.com/mobuladock-latest.apk">Test build</a></td>
-            </tr>
-            <tr>
-              <td>Server</td>
-              <td>Self-host stack</td>
-              <td><span class="badge">Docs</span></td>
-              <td><a class="btn btn--small btn--ghost" href="docs/infrastructure.html">Setup Guide</a></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="servers">
-    <div class="container">
-      <div class="section__head">
-        <span class="kicker">public servers</span>
-        <h2>Join a server or run your own</h2>
-        <p class="lead">Public servers are useful for testing and discovery. Private servers are useful when you prefer your infrastructure not to become somebody else's content farm.</p>
-      </div>
-
-      <div class="servers-shell">
-        <div class="servers-feed">
-          <div id="servers-loading" class="server-list-state">
-            <span class="spinner"></span>
-            <span>Loading public server list...</span>
-          </div>
-
-          <div id="servers-error" class="server-list-state server-list-state--error" hidden>
-            <p>Unable to load server list right now. The directory may be offline or still booting.</p>
-          </div>
-
-          <div id="servers-list" class="servers-list" hidden></div>
+    <section class="section" id="features">
+      <div class="container">
+        <h2>Everything your group needs. Nothing bloated.</h2>
+        <div class="card-grid halves">
+          <article class="card">
+            <p class="mono-tag">secure messaging</p>
+            <ul>
+              <li>End-to-end encryption via Signal Protocol</li>
+              <li>X3DH + Double Ratchet</li>
+              <li>Sender Keys for group chats</li>
+              <li>Certificate pinning with TOFU</li>
+            </ul>
+          </article>
+          <article class="card">
+            <p class="mono-tag">voice and real-time communication</p>
+            <ul>
+              <li>Voice rooms</li>
+              <li>Private calls</li>
+              <li>WebRTC peer-to-peer media</li>
+              <li>Push notifications on Android</li>
+            </ul>
+          </article>
+          <article class="card">
+            <p class="mono-tag">everyday usability</p>
+            <ul>
+              <li>File transfers with chunked upload/download</li>
+              <li>Link previews</li>
+              <li>Full-text message search with filters</li>
+              <li>Mouse support in the desktop client</li>
+            </ul>
+          </article>
+          <article class="card">
+            <p class="mono-tag">server administration</p>
+            <ul>
+              <li>Admin TUI for management</li>
+              <li>Log viewer</li>
+              <li>Settings and user management</li>
+              <li>Public server directory for discovery</li>
+            </ul>
+          </article>
         </div>
+      </div>
+    </section>
 
-        <aside class="quick-connect-card">
-          <p class="kicker">quick connect</p>
-          <h3>Connect directly</h3>
-          <p>Paste any MantaLink address below. Legacy <code>ircord://</code> links still work, and the native client opens immediately when the protocol handler is installed.</p>
+    <section class="section" id="security">
+      <div class="container security-panel">
+        <div>
+          <p class="mono-tag">cryptography: active</p>
+          <h2>Built around real encryption, not branding theater.</h2>
+          <p class="lede">GROTTO.chat uses Signal Protocol primitives for end-to-end encrypted messaging, including X3DH for key agreement and Double Ratchet for forward secrecy. Group chats use Sender Keys for efficient multi-party encryption. Android clients can additionally use biometric protection for identity key access, SQLCipher for local database encryption, and screen capture protection.</p>
+          <ul>
+            <li>Signal Protocol foundations</li>
+            <li>Sender Keys for groups</li>
+            <li>Certificate pinning with TOFU</li>
+            <li>SQLCipher on Android</li>
+            <li>Biometric identity key access on Android</li>
+            <li>Screen capture protection on Android</li>
+          </ul>
+        </div>
+        <img class="daemon-art" src="images/grotto-daemon-avatar.png" alt="GROTTO daemon support mascot">
+      </div>
+    </section>
 
-          <div class="connect-form">
-            <input type="text" id="server-address" placeholder="chat.example.com:6697" autocomplete="off">
-            <button id="connect-btn" class="btn btn--primary">Connect</button>
+    <section class="section" id="hosting">
+      <div class="container split">
+        <div>
+          <h2>Run your own cave.</h2>
+          <p class="lede">Host a private server for your group, manage it through the admin TUI, and decide whether it stays private or appears in the public server directory. GROTTO.chat is designed to work well for small communities that want control without enterprise nonsense.</p>
+          <ul>
+            <li>Self-hosted server support</li>
+            <li>Admin TUI with logs and settings</li>
+            <li>Optional public server directory</li>
+            <li>Friend-group scale first</li>
+          </ul>
+          <div class="actions">
+            <a class="btn btn-primary" href="docs/infrastructure.html">Host a server</a>
+            <a class="btn btn-ghost" href="docs/">Read the docs</a>
           </div>
+        </div>
+        <img class="cave-art" src="images/grotto-daemon-cave.png" alt="GROTTO cave tunnel illustration">
+      </div>
+    </section>
 
-          <p class="connect-hint">Direct link format: <code>ircord://chat.example.com:6697</code></p>
-          <div class="docs__actions">
-            <a class="btn btn--ghost btn--small" href="invite.html">Open invite page</a>
-            <a class="btn btn--ghost btn--small" href="docs/infrastructure.html">Host your own</a>
-          </div>
-        </aside>
+    <section class="section" id="clients">
+      <div class="container split">
+        <div class="card">
+          <p class="mono-tag">desktop / tui</p>
+          <h3>Terminal roots, modern clients.</h3>
+          <p>The desktop experience keeps the minimal, text-first feeling that made terminal chat clients great, while adding practical comforts like mouse support, search, resizing, themes, and richer media handling.</p>
+          <img src="images/general_chat_desktop.jpg" alt="GROTTO desktop chat screenshot">
+        </div>
+        <div class="card">
+          <p class="mono-tag">android security</p>
+          <h3>Mobile protection features.</h3>
+          <p>Android support adds push notifications, biometric key protection, SQLCipher database encryption, and screen capture protection.</p>
+          <img src="images/android-setup-login.png" alt="GROTTO Android setup screenshot">
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="philosophy">
+      <div class="container centered">
+        <h2>A quieter place to talk.</h2>
+        <p class="lede">GROTTO.chat is built for people who want a more intentional communication space. It is not designed to maximize engagement, distract your group, or push everyone into a giant global feed. It is meant to feel smaller, calmer, and more yours.</p>
+        <div class="mono-stack">
+          <span>not a feed</span>
+          <span>not a workspace</span>
+          <span>not a growth funnel</span>
+          <span>just your cave</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section final-cta" id="cta">
+      <div class="container centered">
+        <h2>Enter the cave.</h2>
+        <p class="lede">Download the client, host your own server, and build a quieter encrypted space for your group.</p>
+        <div class="actions centered-actions">
+          <a class="btn btn-primary" href="https://chat.rausku.com/downloads/">Download client</a>
+          <a class="btn btn-ghost" href="docs/infrastructure.html">Host a server</a>
+        </div>
+        <p class="support-copy">Private chat, voice, files, and servers for friend groups.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div>
+        <h4>Product</h4>
+        <a href="#cta">Download</a>
+        <a href="#features">Features</a>
+        <a href="#security">Security</a>
+        <a href="#hosting">Server directory</a>
+      </div>
+      <div>
+        <h4>Docs</h4>
+        <a href="docs/infrastructure.html">Hosting</a>
+        <a href="docs/server.html">Admin TUI</a>
+        <a href="docs/android.html">Android security</a>
+        <a href="docs/">FAQ</a>
+      </div>
+      <div>
+        <h4>Community</h4>
+        <a href="https://github.com/hittoSepi/grotto.chat">GitHub</a>
+        <a href="https://chat.rausku.com/">Status / updates</a>
       </div>
     </div>
-  </section>
-
-  <footer class="footer">
-    <div class="container">
-      MantaLink. Private group chat, modern encryption, fewer unnecessary UI crimes.
-      <br><br>
-      Repos:
-      <a href="https://github.com/hittoSepi/mobuladock-server" target="_blank" rel="noopener">server</a>,
-      <a href="https://github.com/hittoSepi/mobuladock-client" target="_blank" rel="noopener">client</a>,
-      <a href="https://github.com/hittoSepi/mobuladock-android" target="_blank" rel="noopener">android</a>,
-      <a href="https://github.com/hittoSepi/mobuladock-infra" target="_blank" rel="noopener">infra</a>
-      <br><br>
-      Documentation: <a href="docs/">/docs/</a>
-    </div>
+    <p class="easter-egg">Approved by one domestic grotto daemon.</p>
   </footer>
-
-  <script src="config.js"></script>
-  <script src="servers.js"></script>
 </body>
 </html>

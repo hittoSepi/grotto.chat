@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Desktop Client — MobulaDock Docs</title>
+  <title>Desktop Client — GROTTO.chat Docs</title>
   <link rel="stylesheet" href="docs.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
 
   <aside class="sidebar">
     <div class="sidebar-header">
-      <a href="../index.html" class="sidebar-logo"><span>MobulaDock</span></a>
+      <a href="../index.html" class="sidebar-logo"><span>GROTTO.chat</span></a>
       <div class="sidebar-label">Documentation</div>
     </div>
     <nav class="sidebar-nav">
@@ -38,7 +38,7 @@
       <a href="#settings-ui">Settings UI</a>
     </div>
     <div class="sidebar-footer">
-      <a href="../index.html">&larr; Back to MobulaDock</a>
+      <a href="../index.html">&larr; Back to GROTTO.chat</a>
     </div>
   </aside>
 
@@ -51,7 +51,7 @@
       <!-- Overview -->
       <h2 id="overview">Overview</h2>
       <p>
-        The MobulaDock desktop client is a modern C++20 terminal user interface (TUI) application powered by
+        The GROTTO.chat desktop client is a modern C++20 terminal user interface (TUI) application powered by
         <a href="https://github.com/ArthurSonzogni/FTXUI" target="_blank">FTXUI</a>. It runs natively on
         Windows (x64) and Linux (x64), with no Electron, no browser engine, and no unnecessary overhead.
       </p>
@@ -69,7 +69,7 @@
       </ul>
 
       <div class="screenshot-showcase">
-        <img src="img/general_chat_desktop.jpg" alt="MobulaDock Desktop — Chat view with channels, messages and user list" class="screenshot-full">
+        <img src="img/general_chat_desktop.jpg" alt="GROTTO.chat Desktop — Chat view with channels, messages and user list" class="screenshot-full">
         <p class="screenshot-caption">The main chat interface — channel tabs at the top, messages in the center, user list on the right, and input at the bottom.</p>
       </div>
 
@@ -84,10 +84,10 @@
           <button class="code-copy">Copy</button>
         </div>
 <pre><code># Extract the release archive
-Expand-Archive mobuladock-client-win-x64.zip -DestinationPath C:\mobuladock
+Expand-Archive grotto-client-win-x64.zip -DestinationPath C:\grotto
 
 # Run the client
-C:\mobuladock\mobuladock-client.exe</code></pre>
+C:\grotto\grotto-client.exe</code></pre>
       </div>
 
       <h3>Linux</h3>
@@ -98,13 +98,13 @@ C:\mobuladock\mobuladock-client.exe</code></pre>
           <button class="code-copy">Copy</button>
         </div>
 <pre><code># Extract
-tar xzf mobuladock-client-linux-x64.tar.gz
+tar xzf grotto-client-linux-x64.tar.gz
 
 # Make executable
-chmod +x mobuladock-client/mobuladock-client
+chmod +x grotto-client/grotto-client
 
 # Run
-./mobuladock-client/mobuladock-client</code></pre>
+./grotto-client/grotto-client</code></pre>
       </div>
 
       <div class="callout tip">
@@ -121,7 +121,7 @@ chmod +x mobuladock-client/mobuladock-client
       </p>
       <ol>
         <li><strong>Launch</strong> the client from your terminal.</li>
-        <li><strong>Enter the server address</strong> when prompted (e.g., <code>mobuladock.example.com</code>).</li>
+        <li><strong>Enter the server address</strong> when prompted (e.g., <code>grotto.example.com</code>).</li>
         <li><strong>Register or log in.</strong> New users create an account; returning users authenticate with their existing credentials.</li>
       </ol>
 
@@ -130,13 +130,13 @@ chmod +x mobuladock-client/mobuladock-client
           <span class="code-block-lang">Terminal</span>
           <button class="code-copy">Copy</button>
         </div>
-<pre><code>$ ./mobuladock-client
-MobulaDock Desktop Client v0.15
+<pre><code>$ ./grotto-client
+GROTTO.chat Desktop Client v0.15
 
-Server address: mobuladock.example.com
+Server address: grotto.example.com
 Port [6697]:
 
-Connecting to mobuladock.example.com:6697 (TLS 1.3)...
+Connecting to grotto.example.com:6697 (TLS 1.3)...
 Connected.
 
 Username: alice
@@ -144,7 +144,7 @@ Password: ********
 
 Generating Ed25519 identity key...
 Uploading public keys...
-Authenticated as alice. Welcome to MobulaDock.</code></pre>
+Authenticated as alice. Welcome to GROTTO.chat.</code></pre>
       </div>
 
       <p>
@@ -242,7 +242,7 @@ Authenticated as alice. Welcome to MobulaDock.</code></pre>
       </p>
 
       <div class="screenshot-showcase">
-        <img src="img/general_chat_notification_settings.jpg" alt="MobulaDock Desktop — Voice room active with user in VOX mode" class="screenshot-full">
+        <img src="img/general_chat_notification_settings.jpg" alt="GROTTO.chat Desktop — Voice room active with user in VOX mode" class="screenshot-full">
         <p class="screenshot-caption">Voice room active — the status bar shows the room name, user count, and current voice mode (VOX).</p>
       </div>
 
@@ -369,11 +369,11 @@ Authenticated as alice. Welcome to MobulaDock.</code></pre>
         <tbody>
           <tr>
             <td>Linux</td>
-            <td><code>~/.config/mobuladock/config.toml</code></td>
+            <td><code>~/.config/grotto/config.toml</code></td>
           </tr>
           <tr>
             <td>Windows</td>
-            <td><code>%APPDATA%\mobuladock\config.toml</code></td>
+            <td><code>%APPDATA%\grotto\config.toml</code></td>
           </tr>
         </tbody>
       </table>
@@ -424,9 +424,9 @@ Authenticated as alice. Welcome to MobulaDock.</code></pre>
           <span class="code-block-lang">TOML</span>
           <button class="code-copy">Copy</button>
         </div>
-<pre><code># MobulaDock Desktop Client Configuration
+<pre><code># GROTTO.chat Desktop Client Configuration
 
-server = "mobuladock.example.com"
+server = "grotto.example.com"
 port = 6697
 username = "alice"
 
@@ -472,8 +472,8 @@ user_list_width = 24</code></pre>
 
       <!-- Footer -->
       <div class="docs-footer">
-        <p>MobulaDock &mdash; Open source, encrypted messaging. &bull;
-          <a href="https://github.com/hittoSepi/mobuladock" target="_blank">GitHub</a> &bull;
+        <p>GROTTO.chat &mdash; Open source, encrypted messaging. &bull;
+          <a href="https://github.com/hittoSepi/grotto.chat" target="_blank">GitHub</a> &bull;
           <a href="../index.html">Homepage</a>
         </p>
       </div>

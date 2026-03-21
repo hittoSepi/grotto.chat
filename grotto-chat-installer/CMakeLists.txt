@@ -9,6 +9,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(FetchContent)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../grotto-daemon ${CMAKE_BINARY_DIR}/grotto-daemon)
+
 FetchContent_Declare(
     ftxui
     GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI.git
@@ -47,6 +49,7 @@ target_link_libraries(grotto-installer PRIVATE
     ftxui::dom
     ftxui::component
     nlohmann_json::nlohmann_json
+    grotto-daemon
 )
 
 if(MSVC)

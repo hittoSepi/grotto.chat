@@ -3,64 +3,59 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MobulaDock Invite</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="landing-live.css">
+  <title>GROTTO.chat Invite</title>
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="grid-overlay"></div>
+  <div class="bg-grain" aria-hidden="true"></div>
 
-  <nav class="nav">
-    <div class="container nav__wrap">
-      <a href="index.html" class="brand">
-        <span class="brand__mark"></span>
-        <div>
-          MobulaDock
-          <small>invite flow</small>
-        </div>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="index.html" class="brand" aria-label="GROTTO.chat home">
+        <img src="images/grotto-chat-label.png" alt="GROTTO.chat wordmark">
       </a>
-
-      <div class="nav__links">
-        <a href="index.html#servers">Servers</a>
-        <a href="index.html#download">Download</a>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="index.html#features">Features</a>
+        <a href="index.html#security">Security</a>
+        <a href="index.html#hosting">Host a server</a>
         <a href="docs/">Docs</a>
-      </div>
-
-      <div class="nav__actions">
-        <a class="btn btn--ghost btn--small" href="index.html">Back to landing</a>
-        <a class="btn btn--primary btn--small" href="index.html#download">Download</a>
+        <a href="index.html#cta">Download</a>
+      </nav>
+      <div class="header-cta">
+        <a class="btn btn-ghost" href="index.html">Back to landing</a>
+        <a class="btn btn-primary" href="index.html#cta">Download client</a>
       </div>
     </div>
-  </nav>
+  </header>
 
   <main class="invite-main">
-    <section class="hero invite-hero">
+    <section class="hero section">
       <div class="container invite-shell">
-        <article class="invite-panel invite-panel--hero">
-          <div class="eyebrow"><span class="eyebrow__dot"></span>Public MobulaDock invite</div>
-          <h1 id="invite-title">Join MobulaDock Server</h1>
-          <p id="invite-summary" class="hero__description">Open MobulaDock directly from this invite, or fall back to manual connect and download options if the protocol handler is unavailable.</p>
+        <article class="card invite-panel--hero">
+          <p class="mono-tag">Public GROTTO.chat invite</p>
+          <h1 id="invite-title">Join GROTTO.chat Server</h1>
+          <p id="invite-summary" class="lede">Open GROTTO.chat directly from this invite, or fall back to manual connect and download options if the protocol handler is unavailable.</p>
 
           <div class="invite-badges">
             <span class="invite-badge">Public server</span>
             <span id="invite-status-badge" class="invite-badge invite-badge--online">Online</span>
           </div>
 
-          <div class="hero__actions">
-            <button id="invite-open-btn" class="btn btn--primary">Open in MobulaDock</button>
-            <a href="index.html#download" class="btn btn--ghost">Download client</a>
+          <div class="actions">
+            <button id="invite-open-btn" class="btn btn-primary">Open in GROTTO.chat</button>
+            <a href="index.html#cta" class="btn btn-ghost">Download client</a>
           </div>
 
           <div class="invite-copy-row">
-            <button id="invite-copy-address-btn" class="btn btn--ghost invite-text-action">Copy address</button>
-            <button id="invite-copy-link-btn" class="btn btn--ghost invite-text-action">Copy invite link</button>
+            <button id="invite-copy-address-btn" class="btn btn-ghost invite-text-action">Copy address</button>
+            <button id="invite-copy-link-btn" class="btn btn-ghost invite-text-action">Copy invite link</button>
           </div>
         </article>
 
-        <aside class="invite-panel">
-          <span class="invite-card-kicker">Server invite</span>
-          <h3 id="invite-server-name">Public MobulaDock Server</h3>
-          <p id="invite-server-description">A shared invite page for joining one public MobulaDock community.</p>
+        <aside class="card invite-panel">
+          <span class="mono-tag">Server invite</span>
+          <h3 id="invite-server-name">Public GROTTO.chat Server</h3>
+          <p id="invite-server-description">A shared invite page for joining one public GROTTO.chat community.</p>
 
           <div class="invite-detail-grid">
             <div class="invite-detail-item">
@@ -82,30 +77,30 @@
 
     <section class="section">
       <div class="container">
-        <div class="invite-card-grid">
-          <article class="invite-panel">
-            <span class="invite-card-kicker">What happens next</span>
+        <div class="card-grid thirds">
+          <article class="card">
+            <span class="mono-tag">What happens next</span>
             <h3>Join flow</h3>
             <ul class="invite-list">
-              <li><strong>1. Open client</strong> The invite tries the native <code>ircord://</code> handler first.</li>
+              <li><strong>1. Open client</strong> The invite tries the native protocol handler first.</li>
               <li><strong>2. Prefill server</strong> Host and port are carried into the client for quick join.</li>
               <li><strong>3. Confirm and join</strong> User reviews the address and joins the server.</li>
             </ul>
           </article>
 
-          <article class="invite-panel">
-            <span class="invite-card-kicker">Fallback</span>
+          <article class="card">
+            <span class="mono-tag">Fallback</span>
             <h3>Manual connect and downloads</h3>
             <div id="invite-manual-address" class="invite-manual-address">chat.example.com:6697</div>
             <ul class="invite-list">
-              <li><strong>Manual address</strong> If the protocol handler does not open, paste the address into the MobulaDock client.</li>
-              <li><strong>Client downloads</strong> <a href="index.html#download">Windows, Linux and Android builds live on the landing page.</a></li>
+              <li><strong>Manual address</strong> If the protocol handler does not open, paste the address into the GROTTO.chat client.</li>
+              <li><strong>Client downloads</strong> <a href="index.html#cta">Windows, Linux and Android builds live on the landing page.</a></li>
               <li><strong>Need help?</strong> <a href="docs/">Open the docs for installation and connection help.</a></li>
             </ul>
           </article>
 
-          <article class="invite-panel">
-            <span class="invite-card-kicker">Email invite</span>
+          <article class="card">
+            <span class="mono-tag">Email invite</span>
             <h3>Send a join link</h3>
             <form id="invite-email-form" class="invite-email-form">
               <input id="invite-email-input" class="invite-field" type="email" placeholder="recipient@example.com" autocomplete="email">
@@ -113,7 +108,7 @@
                 <span class="invite-captcha-check"></span>
                 <span>CAPTCHA placeholder</span>
               </div>
-              <button type="submit" class="btn btn--primary btn--wide">Send invite</button>
+              <button type="submit" class="btn btn-primary btn--wide">Send invite</button>
             </form>
             <div id="invite-email-feedback" class="invite-status-message" aria-live="polite"></div>
             <div class="invite-state-grid">
@@ -127,8 +122,8 @@
         </div>
 
         <div class="invite-bottom-grid">
-          <article class="invite-panel">
-            <span class="invite-card-kicker">API contract</span>
+          <article class="card">
+            <span class="mono-tag">API contract</span>
             <h3>Frontend and backend handshake</h3>
             <ul class="invite-list">
               <li><strong>Resolve invite</strong> <code>GET /api/invites/resolve?server=&lt;serverId&gt;</code></li>
@@ -137,8 +132,8 @@
             </ul>
           </article>
 
-          <aside class="invite-panel">
-            <span class="invite-card-kicker">Guard rails</span>
+          <aside class="card">
+            <span class="mono-tag">Guard rails</span>
             <h3>Safety and delivery</h3>
             <ul class="invite-list">
               <li><strong>CAPTCHA required</strong> Public email sending stays gated.</li>
@@ -154,6 +149,31 @@
       </div>
     </section>
   </main>
+
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div>
+        <h4>Product</h4>
+        <a href="index.html#cta">Download</a>
+        <a href="index.html#features">Features</a>
+        <a href="index.html#security">Security</a>
+        <a href="index.html#hosting">Server directory</a>
+      </div>
+      <div>
+        <h4>Docs</h4>
+        <a href="docs/infrastructure.html">Hosting</a>
+        <a href="docs/server.html">Admin TUI</a>
+        <a href="docs/android.html">Android security</a>
+        <a href="docs/">FAQ</a>
+      </div>
+      <div>
+        <h4>Community</h4>
+        <a href="https://github.com/hittoSepi/grotto.chat">GitHub</a>
+        <a href="https://chat.rausku.com/">Status / updates</a>
+      </div>
+    </div>
+    <p class="easter-egg">Approved by one domestic grotto daemon.</p>
+  </footer>
 
   <script src="config.js"></script>
   <script src="invite.js"></script>

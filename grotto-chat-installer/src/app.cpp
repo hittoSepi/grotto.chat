@@ -1,10 +1,14 @@
 #include "app.hpp"
 
+#include "grotto/grotto.h"
+
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 
+#include <chrono>
 #include <mutex>
+#include <sstream>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -53,6 +57,15 @@ std::string TlsLabel(TlsMode mode) {
             return "Existing cert";
     }
     return "Unknown";
+}
+
+std::vector<std::string> SplitLines(const std::string& text_value) {
+    std::vector<std::string> lines;
+    std::istringstream stream(text_value);
+    for (std::string line; std::getline(stream, line);) {
+        lines.push_back(line);
+    }
+    return lines;
 }
 
 }  // namespace
@@ -194,6 +207,12 @@ struct InstallerApp::Impl {
         screen.PostEvent(Event::Custom);
     }
 
+    void PushLogLines(const std::vector<std::string>& lines) {
+        for (const auto& line : lines) {
+            PushLog(line);
+        }
+    }
+
     void StartInstall() {
         if (install_thread.joinable()) {
             install_thread.join();
@@ -208,6 +227,40 @@ struct InstallerApp::Impl {
 
         active_tab = 3;
         install_thread = std::thread([this] {
+            using namespace std::chrono_literals;
+
+            daemon.randomize_mood();
+
+            const auto frame = [this](const std::string& label, grotto::GROTTO::mood mood_state) {
+                daemon.set_mood(mood_state);
+                PushLog(label);
+                PushLogLines(SplitLines(daemon.get_face()));
+            };
+
+            frame("summoning grotto daemon...", grotto::GROTTO::mood::sleeping);
+            std::this_thread::sleep_for(250ms);
+            frame("daemon awakened", grotto::GROTTO::mood::waking_up);
+            std::this_thread::sleep_for(250ms);
+            frame("opening tunnels...", grotto::GROTTO::mood::on_edge);
+            std::this_thread::sleep_for(250ms);
+            frame("secure cave ready", grotto::GROTTO::mood::calm);
+            std::this_thread::sleep_for(250ms);
+
+            daemon.randomize_mood();
+            if (daemon.get_mood() == "grumpy" || daemon.get_mood() == "MAD") {
+                PushLog(daemon.random_error_message());
+            } else {
+                PushLog(daemon.random_startup_message());
+            }
+
+            PushLog("lighting encryption torches...");
+            PushLog("checking tunnel integrity...");
+            PushLog("binding encryption keys...");
+            PushLog("opening secure channels...");
+            PushLog("preparing voice caverns...");
+            PushLog("securing file transfer paths...");
+            PushLog("finalizing cave layout...");
+
             install_summary = runner.RunInstall(config, [this](const std::string& step, bool is_error) {
                 PushLog((is_error ? "[error] " : "[step] ") + step);
             });
@@ -232,11 +285,16 @@ struct InstallerApp::Impl {
             "Current preflight state:",
         };
 
+        auto daemon_lines = SplitLines(grotto::GROTTO::grotto_daemon);
+        daemon_lines.push_back("daemon mood: idle");
+
         if (!manifest_error.empty()) {
             summary.push_back("Manifest warning: " + manifest_error);
         }
 
         return vbox({
+                   ParagraphLines(daemon_lines),
+                   separator(),
                    ParagraphLines(summary),
                    separator(),
                    ParagraphLines(FormatPreflight(preflight_issues)),
@@ -323,6 +381,9 @@ struct InstallerApp::Impl {
             install_summary.headline.empty() ? "Installation finished" : install_summary.headline,
             "",
         };
+        auto daemon_lines = SplitLines(daemon.get_face());
+        daemon_lines.push_back("daemon mood: " + daemon.get_mood());
+        daemon_lines.push_back(install_summary.success ? daemon.random_startup_message() : daemon.random_error_message());
         for (const auto& detail : install_summary.details) {
             lines.push_back(detail);
         }
@@ -331,6 +392,8 @@ struct InstallerApp::Impl {
         }
 
         return vbox({
+                   ParagraphLines(daemon_lines),
+                   separator(),
                    ParagraphLines(lines),
                    separator(),
                    result_buttons->Render(),
@@ -345,6 +408,7 @@ struct InstallerApp::Impl {
     std::string manifest_error;
     InstallConfig config;
     InstallerRunner runner;
+    mutable grotto::GROTTO daemon;
 
     std::vector<PreflightIssue> preflight_issues;
     std::vector<std::string> progress_lines;
