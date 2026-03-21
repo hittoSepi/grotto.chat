@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -17,11 +18,19 @@ struct ArtifactInfo {
     std::string sha256;
 };
 
+struct PackInfo {
+    std::string id;
+    std::string name;
+    std::string description;
+    bool required = false;
+};
+
 struct Manifest {
     std::string version;
     std::string docs_url;
     ArtifactInfo installer;
-    ArtifactInfo server;
+    std::vector<PackInfo> packs;
+    std::map<std::string, ArtifactInfo> artifacts;
 };
 
 struct SystemInfo {
@@ -48,6 +57,7 @@ struct InstallConfig {
     bool manage_firewall = true;
     bool install_ufw_if_missing = true;
     bool start_after_install = true;
+    std::vector<std::string> selected_pack_ids = {"server"};
 };
 
 struct PreflightIssue {

@@ -7,6 +7,7 @@
 #include <ftxui/dom/elements.hpp>
 
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <thread>
@@ -68,7 +69,32 @@ std::vector<std::string> SplitLines(const std::string& text_value) {
     return lines;
 }
 
+Elements BannerLines() {
+    return {
+        text(" ██████╗ ██████╗  ██████╗ ████████╗████████╗ ██████╗ "),
+        text("██╔════╝ ██╔══██╗██╔═══██╗╚══██╔══╝╚══██╔══╝██╔═══██╗"),
+        text("██║  ███╗██████╔╝██║   ██║   ██║      ██║   ██║   ██║"),
+        text("██║   ██║██╔══██╗██║   ██║   ██║      ██║   ██║   ██║"),
+        text("╚██████╔╝██║  ██║╚██████╔╝   ██║      ██║   ╚██████╔╝"),
+        text(" ╚═════╝ ╚═╝  ╚═╝ ╚═════╝    ╚═╝      ╚═╝    ╚═════╝ "),
+    };
+}
+
+Elements BannerSmall() {
+    return {
+        text("GROTTO.chat"),
+        text("installer"),
+    };
+}
+
 }  // namespace
+
+enum class InstallStepStatus { pending, running, ok, error };
+
+struct InstallStep {
+    std::string label;
+    InstallStepStatus status = InstallStepStatus::pending;
+};
 
 struct InstallerApp::Impl {
     explicit Impl(SystemInfo detected_system,
@@ -79,7 +105,21 @@ struct InstallerApp::Impl {
           manifest(std::move(detected_manifest)),
           manifest_source(std::move(detected_manifest_source)),
           manifest_error(std::move(detected_manifest_error)),
-          runner(system_info, manifest) {}
+          runner(system_info, manifest) {
+        InitializePacks();
+    }
+
+    void InitializePacks() {
+        if (!manifest.packs.empty()) {
+            for (const auto& pack : manifest.packs) {
+                pack_ui_states.push_back(pack.id == "server");
+                pack_ids.push_back(pack.id);
+            }
+        } else {
+            pack_ids = {"server"};
+            pack_ui_states = {true};
+        }
+    }
 
     int Run() {
         BuildComponents();
@@ -88,18 +128,53 @@ struct InstallerApp::Impl {
         return 0;
     }
 
+    ButtonOption StyledButton() {
+        ButtonOption option;
+        option.transform = [](const EntryState& s) {
+            auto element = text(s.label) | border;
+            if (s.focused) {
+                element |= inverted;
+            }
+            return element;
+        };
+        return option;
+    }
+
     void BuildComponents() {
         tls_entries = {"Let's Encrypt", "Self-signed", "Existing cert"};
         tls_index = static_cast<int>(config.tls_mode);
 
+        auto btn_opt = StyledButton();
+
+        // Welcome
         welcome_buttons = Container::Horizontal({
-            Button("Re-run preflight", [&] { RefreshPreflight(); }),
-            Button("Configure", [&] {
+            Button("Re-run preflight", [&] { RefreshPreflight(); }, btn_opt),
+            Button("Continue ", [&] {
                 RefreshPreflight();
                 active_tab = 1;
-            }),
+            }, btn_opt),
         });
 
+        // Pack selection
+        pack_checkboxes.clear();
+        pack_checkbox_states.clear();
+        for (size_t i = 0; i < pack_ids.size(); ++i) {
+            pack_checkbox_states.push_back(std::make_unique<PackCheckboxState>(PackCheckboxState{pack_ui_states[i] != 0}));
+        }
+        for (size_t i = 0; i < pack_ids.size(); ++i) {
+            pack_checkboxes.push_back(Checkbox(pack_ids[i], &pack_checkbox_states[i]->checked));
+        }
+        pack_list = Container::Vertical(pack_checkboxes);
+        
+        pack_buttons = Container::Horizontal({
+            Button(" Back ", [&] { active_tab = 0; }, btn_opt),
+            Button("Configure ", [&] {
+                UpdateSelectedPacks();
+                active_tab = 2;
+            }, btn_opt),
+        });
+
+        // Configuration
         domain_input = Input(&config.domain, "chat.example.com");
         listen_input = Input(&config.listen_address, "0.0.0.0");
         port_input = Input(&config.port_text, "6697");
@@ -113,12 +188,13 @@ struct InstallerApp::Impl {
         start_checkbox = Checkbox("Start after install", &config.start_after_install);
 
         configure_buttons = Container::Horizontal({
-            Button("Back", [&] { active_tab = 0; }),
-            Button("Review", [&] {
+            Button(" Back ", [&] { active_tab = 1; }, btn_opt),
+            Button("Review ", [&] {
                 SyncTlsMode();
                 RefreshPreflight();
-                active_tab = 2;
-            }),
+                BuildInstallSteps();
+                active_tab = 3;
+            }, btn_opt),
         });
 
         configure_form = Container::Vertical({
@@ -136,8 +212,9 @@ struct InstallerApp::Impl {
             configure_buttons,
         });
 
+        // Confirm
         confirm_buttons = Container::Horizontal({
-            Button("Back", [&] { active_tab = 1; }),
+            Button(" Back ", [&] { active_tab = 2; }, btn_opt),
             Button("Install", [&] {
                 SyncTlsMode();
                 RefreshPreflight();
@@ -151,22 +228,26 @@ struct InstallerApp::Impl {
                 if (!blocked) {
                     StartInstall();
                 }
-            }),
+            }, btn_opt),
         });
 
+        // Progress
         progress_buttons = Container::Horizontal({
             Button("Close", [&] {
                 if (install_done) {
                     screen.ExitLoopClosure()();
                 }
-            }),
+            }, btn_opt),
         });
 
+        // Result
         result_buttons = Container::Horizontal({
-            Button("Exit", [&] { screen.ExitLoopClosure()(); }),
+            Button("Exit", [&] { screen.ExitLoopClosure()(); }, btn_opt),
         });
 
+        // Renderers
         welcome_renderer = Renderer(welcome_buttons, [&] { return RenderWelcome(); });
+        pack_renderer = Renderer(Container::Vertical({pack_list, pack_buttons}), [&] { return RenderPackSelect(); });
         configure_renderer = Renderer(configure_form, [&] { return RenderConfigure(); });
         confirm_renderer = Renderer(confirm_buttons, [&] { return RenderConfirm(); });
         progress_renderer = Renderer(progress_buttons, [&] { return RenderProgress(); });
@@ -174,6 +255,7 @@ struct InstallerApp::Impl {
 
         tabs = Container::Tab({
                                   welcome_renderer,
+                                  pack_renderer,
                                   configure_renderer,
                                   confirm_renderer,
                                   progress_renderer,
@@ -183,10 +265,10 @@ struct InstallerApp::Impl {
 
         root = Renderer(tabs, [&] {
             return window(
-                       BoxTitle("Grotto Installer"),
+                       BoxTitle("GROTTO.chat Installer"),
                        tabs->Render() | flex) |
-                   size(WIDTH, GREATER_THAN, 80) |
-                   size(HEIGHT, GREATER_THAN, 28);
+                   size(WIDTH, GREATER_THAN, 90) |
+                   size(HEIGHT, GREATER_THAN, 32);
         });
     }
 
@@ -199,6 +281,43 @@ struct InstallerApp::Impl {
         preflight_issues = runner.RunPreflight(config);
     }
 
+    void UpdateSelectedPacks() {
+        config.selected_pack_ids.clear();
+        for (size_t i = 0; i < pack_ids.size() && i < pack_checkbox_states.size(); ++i) {
+            if (pack_checkbox_states[i]->checked) {
+                config.selected_pack_ids.push_back(pack_ids[i]);
+            }
+        }
+        if (config.selected_pack_ids.empty()) {
+            config.selected_pack_ids.push_back("server");
+            if (!pack_checkbox_states.empty()) {
+                pack_checkbox_states[0]->checked = true;
+            }
+        }
+    }
+
+    void BuildInstallSteps() {
+        install_steps.clear();
+        install_steps.push_back({"summoning grotto daemon...", InstallStepStatus::pending});
+        install_steps.push_back({"lighting encryption torches...", InstallStepStatus::pending});
+        install_steps.push_back({"installing dependencies", InstallStepStatus::pending});
+        
+        for (const auto& pack_id : config.selected_pack_ids) {
+            install_steps.push_back({"downloading " + pack_id + "...", InstallStepStatus::pending});
+            install_steps.push_back({"verifying " + pack_id + "...", InstallStepStatus::pending});
+            install_steps.push_back({"installing " + pack_id + "...", InstallStepStatus::pending});
+        }
+        
+        install_steps.push_back({"configuring TLS", InstallStepStatus::pending});
+        install_steps.push_back({"writing server config", InstallStepStatus::pending});
+        install_steps.push_back({"installing systemd service", InstallStepStatus::pending});
+        install_steps.push_back({"finalizing cave layout...", InstallStepStatus::pending});
+        
+        if (config.start_after_install) {
+            install_steps.push_back({"starting GROTTO.chat", InstallStepStatus::pending});
+        }
+    }
+
     void PushLog(const std::string& line) {
         {
             std::lock_guard<std::mutex> lock(log_mutex);
@@ -207,10 +326,13 @@ struct InstallerApp::Impl {
         screen.PostEvent(Event::Custom);
     }
 
-    void PushLogLines(const std::vector<std::string>& lines) {
-        for (const auto& line : lines) {
-            PushLog(line);
+    void SetStepStatus(size_t index, InstallStepStatus status) {
+        if (index < install_steps.size()) {
+            std::lock_guard<std::mutex> lock(log_mutex);
+            install_steps[index].status = status;
+            current_step = index;
         }
+        screen.PostEvent(Event::Custom);
     }
 
     void StartInstall() {
@@ -220,82 +342,96 @@ struct InstallerApp::Impl {
 
         install_done = false;
         install_summary = {};
+        current_step = 0;
         {
             std::lock_guard<std::mutex> lock(log_mutex);
             progress_lines.clear();
         }
 
-        active_tab = 3;
+        daemon.randomize_mood();
+        active_tab = 4;
+        
         install_thread = std::thread([this] {
             using namespace std::chrono_literals;
 
-            daemon.randomize_mood();
+            // Boot sequence animation
+            daemon.set_mood(grotto::GROTTO::mood::sleeping);
+            std::this_thread::sleep_for(300ms);
+            SetStepStatus(0, InstallStepStatus::running);
+            
+            daemon.set_mood(grotto::GROTTO::mood::waking_up);
+            std::this_thread::sleep_for(300ms);
+            SetStepStatus(0, InstallStepStatus::ok);
+            SetStepStatus(1, InstallStepStatus::running);
+            
+            daemon.set_mood(grotto::GROTTO::mood::focused);
+            std::this_thread::sleep_for(200ms);
+            SetStepStatus(1, InstallStepStatus::ok);
 
-            const auto frame = [this](const std::string& label, grotto::GROTTO::mood mood_state) {
-                daemon.set_mood(mood_state);
-                PushLog(label);
-                PushLogLines(SplitLines(daemon.get_face()));
-            };
-
-            frame("summoning grotto daemon...", grotto::GROTTO::mood::sleeping);
-            std::this_thread::sleep_for(250ms);
-            frame("daemon awakened", grotto::GROTTO::mood::waking_up);
-            std::this_thread::sleep_for(250ms);
-            frame("opening tunnels...", grotto::GROTTO::mood::on_edge);
-            std::this_thread::sleep_for(250ms);
-            frame("secure cave ready", grotto::GROTTO::mood::calm);
-            std::this_thread::sleep_for(250ms);
-
-            daemon.randomize_mood();
-            if (daemon.get_mood() == "grumpy" || daemon.get_mood() == "MAD") {
-                PushLog(daemon.random_error_message());
-            } else {
-                PushLog(daemon.random_startup_message());
-            }
-
-            PushLog("lighting encryption torches...");
-            PushLog("checking tunnel integrity...");
-            PushLog("binding encryption keys...");
-            PushLog("opening secure channels...");
-            PushLog("preparing voice caverns...");
-            PushLog("securing file transfer paths...");
-            PushLog("finalizing cave layout...");
-
-            install_summary = runner.RunInstall(config, [this](const std::string& step, bool is_error) {
+            // Run actual install
+            size_t step_idx = 2;
+            install_summary = runner.RunInstall(config, [this, &step_idx](const std::string& step, bool is_error) {
+                if (step_idx < install_steps.size()) {
+                    SetStepStatus(step_idx, is_error ? InstallStepStatus::error : InstallStepStatus::ok);
+                    step_idx++;
+                    if (step_idx < install_steps.size()) {
+                        SetStepStatus(step_idx, InstallStepStatus::running);
+                    }
+                }
                 PushLog((is_error ? "[error] " : "[step] ") + step);
             });
+
+            // Final status
             install_done = true;
-            active_tab = 4;
+            if (install_summary.success) {
+                daemon.set_mood(grotto::GROTTO::mood::calm);
+            } else {
+                daemon.set_mood(grotto::GROTTO::mood::grumpy);
+            }
+            active_tab = 5;
             screen.PostEvent(Event::Custom);
         });
     }
 
+    Element RenderHeader(bool compact = false) const {
+        auto banner = compact ? BannerSmall() : BannerLines();
+        auto face = daemon.get_face_lines();
+        
+        Elements face_elements;
+        for (const auto& line : face.lines) {
+            face_elements.push_back(text(line));
+        }
+        face_elements.push_back(text(""));
+        face_elements.push_back(text("daemon mood: " + daemon.get_mood()) | color(Color::Green));
+        
+        return hbox({
+            vbox(std::move(banner)) | flex,
+            separator(),
+            vbox(std::move(face_elements))
+        });
+    }
+
     Element RenderWelcome() const {
-        std::vector<std::string> summary = {
-            "Install Grotto server on this machine.",
-            "",
-            "Manifest source: " + manifest_source,
-            "Manifest version: " + manifest.version,
-            "Docs: " + manifest.docs_url,
-            "Detected platform: " + system_info.platform_key,
-            "Distribution: " + (system_info.distro_id.empty() ? "unknown" : system_info.distro_id + " " + system_info.distro_version),
+        auto header = RenderHeader(false);
+        
+        std::vector<std::string> info = {
+            "Platform: " + system_info.platform_key,
             "systemd: " + std::string(system_info.has_systemd ? "yes" : "no"),
-            "ufw installed: " + std::string(system_info.has_ufw ? "yes" : "no"),
+            "UFW: " + std::string(system_info.has_ufw ? "yes" : "no"),
             "",
-            "Current preflight state:",
+            "Manifest: " + manifest_source,
+            "Version: " + manifest.version,
         };
-
-        auto daemon_lines = SplitLines(grotto::GROTTO::grotto_daemon);
-        daemon_lines.push_back("daemon mood: idle");
-
+        
         if (!manifest_error.empty()) {
-            summary.push_back("Manifest warning: " + manifest_error);
+            info.push_back("");
+            info.push_back("Warning: " + manifest_error);
         }
 
         return vbox({
-                   ParagraphLines(daemon_lines),
+                   header,
                    separator(),
-                   ParagraphLines(summary),
+                   ParagraphLines(info),
                    separator(),
                    ParagraphLines(FormatPreflight(preflight_issues)),
                    separator(),
@@ -304,8 +440,51 @@ struct InstallerApp::Impl {
                border;
     }
 
+    Element RenderPackSelect() const {
+        auto header = RenderHeader(true);
+        
+        // Show first selected pack description, or first pack if none selected
+        std::string description = "Select packs to install.";
+        if (!manifest.packs.empty()) {
+            for (size_t i = 0; i < manifest.packs.size() && i < pack_ui_states.size(); ++i) {
+                if (pack_ui_states[i]) {
+                    description = manifest.packs[i].description;
+                    break;
+                }
+            }
+            if (description == "Select packs to install.") {
+                description = manifest.packs[0].description;
+            }
+        }
+
+        auto left = vbox({
+            text("SELECT PACKS TO INSTALL") | bold,
+            separator(),
+            pack_list->Render(),
+        }) | border;
+
+        auto right = vbox({
+            text("Description") | bold,
+            separator(),
+            paragraph(description),
+        }) | border | flex;
+
+        return vbox({
+                   header,
+                   separator(),
+                   hbox({left, right}),
+                   separator(),
+                   pack_buttons->Render(),
+               }) |
+               border;
+    }
+
     Element RenderConfigure() const {
+        auto header = RenderHeader(true);
+        
         Elements rows = {
+            text("Configuration") | bold,
+            separator(),
             hbox(text("Domain:            "), domain_input->Render()),
             hbox(text("Listen address:    "), listen_input->Render()),
             hbox(text("Port:              "), port_input->Render()),
@@ -328,28 +507,40 @@ struct InstallerApp::Impl {
         rows.push_back(separator());
         rows.push_back(configure_buttons->Render());
 
-        return vbox(std::move(rows)) | border;
+        return vbox({
+                   header,
+                   separator(),
+                   vbox(std::move(rows)),
+               }) |
+               border;
     }
 
     Element RenderConfirm() const {
+        auto header = RenderHeader(true);
+        
         std::vector<std::string> summary = {
-            "Review installation settings:",
+            "Review installation:",
             "",
+            "Packs: " + [&] {
+                std::string s;
+                for (const auto& id : config.selected_pack_ids) {
+                    if (!s.empty()) s += ", ";
+                    s += id;
+                }
+                return s;
+            }(),
             "Domain: " + config.domain,
-            "Listen address: " + config.listen_address,
-            "Port: " + config.port_text,
+            "Listen: " + config.listen_address + ":" + config.port_text,
             "Install path: " + config.install_path,
-            "Data path: " + config.data_path,
             "TLS: " + TlsLabel(config.tls_mode),
-            "Manage firewall: " + std::string(config.manage_firewall ? "yes" : "no"),
-            "Start after install: " + std::string(config.start_after_install ? "yes" : "no"),
             "",
             "Preflight:",
         };
 
         return vbox({
-                   ParagraphLines(summary),
+                   header,
                    separator(),
+                   ParagraphLines(summary),
                    ParagraphLines(FormatPreflight(preflight_issues)),
                    separator(),
                    confirm_buttons->Render(),
@@ -358,43 +549,90 @@ struct InstallerApp::Impl {
     }
 
     Element RenderProgress() const {
-        Elements lines;
+        auto header = RenderHeader(true);
+        
+        Elements step_elements;
         {
             std::lock_guard<std::mutex> lock(log_mutex);
-            for (const auto& line : progress_lines) {
-                lines.push_back(text(line));
+            for (const auto& step : install_steps) {
+                std::string marker;
+                Element marker_elem;
+                switch (step.status) {
+                    case InstallStepStatus::pending:
+                        marker = "[  ]";
+                        marker_elem = text(marker);
+                        break;
+                    case InstallStepStatus::running:
+                        marker = "[..]";
+                        marker_elem = text(marker) | color(Color::Yellow);
+                        break;
+                    case InstallStepStatus::ok:
+                        marker = "[ok]";
+                        marker_elem = text(marker) | color(Color::Green);
+                        break;
+                    case InstallStepStatus::error:
+                        marker = "[!!]";
+                        marker_elem = text(marker) | color(Color::Red);
+                        break;
+                }
+                step_elements.push_back(hbox({
+                    marker_elem,
+                    text(" "),
+                    text(step.label)
+                }));
             }
         }
-        if (lines.empty()) {
-            lines.push_back(text("Waiting for installer pipeline..."));
-        }
 
-        lines.push_back(separator());
-        lines.push_back(text(install_done ? "Installation finished." : "Installing..."));
-        lines.push_back(progress_buttons->Render());
-
-        return vbox(std::move(lines)) | border;
-    }
-
-    Element RenderResult() const {
-        std::vector<std::string> lines = {
-            install_summary.headline.empty() ? "Installation finished" : install_summary.headline,
-            "",
-        };
-        auto daemon_lines = SplitLines(daemon.get_face());
-        daemon_lines.push_back("daemon mood: " + daemon.get_mood());
-        daemon_lines.push_back(install_summary.success ? daemon.random_startup_message() : daemon.random_error_message());
-        for (const auto& detail : install_summary.details) {
-            lines.push_back(detail);
-        }
-        if (!install_summary.docs_url.empty()) {
-            lines.push_back("Docs: " + install_summary.docs_url);
+        // Progress bar
+        float progress = 0.0f;
+        if (!install_steps.empty()) {
+            int completed = 0;
+            {
+                std::lock_guard<std::mutex> lock(log_mutex);
+                for (const auto& step : install_steps) {
+                    if (step.status == InstallStepStatus::ok || step.status == InstallStepStatus::error) {
+                        completed++;
+                    }
+                }
+            }
+            progress = static_cast<float>(completed) / static_cast<float>(install_steps.size());
         }
 
         return vbox({
-                   ParagraphLines(daemon_lines),
+                   header,
                    separator(),
-                   ParagraphLines(lines),
+                   vbox(std::move(step_elements)),
+                   separator(),
+                   gauge(progress),
+                   separator(),
+                   text(install_done ? "Installation finished." : "Installing..."),
+                   progress_buttons->Render(),
+               }) |
+               border;
+    }
+
+    Element RenderResult() const {
+        auto header = RenderHeader(true);
+        auto face = daemon.get_face_lines();
+        
+        Elements lines = {
+            install_summary.headline.empty() ? text("Installation finished") : text(install_summary.headline),
+        };
+        
+        if (install_summary.success) {
+            lines.push_back(text(daemon.random_startup_message()) | color(Color::Green));
+        } else {
+            lines.push_back(text(daemon.random_error_message()) | color(Color::Red));
+        }
+        
+        for (const auto& detail : install_summary.details) {
+            lines.push_back(text(detail));
+        }
+
+        return vbox({
+                   header,
+                   separator(),
+                   vbox(std::move(lines)),
                    separator(),
                    result_buttons->Render(),
                }) |
@@ -414,6 +652,13 @@ struct InstallerApp::Impl {
     std::vector<std::string> progress_lines;
     InstallSummary install_summary;
 
+    std::vector<std::string> pack_ids;
+    std::vector<char> pack_ui_states;
+    struct PackCheckboxState { bool checked; };
+    std::vector<std::unique_ptr<PackCheckboxState>> pack_checkbox_states;
+    std::vector<InstallStep> install_steps;
+    size_t current_step = 0;
+
     int active_tab = 0;
     int tls_index = 0;
     std::vector<std::string> tls_entries;
@@ -425,6 +670,9 @@ struct InstallerApp::Impl {
     Component root;
     Component tabs;
     Component welcome_buttons;
+    Component pack_list;
+    Component pack_buttons;
+    std::vector<Component> pack_checkboxes;
     Component configure_form;
     Component configure_buttons;
     Component confirm_buttons;
@@ -442,6 +690,7 @@ struct InstallerApp::Impl {
     Component install_ufw_checkbox;
     Component start_checkbox;
     Component welcome_renderer;
+    Component pack_renderer;
     Component configure_renderer;
     Component confirm_renderer;
     Component progress_renderer;

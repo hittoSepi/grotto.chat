@@ -112,3 +112,5 @@ conanbuildinfo.*
 conaninfo.txt
 graph_info.json
 dev_docs/GROTTO-DAEMON-MASCOT-PLAN.md
+dev_docs/DETAILED-TASKS.md
+dev_docs/CODEBASE-ANALYSIS-2026-03-21.md

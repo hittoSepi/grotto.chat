@@ -146,7 +146,8 @@ std::vector<PreflightIssue> InstallerRunner::RunPreflight(const InstallConfig& c
         system_info_.distro_id != "debian") {
         issues.push_back({true, "Unsupported distribution: " + system_info_.distro_id});
     }
-    if (manifest_.server.url.empty()) {
+    if (manifest_.artifacts.find("server") == manifest_.artifacts.end() ||
+        manifest_.artifacts.at("server").url.empty()) {
         issues.push_back({true, "Manifest does not contain a server artifact for this platform."});
     }
 
@@ -263,7 +264,8 @@ InstallSummary InstallerRunner::RunInstall(const InstallConfig& config,
 
     callback("Downloading Grotto server package", false);
     std::string download_error;
-    if (!SystemOps::DownloadFile(manifest_.server.url, archive_path, &download_error)) {
+    const auto& server_artifact = manifest_.artifacts.at("server");
+    if (!SystemOps::DownloadFile(server_artifact.url, archive_path, &download_error)) {
         summary.success = false;
         summary.headline = "Server download failed";
         summary.details.push_back(download_error);
@@ -272,7 +274,7 @@ InstallSummary InstallerRunner::RunInstall(const InstallConfig& config,
 
     callback("Verifying download integrity", false);
     std::string sha_error;
-    if (!SystemOps::VerifySha256(archive_path, manifest_.server.sha256, &sha_error)) {
+    if (!SystemOps::VerifySha256(archive_path, server_artifact.sha256, &sha_error)) {
         summary.success = false;
         summary.headline = "Checksum verification failed";
         summary.details.push_back(sha_error);

@@ -1,6 +1,32 @@
 {
   "version": "0.1.0",
   "docs_url": "https://chat.rausku.com/docs",
+  "packs": [
+    {
+      "id": "client",
+      "name": "GROTTO.chat Client",
+      "description": "Terminal desktop client with encryption, voice rooms and file transfer.",
+      "required": false
+    },
+    {
+      "id": "server",
+      "name": "GROTTO.chat Server",
+      "description": "Encrypted relay server with systemd integration.",
+      "required": false
+    },
+    {
+      "id": "cli",
+      "name": "GROTTO CLI",
+      "description": "Command-line management and status tools.",
+      "required": false
+    },
+    {
+      "id": "landing",
+      "name": "Landing page",
+      "description": "Static landing page and docs bundle.",
+      "required": false
+    }
+  ],
   "platforms": {
     "linux-x64": {
       "installer": {
@@ -10,6 +36,18 @@
       "server": {
         "url": "https://chat.rausku.com/downloads/grotto-server-linux-x64.tar.gz",
         "sha256": "replace-with-real-server-sha256"
+      },
+      "client": {
+        "url": "https://chat.rausku.com/downloads/grotto-client-linux-x64.tar.gz",
+        "sha256": "replace-with-real-client-sha256"
+      },
+      "cli": {
+        "url": "https://chat.rausku.com/downloads/grotto-cli-linux-x64.tar.gz",
+        "sha256": "replace-with-real-cli-sha256"
+      },
+      "landing": {
+        "url": "https://chat.rausku.com/downloads/grotto-landing-linux-x64.tar.gz",
+        "sha256": "replace-with-real-landing-sha256"
       }
     },
     "linux-arm64": {
@@ -20,6 +58,18 @@
       "server": {
         "url": "https://chat.rausku.com/downloads/grotto-server-linux-arm64.tar.gz",
         "sha256": "replace-with-real-server-sha256"
+      },
+      "client": {
+        "url": "https://chat.rausku.com/downloads/grotto-client-linux-arm64.tar.gz",
+        "sha256": "replace-with-real-client-sha256"
+      },
+      "cli": {
+        "url": "https://chat.rausku.com/downloads/grotto-cli-linux-arm64.tar.gz",
+        "sha256": "replace-with-real-cli-sha256"
+      },
+      "landing": {
+        "url": "https://chat.rausku.com/downloads/grotto-landing-linux-arm64.tar.gz",
+        "sha256": "replace-with-real-landing-sha256"
       }
     }
   }

@@ -31,6 +31,24 @@ ArtifactInfo ParseArtifact(const nlohmann::json& object, const char* key) {
     };
 }
 
+std::vector<PackInfo> ParsePacks(const nlohmann::json& parsed) {
+    std::vector<PackInfo> packs;
+    if (!parsed.contains("packs")) {
+        packs.push_back(PackInfo{"server", "GROTTO.chat Server", "Encrypted relay server.", false});
+        return packs;
+    }
+
+    for (const auto& pack : parsed.at("packs")) {
+        packs.push_back(PackInfo{
+            pack.at("id").get<std::string>(),
+            pack.at("name").get<std::string>(),
+            pack.value("description", ""),
+            pack.value("required", false),
+        });
+    }
+    return packs;
+}
+
 }  // namespace
 
 std::optional<Manifest> LoadManifestFromFile(const std::filesystem::path& path,
@@ -41,11 +59,30 @@ std::optional<Manifest> LoadManifestFromFile(const std::filesystem::path& path,
         const auto& platforms = parsed.at("platforms");
         const auto& platform = platforms.at(platform_key);
 
+        auto packs = ParsePacks(parsed);
+        std::map<std::string, ArtifactInfo> artifacts;
+        for (const auto& pack : packs) {
+            if (platform.contains(pack.id)) {
+                const auto& artifact = platform.at(pack.id);
+                artifacts.emplace(pack.id,
+                                  ArtifactInfo{
+                                      artifact.at("url").get<std::string>(),
+                                      artifact.value("sha256", ""),
+                                  });
+            }
+        }
+
+        if (!artifacts.contains("server") && platform.contains("server")) {
+            const auto& server = platform.at("server");
+            artifacts.emplace("server", ArtifactInfo{server.at("url").get<std::string>(), server.value("sha256", "")});
+        }
+
         return Manifest{
             parsed.value("version", "unknown"),
             parsed.value("docs_url", "https://chat.rausku.com/docs"),
             ParseArtifact(platform, "installer"),
-            ParseArtifact(platform, "server"),
+            std::move(packs),
+            std::move(artifacts),
         };
     } catch (const std::exception& ex) {
         if (error_message != nullptr) {
