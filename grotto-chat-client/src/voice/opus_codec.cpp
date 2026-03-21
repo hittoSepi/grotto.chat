@@ -63,7 +63,10 @@ std::vector<float> OpusCodec::decode_plc() {
 
     std::vector<float> out(kFrameSamples);
     // Pass nullptr + 0 for FEC/PLC
-    opus_decode_float(dec_, nullptr, 0, out.data(), kFrameSamples, 0);
+    int decoded = opus_decode_float(dec_, nullptr, 0, out.data(), kFrameSamples, 0);
+    if (decoded < 0) {
+        std::fill(out.begin(), out.end(), 0.0f);
+    }
     return out;
 }
 

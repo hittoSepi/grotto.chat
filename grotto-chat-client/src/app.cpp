@@ -824,7 +824,6 @@ void App::handle_command_response(const CommandResponse& response) {
         auto header_end = msg.find(":\n");
         if (header_end != std::string::npos) {
             // Extract channel name from "Users in #channel"
-            auto prefix_end = msg.find(' ', 9); // skip "Users in "
             std::string channel = msg.substr(9, header_end - 9);
 
             std::vector<ChannelUserInfo> users;

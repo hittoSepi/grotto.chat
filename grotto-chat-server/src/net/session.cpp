@@ -784,7 +784,7 @@ void Session::handle_key_request(const KeyRequest& kr) {
     send_envelope(MT_KEY_BUNDLE, bundle);
 }
 
-void Session::handle_file_request(const FileUploadRequest& req, const Envelope& raw) {
+void Session::handle_file_request(const FileUploadRequest& req, const Envelope& /*raw*/) {
     auto& file_store = server_ctx_.file_store();
     
     // Validate request
@@ -852,7 +852,7 @@ void Session::handle_file_request(const FileUploadRequest& req, const Envelope& 
         remote_endpoint_, req.file_id(), req.file_size(), req.filename());
 }
 
-void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& raw) {
+void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& /*raw*/) {
     auto& file_store = server_ctx_.file_store();
     
     // Check rate limit

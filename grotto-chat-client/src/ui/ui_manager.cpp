@@ -210,6 +210,7 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
 }
 
 void UIManager::handle_double_click(int mouse_x, int mouse_y) {
+    (void)mouse_x;
     // Double-click to select word (entire message in this implementation)
     if (mouse_tracker_.is_over_message_area()) {
         // Calculate which line was clicked
@@ -239,6 +240,7 @@ void UIManager::handle_double_click(int mouse_x, int mouse_y) {
 }
 
 void UIManager::handle_triple_click(int mouse_x, int mouse_y) {
+    (void)mouse_x;
     // Triple-click to select entire line/message with sender
     if (mouse_tracker_.is_over_message_area()) {
         int line_y = mouse_y - mouse_tracker_.message_region().y;

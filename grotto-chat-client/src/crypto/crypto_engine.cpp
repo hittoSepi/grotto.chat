@@ -80,7 +80,7 @@ static void signal_sha512_digest_cleanup(void* ctx, void*) {
 static int signal_encrypt(signal_buffer** out,
                            int cipher,
                            const uint8_t* key, size_t key_len,
-                           const uint8_t* iv, size_t iv_len,
+                           const uint8_t* iv, size_t /*iv_len*/,
                            const uint8_t* data, size_t data_len,
                            void*)
 {
@@ -110,7 +110,7 @@ static int signal_encrypt(signal_buffer** out,
 static int signal_decrypt(signal_buffer** out,
                            int cipher,
                            const uint8_t* key, size_t key_len,
-                           const uint8_t* iv, size_t iv_len,
+                           const uint8_t* iv, size_t /*iv_len*/,
                            const uint8_t* data, size_t data_len,
                            void*)
 {

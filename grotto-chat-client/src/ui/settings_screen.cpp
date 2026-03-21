@@ -55,17 +55,6 @@ std::string category_label(SettingsCategory cat) {
     return "Unknown";
 }
 
-// Category icon
-std::string category_icon(SettingsCategory cat) {
-    switch (cat) {
-        case SettingsCategory::Appearance: return "\xf0\x9f\x8e\xa8"; // Palette
-        case SettingsCategory::Connection: return "\xe2\x9a\xa1";     // Lightning
-        case SettingsCategory::Notifications: return "\xf0\x9f\x94\x94"; // Bell
-        case SettingsCategory::Account: return "\xf0\x9f\x91\xa4";     // Person
-    }
-    return "";
-}
-
 } // anonymous namespace
 
 const std::vector<std::string>& available_themes() {

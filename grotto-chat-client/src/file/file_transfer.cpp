@@ -46,8 +46,8 @@ std::string FileTransferManager::upload(
     const std::filesystem::path& local_path,
     const std::string& recipient_id,
     const std::string& channel_id,
-    ProgressCallback on_progress,
-    CompletionCallback on_complete) {
+    ProgressCallback /*on_progress*/,
+    CompletionCallback /*on_complete*/) {
     
     // Validate file exists
     if (!std::filesystem::exists(local_path)) {
@@ -101,8 +101,8 @@ std::string FileTransferManager::upload(
 std::string FileTransferManager::download(
     const std::string& file_id,
     const std::filesystem::path& local_path,
-    ProgressCallback on_progress,
-    CompletionCallback on_complete) {
+    ProgressCallback /*on_progress*/,
+    CompletionCallback /*on_complete*/) {
     
     // Create transfer record
     TransferInfo info;

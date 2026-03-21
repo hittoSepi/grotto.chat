@@ -405,7 +405,7 @@ ServerOwner::CommandResult ServerOwner::cmd_shutdown(const std::vector<std::stri
         : "Server shutdown initiated"};
 }
 
-ServerOwner::CommandResult ServerOwner::cmd_restart(const std::vector<std::string>& args) {
+ServerOwner::CommandResult ServerOwner::cmd_restart(const std::vector<std::string>& /*args*/) {
     cmd_announce({"Server is restarting..."});
     
     spdlog::info("RESTART initiated");
@@ -417,7 +417,7 @@ ServerOwner::CommandResult ServerOwner::cmd_restart(const std::vector<std::strin
     return {true, "Server restart requested. This build does not support in-process restart, so the server is shutting down for an external supervisor to restart it."};
 }
 
-ServerOwner::CommandResult ServerOwner::cmd_status(const std::vector<std::string>& args) {
+ServerOwner::CommandResult ServerOwner::cmd_status(const std::vector<std::string>& /*args*/) {
     std::stringstream ss;
     auto* listener = server_.listener();
     auto* command_handler = listener ? listener->command_handler() : nullptr;
@@ -460,7 +460,7 @@ ServerOwner::CommandResult ServerOwner::cmd_config(const std::vector<std::string
     return {true, "Config updated: " + key + " = " + value};
 }
 
-ServerOwner::CommandResult ServerOwner::cmd_help(const std::vector<std::string>& args) {
+ServerOwner::CommandResult ServerOwner::cmd_help(const std::vector<std::string>& /*args*/) {
     std::string help_text = R"(Available admin commands:
 
 /announce <message>     - Send announcement to all connected users

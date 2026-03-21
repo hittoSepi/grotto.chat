@@ -90,7 +90,7 @@ ClientConfig load_config(const std::filesystem::path& path);
 void save_config(const ClientConfig& cfg, const std::filesystem::path& path);
 
 // Returns the default platform config directory:
-//   Windows: %APPDATA%\grotto\
+//   Windows: %APPDATA%\\grotto
 //   Linux:   ~/.config/grotto/
 std::filesystem::path default_config_dir();
 
