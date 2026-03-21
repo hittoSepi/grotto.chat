@@ -13,9 +13,9 @@
 
 // libsignal-protocol-c requires a crypto provider backed by libsodium
 extern "C" {
+#include <openssl/core_names.h>
+#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
 }
 
 namespace grotto::crypto {
@@ -28,52 +28,79 @@ static int signal_random_bytes(uint8_t* data, size_t len, void*) {
 }
 
 static int signal_hmac_sha256_init(void** ctx, const uint8_t* key, size_t key_len, void*) {
-    HMAC_CTX* hmac = HMAC_CTX_new();
-    if (!hmac) return SG_ERR_NOMEM;
-    HMAC_Init_ex(hmac, key, static_cast<int>(key_len), EVP_sha256(), nullptr);
-    *ctx = hmac;
+    EVP_MAC* mac = EVP_MAC_fetch(nullptr, "HMAC", nullptr);
+    if (!mac) return SG_ERR_NOMEM;
+
+    EVP_MAC_CTX* mac_ctx = EVP_MAC_CTX_new(mac);
+    EVP_MAC_free(mac);
+    if (!mac_ctx) return SG_ERR_NOMEM;
+
+    OSSL_PARAM params[] = {
+        OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST,
+                                         const_cast<char*>("SHA256"), 0),
+        OSSL_PARAM_construct_end(),
+    };
+
+    if (EVP_MAC_init(mac_ctx, key, key_len, params) != 1) {
+        EVP_MAC_CTX_free(mac_ctx);
+        return SG_ERR_UNKNOWN;
+    }
+
+    *ctx = mac_ctx;
     return SG_SUCCESS;
 }
 
 static int signal_hmac_sha256_update(void* ctx, const uint8_t* data, size_t len, void*) {
-    HMAC_Update(static_cast<HMAC_CTX*>(ctx), data, len);
-    return SG_SUCCESS;
+    return EVP_MAC_update(static_cast<EVP_MAC_CTX*>(ctx), data, len) == 1
+        ? SG_SUCCESS
+        : SG_ERR_UNKNOWN;
 }
 
 static int signal_hmac_sha256_final(void* ctx, signal_buffer** out, void*) {
-    auto* hmac = static_cast<HMAC_CTX*>(ctx);
-    uint8_t buf[32]; unsigned int len = 32;
-    HMAC_Final(hmac, buf, &len);
+    auto* mac_ctx = static_cast<EVP_MAC_CTX*>(ctx);
+    uint8_t buf[EVP_MAX_MD_SIZE];
+    size_t len = sizeof(buf);
+    if (EVP_MAC_final(mac_ctx, buf, &len, sizeof(buf)) != 1) {
+        return SG_ERR_UNKNOWN;
+    }
     *out = signal_buffer_create(buf, len);
     return *out ? SG_SUCCESS : SG_ERR_NOMEM;
 }
 
 static void signal_hmac_sha256_cleanup(void* ctx, void*) {
-    HMAC_CTX_free(static_cast<HMAC_CTX*>(ctx));
+    EVP_MAC_CTX_free(static_cast<EVP_MAC_CTX*>(ctx));
 }
 
 static int signal_sha512_digest_init(void** ctx, void*) {
-    SHA512_CTX* sha = new SHA512_CTX;
-    SHA512_Init(sha);
-    *ctx = sha;
+    EVP_MD_CTX* md_ctx = EVP_MD_CTX_new();
+    if (!md_ctx) return SG_ERR_NOMEM;
+    if (EVP_DigestInit_ex(md_ctx, EVP_sha512(), nullptr) != 1) {
+        EVP_MD_CTX_free(md_ctx);
+        return SG_ERR_UNKNOWN;
+    }
+    *ctx = md_ctx;
     return SG_SUCCESS;
 }
 
 static int signal_sha512_digest_update(void* ctx, const uint8_t* data, size_t len, void*) {
-    SHA512_Update(static_cast<SHA512_CTX*>(ctx), data, len);
-    return SG_SUCCESS;
+    return EVP_DigestUpdate(static_cast<EVP_MD_CTX*>(ctx), data, len) == 1
+        ? SG_SUCCESS
+        : SG_ERR_UNKNOWN;
 }
 
 static int signal_sha512_digest_final(void* ctx, signal_buffer** out, void*) {
-    auto* sha = static_cast<SHA512_CTX*>(ctx);
-    uint8_t buf[64];
-    SHA512_Final(buf, sha);
-    *out = signal_buffer_create(buf, 64);
+    auto* md_ctx = static_cast<EVP_MD_CTX*>(ctx);
+    uint8_t buf[EVP_MAX_MD_SIZE];
+    unsigned int len = 0;
+    if (EVP_DigestFinal_ex(md_ctx, buf, &len) != 1) {
+        return SG_ERR_UNKNOWN;
+    }
+    *out = signal_buffer_create(buf, len);
     return *out ? SG_SUCCESS : SG_ERR_NOMEM;
 }
 
 static void signal_sha512_digest_cleanup(void* ctx, void*) {
-    delete static_cast<SHA512_CTX*>(ctx);
+    EVP_MD_CTX_free(static_cast<EVP_MD_CTX*>(ctx));
 }
 
 // AES-CBC encrypt/decrypt via OpenSSL
