@@ -52,6 +52,15 @@ void Database::execute_schema() {
         ")"
     );
 
+    db_.exec(
+        "CREATE TABLE IF NOT EXISTS bug_reports ("
+        "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  user_id     TEXT NOT NULL,"
+        "  description TEXT NOT NULL,"
+        "  reported_at INTEGER NOT NULL"
+        ")"
+    );
+
     spdlog::debug("Database schema initialized");
 }
 

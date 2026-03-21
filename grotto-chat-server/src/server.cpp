@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <csignal>
+#include <chrono>
 
 #ifdef GROTTO_CHAT_HAS_TUI
 #include "version.hpp"
@@ -393,12 +394,29 @@ void Server::setup_http_api_routes() {
             return grotto::api::Response::bad_request("Description too long (max 2000 chars)");
         }
         
-        // TODO: Store bug report in database
-        // For now, just log it
-        spdlog::info("Bug report from {}: {}", user_id, description.substr(0, 50));
+        int64_t bug_report_id = 0;
+        try {
+            std::lock_guard<std::mutex> lock(db_->mutex());
+            const auto reported_at = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            SQLite::Statement insert(db_->get(), R"(
+                INSERT INTO bug_reports (user_id, description, reported_at)
+                VALUES (?, ?, ?)
+            )");
+            insert.bind(1, user_id);
+            insert.bind(2, description);
+            insert.bind(3, reported_at);
+            insert.exec();
+            bug_report_id = db_->get().getLastInsertRowid();
+        } catch (const std::exception& e) {
+            spdlog::error("Failed to store bug report from {}: {}", user_id, e.what());
+            return grotto::api::Response::server_error("Failed to store bug report");
+        }
+
+        spdlog::info("Stored bug report {} from {}", bug_report_id, user_id);
         
         return grotto::api::Response::created({
-            {"id", 1},
+            {"id", bug_report_id},
             {"message", "Bug report submitted successfully"}
         });
     });
