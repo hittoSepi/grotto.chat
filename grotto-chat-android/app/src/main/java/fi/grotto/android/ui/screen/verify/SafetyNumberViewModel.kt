@@ -59,7 +59,7 @@ class SafetyNumberViewModel @Inject constructor(
                         peerFingerprint = peerFingerprint,
                         safetyNumber = safetyNumber,
                         isVerified = isVerified,
-                        lastVerifiedAt = null, // TODO: Store last verified timestamp
+                        lastVerifiedAt = peerIdentity?.lastVerifiedAt,
                         isLoading = false,
                     )
                 }
@@ -77,8 +77,9 @@ class SafetyNumberViewModel @Inject constructor(
     
     fun markAsVerified(peerId: String) {
         viewModelScope.launch {
+            val verifiedAt = System.currentTimeMillis()
             keyRepository.markVerified(peerId)
-            _uiState.update { it.copy(isVerified = true) }
+            _uiState.update { it.copy(isVerified = true, lastVerifiedAt = verifiedAt) }
         }
     }
     

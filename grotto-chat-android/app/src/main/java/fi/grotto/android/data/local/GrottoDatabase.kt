@@ -21,7 +21,7 @@ import fi.grotto.android.data.local.entity.PeerIdentityEntity
         ChannelMemberEntity::class,
         LinkPreviewEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class GrottoDatabase : RoomDatabase() {

@@ -19,7 +19,8 @@ class KeyRepository @Inject constructor(
 
     suspend fun insertPeer(identity: PeerIdentityEntity) = peerIdentityDao.insert(identity)
 
-    suspend fun markVerified(userId: String) = peerIdentityDao.updateTrust(userId, "verified")
+    suspend fun markVerified(userId: String) =
+        peerIdentityDao.updateTrust(userId, "verified", System.currentTimeMillis())
 
     suspend fun updatePresence(userId: String, status: String) =
         peerIdentityDao.updatePresence(userId, status.lowercase())

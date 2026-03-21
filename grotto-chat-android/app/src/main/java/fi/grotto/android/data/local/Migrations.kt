@@ -84,6 +84,16 @@ object Migrations {
     }
 
     /**
+     * Migration from version 6 to 7:
+     * - Adds last_verified_at column to peer_identities table
+     */
+    val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE peer_identities ADD COLUMN last_verified_at INTEGER DEFAULT NULL")
+        }
+    }
+
+    /**
      * All migrations in order.
      */
     val ALL_MIGRATIONS: Array<Migration> = arrayOf(
@@ -92,5 +102,6 @@ object Migrations {
         MIGRATION_3_4,
         MIGRATION_4_5,
         MIGRATION_5_6,
+        MIGRATION_6_7,
     )
 }
