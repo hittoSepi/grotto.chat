@@ -24,6 +24,23 @@ std::string format_identity_fingerprint(const std::vector<uint8_t>& identity_pub
     return fingerprint;
 }
 
+std::string resolve_target_user_id(
+    const std::unordered_map<std::string, std::string>& nick_to_user_id,
+    const std::string& target) {
+    if (const auto exact = nick_to_user_id.find(target); exact != nick_to_user_id.end()) {
+        return exact->second;
+    }
+
+    const auto it = std::find_if(
+        nick_to_user_id.begin(),
+        nick_to_user_id.end(),
+        [&target](const auto& entry) {
+            return utils::nicknames_equal(entry.first, target);
+        });
+
+    return it != nick_to_user_id.end() ? it->second : target;
+}
+
 } // namespace
 
 // Helper to create CommandResponse
@@ -218,8 +235,8 @@ CommandResponse CommandHandler::cmd_nick(const std::vector<std::string>& args, S
     const std::string& user_id = session->user_id();
     std::string old_nick = user_id_to_nick_.count(user_id) ? user_id_to_nick_[user_id] : user_id;
 
-    // Check if nick is taken
-    if (nick_to_user_id_.count(new_nick) && nick_to_user_id_[new_nick] != user_id) {
+    const std::string existing_user_id = resolve_target_user_id(nick_to_user_id_, new_nick);
+    if (existing_user_id != new_nick && existing_user_id != user_id) {
         return make_response(false, "Nickname " + new_nick + " is already in use", "nick");
     }
 
@@ -257,18 +274,7 @@ CommandResponse CommandHandler::cmd_whois(const std::vector<std::string>& args, 
     std::string target_id;
 
     // Look up by nick or user_id
-    if (nick_to_user_id_.count(target)) {
-        target_id = nick_to_user_id_[target];
-    } else {
-        const auto it = std::find_if(
-            nick_to_user_id_.begin(),
-            nick_to_user_id_.end(),
-            [&target](const auto& entry) {
-                return utils::nicknames_equal(entry.first, target);
-            });
-
-        target_id = it != nick_to_user_id_.end() ? it->second : target;
-    }
+    target_id = resolve_target_user_id(nick_to_user_id_, target);
 
     UserInfo info;
     info.set_user_id(target_id);
@@ -370,11 +376,12 @@ CommandResponse CommandHandler::cmd_kick(const std::vector<std::string>& args, S
 
     // Look up target
     std::string target_id;
-    if (nick_to_user_id_.count(target)) {
-        target_id = nick_to_user_id_[target];
-    } else if (chan.members.count(target)) {
+    target_id = resolve_target_user_id(nick_to_user_id_, target);
+    if (target_id == target && chan.members.count(target)) {
         target_id = target;
-    } else {
+    }
+
+    if (target_id == target && !chan.members.count(target_id)) {
         return make_response(false, "User not found: " + target, "kick");
     }
 
@@ -422,7 +429,7 @@ CommandResponse CommandHandler::cmd_ban(const std::vector<std::string>& args, Se
         return make_response(false, "Only operators can ban users", "ban");
     }
 
-    std::string target_id = nick_to_user_id_.count(target) ? nick_to_user_id_[target] : target;
+    std::string target_id = resolve_target_user_id(nick_to_user_id_, target);
     chan.banned.insert(target_id);
 
     // Kick if currently in channel
@@ -455,7 +462,7 @@ CommandResponse CommandHandler::cmd_invite(const std::vector<std::string>& args,
         return make_response(false, "Only operators can invite users", "invite");
     }
 
-    std::string target_id = nick_to_user_id_.count(target) ? nick_to_user_id_[target] : target;
+    std::string target_id = resolve_target_user_id(nick_to_user_id_, target);
     chan.invites.insert(target_id);
 
     // Notify target if online
@@ -530,7 +537,7 @@ CommandResponse CommandHandler::cmd_mode(const std::vector<std::string>& args, S
         return make_response(false, "Only operators can change modes", "mode");
     }
 
-    std::string target_id = nick_to_user_id_.count(target) ? nick_to_user_id_[target] : target;
+    std::string target_id = resolve_target_user_id(nick_to_user_id_, target);
     
     if (!chan.members.count(target_id)) {
         return make_response(false, target + " is not in " + channel, "mode");
@@ -773,11 +780,7 @@ CommandResponse CommandHandler::cmd_msg(const std::vector<std::string>& args, Se
 
     // Look up target by nick or user_id
     std::string target_id;
-    if (nick_to_user_id_.count(target)) {
-        target_id = nick_to_user_id_[target];
-    } else {
-        target_id = target; // Assume it's a user_id
-    }
+    target_id = resolve_target_user_id(nick_to_user_id_, target);
 
     // Find target session
     auto target_session = find_session_(target_id);
