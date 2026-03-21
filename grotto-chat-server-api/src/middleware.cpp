@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <chrono>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 
 namespace grotto::api {
@@ -43,20 +44,43 @@ MiddlewareFn cors(const std::string& origin) {
 }
 
 MiddlewareFn rate_limit(int requests_per_minute) {
+    using steady_clock_t = std::chrono::steady_clock;
+
     struct ClientInfo {
         int count = 0;
-        std::chrono::steady_clock::time_point window_start;
+        steady_clock_t::time_point window_start{};
+        steady_clock_t::time_point last_access{};
     };
+
+    auto last_cleanup = std::make_shared<steady_clock_t::time_point>(steady_clock_t::now());
     
     auto clients = std::make_shared<std::unordered_map<std::string, ClientInfo>>();
     auto mutex = std::make_shared<std::mutex>();
     
-    return [clients, mutex, requests_per_minute](Request& req, Response& res) -> bool {
-        auto now = std::chrono::steady_clock::now();
+    return [clients, mutex, last_cleanup, requests_per_minute](Request& req, Response& res) -> bool {
+        auto now = steady_clock_t::now();
         auto addr = req.remote_addr();
+        constexpr auto cleanup_interval = std::chrono::minutes(10);
+        constexpr auto idle_timeout = std::chrono::minutes(10);
         
         std::lock_guard<std::mutex> lock(*mutex);
+
+        if (now - *last_cleanup >= cleanup_interval) {
+            for (auto it = clients->begin(); it != clients->end();) {
+                if (now - it->second.last_access >= idle_timeout) {
+                    it = clients->erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            *last_cleanup = now;
+        }
+
         auto& info = (*clients)[addr];
+        if (info.window_start == steady_clock_t::time_point{}) {
+            info.window_start = now;
+        }
+        info.last_access = now;
         
         // Check if window expired
         auto elapsed = std::chrono::duration_cast<std::chrono::minutes>(now - info.window_start).count();

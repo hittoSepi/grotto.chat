@@ -1,4 +1,5 @@
 #include "net/message_handler.hpp"
+#include "file/file_transfer.hpp"
 #include "net/net_client.hpp"
 #include "crypto/crypto_engine.hpp"
 #include "voice/voice_engine.hpp"
@@ -29,6 +30,10 @@ void MessageHandler::dispatch(const Envelope& env) {
     case MT_PING:              handle_ping(env);              break;
     case MT_ERROR:          handle_error(env);          break;
     case MT_COMMAND_RESPONSE: handle_command_response(env); break;
+    case MT_FILE_CHUNK:      handle_file_chunk(env);      break;
+    case MT_FILE_PROGRESS:   handle_file_progress(env);   break;
+    case MT_FILE_COMPLETE:   handle_file_complete(env);   break;
+    case MT_FILE_ERROR:      handle_file_error(env);      break;
     default:
         spdlog::debug("Unhandled message type: {}", static_cast<int>(env.type()));
         break;
@@ -443,6 +448,44 @@ void MessageHandler::send_command(const std::string& cmd, const std::vector<std:
     
     send_envelope(MT_COMMAND, ic);
     spdlog::debug("Sent command: {} with {} args", cmd, args.size());
+}
+
+void MessageHandler::handle_file_chunk(const Envelope& env) {
+    ::FileChunk chunk;
+    if (!chunk.ParseFromString(env.payload())) return;
+
+    if (file_mgr_) {
+        client::file::FileChunk fc;
+        fc.file_id = chunk.file_id();
+        fc.chunk_index = chunk.chunk_index();
+        fc.data.assign(chunk.data().begin(), chunk.data().end());
+        fc.is_last = chunk.is_last();
+        file_mgr_->on_file_chunk(fc);
+    }
+}
+
+void MessageHandler::handle_file_progress(const Envelope& env) {
+    ::FileProgress progress;
+    if (!progress.ParseFromString(env.payload())) return;
+    if (file_mgr_) file_mgr_->on_file_progress(progress);
+}
+
+void MessageHandler::handle_file_complete(const Envelope& env) {
+    ::FileComplete complete;
+    if (!complete.ParseFromString(env.payload())) return;
+    if (file_mgr_) {
+        file_mgr_->on_file_complete(complete);
+        push_system("File transfer completed: " + complete.file_id());
+    }
+}
+
+void MessageHandler::handle_file_error(const Envelope& env) {
+    ::FileError error;
+    if (!error.ParseFromString(env.payload())) return;
+    if (file_mgr_) {
+        file_mgr_->on_file_error(error);
+        push_system("File transfer error: " + error.error_message());
+    }
 }
 
 } // namespace grotto::net

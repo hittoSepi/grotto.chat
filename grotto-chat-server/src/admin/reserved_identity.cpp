@@ -58,7 +58,7 @@ const std::vector<std::regex> ReservedIdentity::pattern_reserved_ = {
 
 // Leet speak characters that trigger additional checking
 const std::unordered_set<char> ReservedIdentity::leet_chars_ = {
-    '4', '@', '1', '3', '0', '5', '7', '$', '€', '8', '9'
+    '4', '@', '1', '3', '0', '5', '7', '$', '8', '9'
 };
 
 bool ReservedIdentity::is_reserved(std::string_view nickname) {
@@ -172,7 +172,6 @@ std::string ReservedIdentity::normalize_leet(std::string_view input) {
                 c = 'i';
                 break;
             case '3':
-            case '€':
                 c = 'e';
                 break;
             case '0':

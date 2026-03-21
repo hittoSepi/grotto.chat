@@ -92,8 +92,11 @@ public:
         std::optional<int64_t>     before_ms;    // before timestamp
         int                        limit = 50;   // max results
     };
-    std::vector<MessageRow> search_messages(const std::string& query, 
-                                            const SearchFilters& filters = {});
+    std::vector<MessageRow> search_messages(const std::string& query,
+                                            const SearchFilters& filters);
+    std::vector<MessageRow> search_messages(const std::string& query) {
+        return search_messages(query, SearchFilters{});
+    }
 
     // Direct DB access for migrations
     SQLite::Database& db() { return db_; }

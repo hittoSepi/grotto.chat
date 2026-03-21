@@ -2,9 +2,9 @@
 
 #include "reserved_identity.hpp"
 
-#include <boost/asio/io_context.hpp>
 #include <sodium.h>
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -136,6 +136,8 @@ private:
     
     // Sign a message with the owner's private key
     std::vector<unsigned char> sign_message(const std::string& message);
+
+    std::chrono::steady_clock::time_point start_time_;
 };
 
 } // namespace grotto::admin

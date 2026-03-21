@@ -62,6 +62,9 @@ public:
     // Getters
     std::vector<std::string> get_channel_members(const std::string& channel);
     std::string get_channel_topic(const std::string& channel);
+    
+    // Get number of active channels
+    size_t channel_count() const { return channels_.size(); }
 
 private:
     // Command implementations

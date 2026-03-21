@@ -28,26 +28,29 @@ const SERVER_TIMEOUT_MS = 10 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 60 * 1000;
 
 // Persist data to disk
-function saveData() {
+async function saveData() {
     try {
         const data = Array.from(servers.values());
-        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+        await fs.promises.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
     } catch (err) {
         console.error('Failed to save data:', err.message);
     }
 }
 
 // Load data from disk
-function loadData() {
+async function loadData() {
     try {
-        if (fs.existsSync(DATA_FILE)) {
-            const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-            for (const server of data) {
-                servers.set(server.id, server);
-            }
-            console.log(`Loaded ${servers.size} servers from disk`);
+        await fs.promises.access(DATA_FILE);
+        const file_contents = await fs.promises.readFile(DATA_FILE, 'utf8');
+        const data = JSON.parse(file_contents);
+        for (const server of data) {
+            servers.set(server.id, server);
         }
+        console.log(`Loaded ${servers.size} servers from disk`);
     } catch (err) {
+        if (err.code === 'ENOENT') {
+            return;
+        }
         console.error('Failed to load data:', err.message);
     }
 }
@@ -99,7 +102,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Register a new server
-app.post('/api/servers/register', (req, res) => {
+app.post('/api/servers/register', async (req, res) => {
     const { host, port, name, description } = req.body;
 
     // Validate required fields
@@ -152,7 +155,7 @@ app.post('/api/servers/register', (req, res) => {
     servers.set(serverId, serverInfo);
     console.log(`New server registered: ${serverAddress} (ID: ${serverId})`);
     
-    saveData();
+    await saveData();
 
     res.status(201).json({
         server_id: serverId,
@@ -161,7 +164,7 @@ app.post('/api/servers/register', (req, res) => {
 });
 
 // Ping to keep server alive
-app.post('/api/servers/ping', (req, res) => {
+app.post('/api/servers/ping', async (req, res) => {
     const { server_id } = req.body;
 
     if (!server_id) {
@@ -181,7 +184,7 @@ app.post('/api/servers/ping', (req, res) => {
     server.lastPing = Date.now();
     server.online = true;
     
-    saveData();
+    await saveData();
 
     res.json({
         message: 'Ping received',
@@ -190,7 +193,7 @@ app.post('/api/servers/ping', (req, res) => {
 });
 
 // Unregister a server
-app.post('/api/servers/unregister', (req, res) => {
+app.post('/api/servers/unregister', async (req, res) => {
     const { server_id } = req.body;
 
     if (!server_id) {
@@ -209,7 +212,7 @@ app.post('/api/servers/unregister', (req, res) => {
     servers.delete(server_id);
     console.log(`Server unregistered: ${server.address} (ID: ${server_id})`);
     
-    saveData();
+    await saveData();
 
     res.json({
         message: 'Server unregistered successfully'
@@ -271,7 +274,7 @@ app.get('/api/servers/:id', (req, res) => {
 /**
  * Cleanup job - remove stale servers
  */
-function cleanupStaleServers() {
+async function cleanupStaleServers() {
     const now = Date.now();
     let removedCount = 0;
 
@@ -289,7 +292,7 @@ function cleanupStaleServers() {
 
     if (removedCount > 0) {
         console.log(`Cleanup: removed ${removedCount} stale servers`);
-        saveData();
+        await saveData();
     }
 }
 
@@ -317,9 +320,9 @@ app.use((err, req, res, next) => {
 /**
  * Start server
  */
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     // Load persisted data
-    loadData();
+    await loadData();
     
     console.log('='.repeat(50));
     console.log('Grotto Directory Service');

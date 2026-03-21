@@ -2,6 +2,7 @@
 #include <string>
 #include <cstdint>
 #include <filesystem>
+#include <vector>
 
 namespace grotto {
 

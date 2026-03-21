@@ -64,6 +64,8 @@ if(WIN32)
 endif()
 
 set(Boost_NO_BOOST_CMAKE ON)
+cmake_policy(SET CMP0074 NEW)
+set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
 find_package(Boost REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -95,9 +97,16 @@ find_package(toml11 CONFIG REQUIRED)
 
 set(PROTO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/proto/grotto.proto")
 if(NOT Protobuf_PROTOC_EXECUTABLE)
-    set(_LOCAL_PROTOC "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/tools/protobuf/protoc.exe")
+    set(_LOCAL_PROTOC "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/tools/protobuf/protoc")
+    set(_LOCAL_PROTOC_WIN "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/tools/protobuf/protoc.exe")
     if(EXISTS "${_LOCAL_PROTOC}")
         set(Protobuf_PROTOC_EXECUTABLE "${_LOCAL_PROTOC}")
+        if(NOT TARGET protobuf::protoc)
+            add_executable(protobuf::protoc IMPORTED)
+            set_target_properties(protobuf::protoc PROPERTIES IMPORTED_LOCATION "${Protobuf_PROTOC_EXECUTABLE}")
+        endif()
+    elseif(EXISTS "${_LOCAL_PROTOC_WIN}")
+        set(Protobuf_PROTOC_EXECUTABLE "${_LOCAL_PROTOC_WIN}")
         if(NOT TARGET protobuf::protoc)
             add_executable(protobuf::protoc IMPORTED)
             set_target_properties(protobuf::protoc PROPERTIES IMPORTED_LOCATION "${Protobuf_PROTOC_EXECUTABLE}")
@@ -279,3 +288,38 @@ add_custom_target(grotto-server_release
 
 
 enable_testing()
+
+# ──────────────────────────────────────────────
+# Tests
+# ──────────────────────────────────────────────
+find_package(Catch2 3 REQUIRED)
+
+add_executable(test-file-encryptor
+    tests/test_file_encryptor.cpp
+    src/crypto/file_encryptor.cpp
+)
+target_include_directories(test-file-encryptor PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(test-file-encryptor PRIVATE
+    Catch2::Catch2WithMain
+    unofficial-sodium::sodium
+    OpenSSL::Crypto
+    spdlog::spdlog
+)
+add_test(NAME file-encryptor-tests COMMAND test-file-encryptor)
+
+add_executable(test-reserved-identity
+    tests/test_reserved_identity.cpp
+    src/admin/reserved_identity.cpp
+)
+target_include_directories(test-reserved-identity PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(test-reserved-identity PRIVATE
+    Catch2::Catch2WithMain
+    spdlog::spdlog
+)
+add_test(NAME reserved-identity-tests COMMAND test-reserved-identity)

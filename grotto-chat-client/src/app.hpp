@@ -10,6 +10,7 @@
 #include "preview/link_previewer.hpp"
 #include "db/local_store.hpp"
 #include "input/command_parser.hpp"
+#include "file/file_transfer.hpp"
 #include "help/help_manager.hpp"
 
 #include <boost/asio/io_context.hpp>
@@ -80,6 +81,7 @@ private:
     std::unique_ptr<voice::VoiceEngine>     voice_;
     std::unique_ptr<LinkPreviewer>          previewer_;
     std::unique_ptr<HelpManager>            help_;
+    std::unique_ptr<client::file::FileTransferManager> file_mgr_;
 
     boost::asio::io_context                 ioc_;
     std::shared_ptr<net::NetClient>         net_client_;

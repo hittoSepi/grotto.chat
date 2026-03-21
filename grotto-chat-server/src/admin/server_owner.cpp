@@ -1,23 +1,67 @@
 #include "server_owner.hpp"
 #include "../server.hpp"
+#include "../commands/command_handler.hpp"
+#include "grotto.pb.h"
 
 #include <spdlog/spdlog.h>
+
+#include <cstdint>
 #include <fstream>
 #include <filesystem>
 #include <sstream>
 #include <algorithm>
 #include <chrono>
+#include <thread>
 
 namespace grotto::admin {
 
 namespace fs = std::filesystem;
 
+namespace {
+
+std::uint64_t unix_timestamp_ms() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+}
+
+std::string join_args(const std::vector<std::string>& args, std::size_t start = 0) {
+    std::string joined;
+    for (std::size_t i = start; i < args.size(); ++i) {
+        if (i > start) {
+            joined += " ";
+        }
+        joined += args[i];
+    }
+    return joined;
+}
+
+Envelope make_command_response_envelope(const std::string& command, const std::string& message) {
+    CommandResponse response;
+    response.set_success(true);
+    response.set_command(command);
+    response.set_message(message);
+
+    Envelope env;
+    env.set_seq(0);
+    env.set_timestamp_ms(unix_timestamp_ms());
+    env.set_type(MT_COMMAND_RESPONSE);
+
+    std::vector<std::uint8_t> payload(response.ByteSizeLong());
+    response.SerializeToArray(payload.data(), static_cast<int>(payload.size()));
+    env.set_payload(payload.data(), payload.size());
+    return env;
+}
+
+} // namespace
+
 ServerOwner::ServerOwner(Server& server, const std::string& key_path)
     : server_(server)
     , key_path_(key_path)
+    , start_time_(std::chrono::steady_clock::now())
 {
     // Generate keys if they don't exist
-    if (!fs::exists(key_path_)) {
+    if (!fs::exists(fs::path(key_path_))) {
         spdlog::info("ServerOwner: Generating new key pair...");
         if (!generate_key_pair(key_path_)) {
             spdlog::error("ServerOwner: Failed to generate key pair!");
@@ -49,13 +93,27 @@ void ServerOwner::send_to_channel(const std::string& channel_id, const std::stri
         spdlog::error("ServerOwner: Cannot send message - keys not loaded");
         return;
     }
+
+    auto* listener = server_.listener();
+    if (!listener || !listener->command_handler()) {
+        spdlog::error("ServerOwner: Cannot send to channel {} - listener not available", channel_id);
+        return;
+    }
+
+    auto* command_handler = listener->command_handler();
+    auto members = command_handler->get_channel_members(channel_id);
+    if (members.empty()) {
+        spdlog::warn("ServerOwner: Cannot send to channel {} - channel does not exist or is empty", channel_id);
+        return;
+    }
     
     spdlog::info("ServerOwner: Sending message to {}: {}", channel_id, 
                  message.substr(0, 50));
-    
-    // TODO: Implement actual channel message sending
-    // This requires integration with ChannelManager
-    // For now, just log it
+
+    command_handler->broadcast_to_channel(
+        channel_id,
+        make_command_response_envelope("announce", message),
+        nullptr);
 }
 
 void ServerOwner::send_to_user(const std::string& user_id, const std::string& message) {
@@ -63,12 +121,28 @@ void ServerOwner::send_to_user(const std::string& user_id, const std::string& me
         spdlog::error("ServerOwner: Cannot send message - keys not loaded");
         return;
     }
+
+    auto* listener = server_.listener();
+    if (!listener) {
+        spdlog::error("ServerOwner: Cannot send to user {} - listener not available", user_id);
+        return;
+    }
     
     spdlog::info("ServerOwner: Sending DM to {}: {}", user_id, 
                  message.substr(0, 50));
-    
-    // TODO: Implement actual DM sending
-    // This requires integration with SessionManager or similar
+
+    Envelope env = make_command_response_envelope("notice", message);
+    auto session = listener->find_session(user_id);
+    if (session) {
+        session->send(env);
+        return;
+    }
+
+    std::vector<std::uint8_t> payload(env.ByteSizeLong());
+    env.SerializeToArray(payload.data(), static_cast<int>(payload.size()));
+    if (!listener->offline_store().save(user_id, payload)) {
+        spdlog::warn("ServerOwner: Failed to queue offline message for {}", user_id);
+    }
 }
 
 ServerOwner::CommandResult ServerOwner::execute_command(const std::string& command,
@@ -171,7 +245,7 @@ bool ServerOwner::load_keys() {
     
     // Expected: 32 bytes public + 64 bytes secret (or just 32 bytes seed)
     if (size < crypto_sign_ed25519_PUBLICKEYBYTES + crypto_sign_ed25519_SECRETKEYBYTES) {
-        spdlog::error("ServerOwner: Key file is too small ({} bytes)", size);
+        spdlog::error("ServerOwner: Key file is too small ({} bytes)", static_cast<long long>(size));
         return false;
     }
     
@@ -208,18 +282,18 @@ ServerOwner::CommandResult ServerOwner::cmd_announce(const std::vector<std::stri
     if (args.empty()) {
         return {false, "Usage: /announce <message>"};
     }
-    
-    // Join all args into message
-    std::string message;
-    for (size_t i = 0; i < args.size(); ++i) {
-        if (i > 0) message += " ";
-        message += args[i];
+
+    auto* listener = server_.listener();
+    if (!listener) {
+        return {false, "Server listener is not available"};
     }
+
+    const std::string message = join_args(args);
+    listener->broadcast(make_command_response_envelope("announce", message));
     
-    // TODO: Broadcast to all channels
     spdlog::info("ANNOUNCEMENT: {}", message);
     
-    return {true, "Announcement sent to all channels: " + message};
+    return {true, "Announcement sent to all connected users: " + message};
 }
 
 ServerOwner::CommandResult ServerOwner::cmd_ban(const std::vector<std::string>& args) {
@@ -243,10 +317,24 @@ ServerOwner::CommandResult ServerOwner::cmd_ban(const std::vector<std::string>& 
         return {false, "Cannot ban the server owner"};
     }
     
-    // TODO: Add user to ban list and kick if online
+    auto* listener = server_.listener();
+    if (!listener) {
+        return {false, "Server listener is not available"};
+    }
+
+    auto session = listener->find_session(user_id);
+    if (!session) {
+        spdlog::warn("BAN requested for offline user {} but no persistent ban API exists", user_id);
+        return {false, "User is not online, and persistent server bans are not supported by the current server APIs"};
+    }
+
+    session->disconnect("Banned by server owner: " + reason);
+
+    // The current server APIs do not expose any persistent server-wide ban store,
+    // so the best available behavior is to disconnect the active session.
     spdlog::info("BAN: {} - Reason: {}", user_id, reason);
     
-    return {true, "User " + user_id + " has been banned. Reason: " + reason};
+    return {true, "User " + user_id + " has been disconnected. Persistent server-wide bans are not supported by the current server APIs. Reason: " + reason};
 }
 
 ServerOwner::CommandResult ServerOwner::cmd_kick(const std::vector<std::string>& args) {
@@ -265,7 +353,17 @@ ServerOwner::CommandResult ServerOwner::cmd_kick(const std::vector<std::string>&
         }
     }
     
-    // TODO: Kick user from current channel or all channels
+    auto* listener = server_.listener();
+    if (!listener) {
+        return {false, "Server listener is not available"};
+    }
+
+    auto session = listener->find_session(user_id);
+    if (!session) {
+        return {false, "User is not currently online: " + user_id};
+    }
+
+    session->disconnect("Kicked by server owner: " + reason);
     spdlog::info("KICK: {} - Reason: {}", user_id, reason);
     
     return {true, "User " + user_id + " has been kicked. Reason: " + reason};
@@ -287,35 +385,54 @@ ServerOwner::CommandResult ServerOwner::cmd_shutdown(const std::vector<std::stri
         message += " in " + std::to_string(delay_seconds) + " seconds";
     }
     
-    // Send announcement
     cmd_announce({message});
-    
-    // TODO: Schedule shutdown
-    spdlog::info("SHUTDOWN initiated");
-    
-    // For now, just return success - actual shutdown handled elsewhere
-    return {true, "Server shutdown initiated"};
+
+    if (!server_.is_running()) {
+        return {false, "Server is not running"};
+    }
+
+    std::thread([this, delay_seconds]() {
+        if (delay_seconds > 0) {
+            std::this_thread::sleep_for(std::chrono::seconds(delay_seconds));
+        }
+
+        spdlog::info("SHUTDOWN initiated by server owner");
+        server_.shutdown();
+    }).detach();
+
+    return {true, delay_seconds > 0
+        ? "Server shutdown scheduled in " + std::to_string(delay_seconds) + " seconds"
+        : "Server shutdown initiated"};
 }
 
 ServerOwner::CommandResult ServerOwner::cmd_restart(const std::vector<std::string>& args) {
     cmd_announce({"Server is restarting..."});
     
     spdlog::info("RESTART initiated");
-    
-    // TODO: Schedule restart
-    return {true, "Server restart initiated"};
+
+    std::thread([this]() {
+        server_.shutdown();
+    }).detach();
+
+    return {true, "Server restart requested. This build does not support in-process restart, so the server is shutting down for an external supervisor to restart it."};
 }
 
 ServerOwner::CommandResult ServerOwner::cmd_status(const std::vector<std::string>& args) {
     std::stringstream ss;
+    auto* listener = server_.listener();
+    auto* command_handler = listener ? listener->command_handler() : nullptr;
+    const auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - start_time_).count();
+    const int online_users = listener ? listener->active_connection_count() : 0;
+    const std::size_t active_channels = command_handler ? command_handler->channel_count() : 0;
     
     ss << "=== Server Status ===\n";
     ss << "Server Owner: " << user_id() << "\n";
-    ss << "Status: Online\n";
-    // TODO: Add actual stats when available
-    ss << "Online users: (not implemented)\n";
-    ss << "Active channels: (not implemented)\n";
-    ss << "Uptime: (not implemented)\n";
+    ss << "Status: " << (server_.is_running() ? "Online" : "Offline") << "\n";
+    ss << "Online users: " << online_users << "\n";
+    ss << "Active channels: " << active_channels << "\n";
+    ss << "Uptime: " << uptime << " seconds\n";
+    ss << "Bind: " << server_.config().host << ":" << server_.config().port << "\n";
     
     return {true, ss.str()};
 }
@@ -346,9 +463,9 @@ ServerOwner::CommandResult ServerOwner::cmd_config(const std::vector<std::string
 ServerOwner::CommandResult ServerOwner::cmd_help(const std::vector<std::string>& args) {
     std::string help_text = R"(Available admin commands:
 
-/announce <message>     - Send announcement to all channels
+/announce <message>     - Send announcement to all connected users
 /ban <user> [reason]    - Ban a user from the server
-/kick <user> [reason]   - Kick a user from current channel
+/kick <user> [reason]   - Disconnect a user from the server
 /shutdown [delay]       - Gracefully shutdown the server
 /restart                - Restart the server
 /status                 - Show server status and statistics

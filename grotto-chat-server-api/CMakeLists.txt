@@ -18,11 +18,17 @@ if(WIN32)
     add_compile_definitions(BOOST_ALL_NO_LIB)
 endif()
 
+set(Boost_NO_BOOST_CMAKE ON)
+
 # ──────────────────────────────────────────────
 # Find dependencies (use parent's if available)
 # ──────────────────────────────────────────────
 
 # Try to find dependencies from parent project first
+if(NOT TARGET Boost::system)
+    find_package(boost_system CONFIG QUIET)
+endif()
+
 if(NOT TARGET Boost::system)
     find_package(Boost REQUIRED COMPONENTS system)
 endif()
@@ -35,6 +41,8 @@ if(NOT TARGET spdlog::spdlog)
     find_package(spdlog CONFIG REQUIRED)
 endif()
 
+find_package(OpenSSL REQUIRED)
+
 # ──────────────────────────────────────────────
 # grotto-server-api static library
 # ──────────────────────────────────────────────
@@ -46,6 +54,7 @@ set(API_SOURCES
     src/auth.cpp
     src/request.cpp
     src/response.cpp
+    src/types.cpp
 )
 
 set(API_HEADERS
@@ -69,6 +78,7 @@ target_link_libraries(grotto-server-api PUBLIC
     Boost::system
     nlohmann_json::nlohmann_json
     spdlog::spdlog
+    OpenSSL::Crypto
 )
 
 if(WIN32)
@@ -89,9 +99,13 @@ option(GROTTO_CHAT_API_BUILD_TESTS "Build HTTP API tests" ON)
 if(GROTTO_CHAT_API_BUILD_TESTS)
     enable_testing()
     
-    add_executable(test-api tests/test_server.cpp tests/test_router.cpp)
-    target_link_libraries(test-api PRIVATE grotto-server-api)
-    add_test(NAME api-tests COMMAND test-api)
+    add_executable(test-api-server tests/test_server.cpp)
+    target_link_libraries(test-api-server PRIVATE grotto-server-api)
+    add_test(NAME api-server-tests COMMAND test-api-server)
+
+    add_executable(test-api-router tests/test_router.cpp)
+    target_link_libraries(test-api-router PRIVATE grotto-server-api)
+    add_test(NAME api-router-tests COMMAND test-api-router)
 endif()
 
 # ──────────────────────────────────────────────

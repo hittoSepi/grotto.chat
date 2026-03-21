@@ -1,5 +1,4 @@
 syntax = "proto3";
-package ircord;
 
 // Server-visible envelope wrapper
 message Envelope {

@@ -1,7 +1,23 @@
 #include "file/file_transfer.hpp"
 #include <spdlog/spdlog.h>
 #include <fstream>
-#include <uuid.h>
+#include <iomanip>
+#include <random>
+#include <sstream>
+
+namespace {
+
+std::string generate_random_id() {
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<uint64_t> dist;
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0') << std::setw(16) << dist(gen)
+        << std::setw(16) << dist(gen);
+    return oss.str();
+}
+
+} // namespace
 
 namespace grotto::client::file {
 
@@ -55,7 +71,7 @@ std::string FileTransferManager::upload(
     // Create transfer record
     TransferInfo info;
     info.transfer_id = generate_transfer_id();
-    info.file_id = uuids::to_string(uuids::uuid_random_generator{}());  // Generate server file ID
+    info.file_id = generate_random_id();
     info.filename = filename;
     info.mime_type = mime_type;
     info.file_size = file_size;

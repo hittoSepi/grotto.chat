@@ -10,8 +10,6 @@ namespace grotto::api {
 namespace beast = boost::beast;
 namespace http = beast::http;
 
-using json = nlohmann::json;
-
 // HTTP Response builder
 class Response {
 public:
@@ -27,11 +25,11 @@ public:
     
     // Body
     Response& body(const std::string& body);
-    Response& json(const json& data);
+    Response& json(const nlohmann::json& data);
     
     // Success/Error helpers
-    static Response ok(const json& data = {});
-    static Response created(const json& data = {});
+    static Response ok(const nlohmann::json& data = {});
+    static Response created(const nlohmann::json& data = {});
     static Response no_content();
     static Response bad_request(const std::string& message = "");
     static Response unauthorized(const std::string& message = "");

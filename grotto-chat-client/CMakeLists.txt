@@ -72,6 +72,8 @@ endif()
 # vcpkg dependencies
 # ──────────────────────────────────────────────
 set(Boost_NO_BOOST_CMAKE ON)
+cmake_policy(SET CMP0074 NEW)
+set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
 find_package(Boost REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(Protobuf REQUIRED)
@@ -153,9 +155,16 @@ endif()
 # ──────────────────────────────────────────────
 set(PROTO_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/proto/grotto.proto")
 if(NOT Protobuf_PROTOC_EXECUTABLE)
-    set(_LOCAL_PROTOC "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/tools/protobuf/protoc.exe")
+    set(_LOCAL_PROTOC "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/tools/protobuf/protoc")
+    set(_LOCAL_PROTOC_WIN "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/tools/protobuf/protoc.exe")
     if(EXISTS "${_LOCAL_PROTOC}")
         set(Protobuf_PROTOC_EXECUTABLE "${_LOCAL_PROTOC}")
+        if(NOT TARGET protobuf::protoc)
+            add_executable(protobuf::protoc IMPORTED)
+            set_target_properties(protobuf::protoc PROPERTIES IMPORTED_LOCATION "${Protobuf_PROTOC_EXECUTABLE}")
+        endif()
+    elseif(EXISTS "${_LOCAL_PROTOC_WIN}")
+        set(Protobuf_PROTOC_EXECUTABLE "${_LOCAL_PROTOC_WIN}")
         if(NOT TARGET protobuf::protoc)
             add_executable(protobuf::protoc IMPORTED)
             set_target_properties(protobuf::protoc PROPERTIES IMPORTED_LOCATION "${Protobuf_PROTOC_EXECUTABLE}")
@@ -201,6 +210,7 @@ set(CLIENT_SOURCES
     src/input/command_parser.cpp
     src/input/tab_complete.cpp
     src/help/help_manager.cpp
+    src/file/file_transfer.cpp
     ${PROTO_SRCS}
 )
 
@@ -217,7 +227,6 @@ target_link_libraries(grotto-client PRIVATE
     OpenSSL::SSL
     OpenSSL::Crypto
     protobuf::libprotobuf
-    absl::abseil_dll
     SQLiteCpp
     unofficial-sodium::sodium
     LibDataChannel::LibDataChannel

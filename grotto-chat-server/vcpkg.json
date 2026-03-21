@@ -2,6 +2,7 @@
   "name": "grotto-server",
   "version-string": "0.1.0",
   "dependencies": [
+    "catch2",
     "boost-asio",
     "boost-system",
     "boost-endian",

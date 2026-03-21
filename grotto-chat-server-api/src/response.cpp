@@ -24,17 +24,17 @@ Response& Response::body(const std::string& body) {
     return *this;
 }
 
-Response& Response::json(const json& data) {
+Response& Response::json(const nlohmann::json& data) {
     body_ = data.dump();
     headers_["Content-Type"] = "application/json";
     return *this;
 }
 
-Response Response::ok(const json& data) {
+Response Response::ok(const nlohmann::json& data) {
     return Response().status(200).json({{"success", true}, {"data", data}});
 }
 
-Response Response::created(const json& data) {
+Response Response::created(const nlohmann::json& data) {
     return Response().status(201).json({{"success", true}, {"data", data}});
 }
 
@@ -43,22 +43,22 @@ Response Response::no_content() {
 }
 
 Response Response::bad_request(const std::string& message) {
-    json error = {{"success", false}, {"error", {{"code", "BAD_REQUEST"}, {"message", message}}}};
+    nlohmann::json error = {{"success", false}, {"error", {{"code", "BAD_REQUEST"}, {"message", message}}}};
     return Response().status(400).json(error);
 }
 
 Response Response::unauthorized(const std::string& message) {
-    json error = {{"success", false}, {"error", {{"code", "UNAUTHORIZED"}, {"message", message}}}};
+    nlohmann::json error = {{"success", false}, {"error", {{"code", "UNAUTHORIZED"}, {"message", message}}}};
     return Response().status(401).json(error);
 }
 
 Response Response::not_found(const std::string& message) {
-    json error = {{"success", false}, {"error", {{"code", "NOT_FOUND"}, {"message", message}}}};
+    nlohmann::json error = {{"success", false}, {"error", {{"code", "NOT_FOUND"}, {"message", message}}}};
     return Response().status(404).json(error);
 }
 
 Response Response::error(const std::string& message, int code) {
-    json error = {{"success", false}, {"error", {{"code", "ERROR"}, {"message", message}}}};
+    nlohmann::json error = {{"success", false}, {"error", {{"code", "ERROR"}, {"message", message}}}};
     return Response().status(code).json(error);
 }
 

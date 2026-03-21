@@ -302,6 +302,18 @@ bool App::init(const std::filesystem::path& config_path,
         handle_command_response(response);
     });
 
+    file_mgr_ = std::make_unique<client::file::FileTransferManager>();
+    file_mgr_->set_send_function([this](uint32_t msg_type, const google::protobuf::Message& msg) {
+        if (!net_client_) return;
+        Envelope env;
+        env.set_type(static_cast<MessageType>(msg_type));
+        env.set_payload(msg.SerializeAsString());
+        env.set_timestamp_ms(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+        net_client_->send(env);
+    });
+    msg_handler_->set_file_transfer_manager(file_mgr_.get());
+
     voice_->set_send_signal([this](const VoiceSignal& sig) {
         Envelope env;
         env.set_type(MT_VOICE_SIGNAL);
@@ -579,6 +591,37 @@ void App::handle_command(const ParsedCommand& cmd) {
     } else if (cmd.name == "/ptt") {
         voice_->toggle_voice_mode();
         ui_->push_system_msg("Voice mode: " + voice_->voice_mode());
+    } else if (cmd.name == "/upload" && !cmd.args.empty()) {
+        std::filesystem::path file_path = cmd.args[0];
+        if (!std::filesystem::exists(file_path)) {
+            ui_->push_system_msg("File not found: " + file_path.string());
+        } else if (!file_mgr_) {
+            ui_->push_system_msg("File transfer not available.");
+        } else {
+            auto channel = state_.active_channel().value_or("");
+            auto tid = file_mgr_->upload(file_path, "", channel);
+            if (tid.empty()) {
+                ui_->push_system_msg("Upload failed to start.");
+            } else {
+                ui_->push_system_msg("Uploading " + file_path.filename().string() + " (" + std::to_string(std::filesystem::file_size(file_path)) + " bytes)...");
+            }
+        }
+    } else if (cmd.name == "/download" && !cmd.args.empty()) {
+        std::string file_id = cmd.args[0];
+        std::filesystem::path save_path = cmd.args.size() > 1
+            ? std::filesystem::path(cmd.args[1])
+            : std::filesystem::path("downloads") / file_id;
+        if (!file_mgr_) {
+            ui_->push_system_msg("File transfer not available.");
+        } else {
+            std::filesystem::create_directories(save_path.parent_path());
+            auto tid = file_mgr_->download(file_id, save_path);
+            if (tid.empty()) {
+                ui_->push_system_msg("Download failed to start.");
+            } else {
+                ui_->push_system_msg("Downloading " + file_id + " to " + save_path.string() + "...");
+            }
+        }
     } else if (cmd.name == "/trust" && !cmd.args.empty()) {
         std::string peer = cmd.args[0];
         std::string sn   = crypto_->safety_number(peer, *store_);

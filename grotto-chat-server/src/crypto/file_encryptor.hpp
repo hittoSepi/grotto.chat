@@ -9,7 +9,7 @@
 namespace grotto::crypto {
 
 /**
- * File encryption at rest using AES-256-GCM via libsodium.
+ * File encryption at rest using AES-256-GCM via OpenSSL.
  * Each file gets a unique data encryption key (DEK) which is encrypted
  * with the master key and stored alongside the file metadata.
  */

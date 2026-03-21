@@ -1,11 +1,35 @@
 #include "crypto/file_encryptor.hpp"
 
+#include <openssl/evp.h>
 #include <spdlog/spdlog.h>
 #include <cstring>
 #include <iomanip>
 #include <sstream>
 
 namespace grotto::crypto {
+
+namespace {
+
+class EvpCipherCtxGuard {
+public:
+    EvpCipherCtxGuard()
+        : ctx_(EVP_CIPHER_CTX_new()) {
+    }
+
+    ~EvpCipherCtxGuard() {
+        EVP_CIPHER_CTX_free(ctx_);
+    }
+
+    EvpCipherCtxGuard(const EvpCipherCtxGuard&) = delete;
+    EvpCipherCtxGuard& operator=(const EvpCipherCtxGuard&) = delete;
+
+    EVP_CIPHER_CTX* get() const { return ctx_; }
+
+private:
+    EVP_CIPHER_CTX* ctx_;
+};
+
+} // namespace
 
 FileEncryptor::FileEncryptor(const std::string& master_key_hex) {
     auto key_bytes = hex_to_bytes(master_key_hex);
@@ -57,7 +81,7 @@ std::optional<std::vector<uint8_t>> FileEncryptor::hex_to_bytes(const std::strin
 std::optional<std::vector<uint8_t>> FileEncryptor::encrypt(
     const std::vector<uint8_t>& plaintext,
     EncryptedKey& out_encrypted_key) {
-    
+
     if (!is_ready()) {
         spdlog::error("FileEncryptor: Not initialized with master key");
         return std::nullopt;
@@ -85,63 +109,75 @@ std::optional<std::vector<uint8_t>> FileEncryptor::encrypt(
     if (file_key.empty()) {
         return std::nullopt;
     }
-    
-    // Encrypt file data using AES-256-GCM via libsodium's crypto_aead
+
+    EvpCipherCtxGuard ctx;
+    if (!ctx.get()) {
+        spdlog::error("FileEncryptor: Failed to allocate OpenSSL cipher context");
+        return std::nullopt;
+    }
+
     std::vector<uint8_t> ciphertext(plaintext.size());
-    unsigned long long ciphertext_len;
-    
-    // Note: libsodium uses crypto_aead_aes256gcm on systems with AES-NI
-    // or falls back to other authenticated encryption
-    // For portable code, we use crypto_secretbox_easy which uses XSalsa20+Poly1305
-    // But for actual AES-GCM, we'd need OpenSSL. Let's use libsodium's secretbox.
-    
-    // Actually, let's implement proper AES-GCM using OpenSSL EVP API
-    // This is a simplified placeholder - in production use OpenSSL EVP
-    
-    // For now, use libsodium's crypto_secretbox (XSalsa20+Poly1305)
-    // which provides authenticated encryption
-    std::vector<uint8_t> nonce(crypto_secretbox_NONCEBYTES);
-    randombytes_buf(nonce.data(), nonce.size());
-    
-    std::vector<uint8_t> encrypted(plaintext.size() + crypto_secretbox_MACBYTES);
-    crypto_secretbox_easy(encrypted.data(), plaintext.data(), plaintext.size(),
-        nonce.data(), file_key.data());
-    
-    // Copy nonce to header (we'll use first 12 bytes as IV, rest for internal use)
-    std::memcpy(header.iv.data(), nonce.data(), std::min(header.iv.size(), nonce.size()));
-    
-    // Copy MAC to header tag
-    std::memcpy(header.tag.data(), encrypted.data(), header.tag.size());
-    
-    header.encrypted_size = encrypted.size() - crypto_secretbox_MACBYTES;
-    
-    // Build output: header + encrypted data (skip MAC since it's in header)
+
+    int update_len = 0;
+    int final_len = 0;
+
+    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+        spdlog::error("FileEncryptor: Failed to initialize AES-256-GCM cipher");
+        return std::nullopt;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN,
+            static_cast<int>(header.iv.size()), nullptr) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM IV length");
+        return std::nullopt;
+    }
+
+    if (EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, file_key.data(), header.iv.data()) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM key and IV");
+        return std::nullopt;
+    }
+
+    if (!plaintext.empty() && EVP_EncryptUpdate(ctx.get(), ciphertext.data(), &update_len,
+            plaintext.data(), static_cast<int>(plaintext.size())) != 1) {
+        spdlog::error("FileEncryptor: AES-256-GCM encryption failed");
+        return std::nullopt;
+    }
+
+    if (EVP_EncryptFinal_ex(ctx.get(), ciphertext.data() + update_len, &final_len) != 1) {
+        spdlog::error("FileEncryptor: AES-256-GCM finalization failed");
+        return std::nullopt;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG,
+            static_cast<int>(header.tag.size()), header.tag.data()) != 1) {
+        spdlog::error("FileEncryptor: Failed to read AES-256-GCM authentication tag");
+        return std::nullopt;
+    }
+
+    header.encrypted_size = static_cast<uint64_t>(update_len + final_len);
+    ciphertext.resize(static_cast<size_t>(header.encrypted_size));
+
     std::vector<uint8_t> result;
-    result.reserve(sizeof(header) + encrypted.size() - crypto_secretbox_MACBYTES);
-    
-    // Serialize header
+    result.reserve(SALT_SIZE + IV_SIZE + TAG_SIZE + 16 + ciphertext.size());
+
     result.insert(result.end(), header.salt.begin(), header.salt.end());
     result.insert(result.end(), header.iv.begin(), header.iv.end());
     result.insert(result.end(), header.tag.begin(), header.tag.end());
-    
-    // Add size fields
+
     uint8_t size_buf[16];
     std::memcpy(size_buf, &header.original_size, 8);
     std::memcpy(size_buf + 8, &header.encrypted_size, 8);
     result.insert(result.end(), size_buf, size_buf + 16);
-    
-    // Add encrypted data (after MAC)
-    result.insert(result.end(), 
-        encrypted.begin() + crypto_secretbox_MACBYTES, 
-        encrypted.end());
-    
+
+    result.insert(result.end(), ciphertext.begin(), ciphertext.end());
+
     return result;
 }
 
 std::optional<std::vector<uint8_t>> FileEncryptor::decrypt(
     const std::vector<uint8_t>& ciphertext_with_header,
     const EncryptedKey& encrypted_key) {
-    
+
     if (!is_ready()) {
         spdlog::error("FileEncryptor: Not initialized with master key");
         return std::nullopt;
@@ -157,20 +193,26 @@ std::optional<std::vector<uint8_t>> FileEncryptor::decrypt(
     // Parse header
     EncryptedHeader header;
     size_t pos = 0;
-    
+
     std::memcpy(header.salt.data(), ciphertext_with_header.data() + pos, SALT_SIZE);
     pos += SALT_SIZE;
-    
+
     std::memcpy(header.iv.data(), ciphertext_with_header.data() + pos, IV_SIZE);
     pos += IV_SIZE;
-    
+
     std::memcpy(header.tag.data(), ciphertext_with_header.data() + pos, TAG_SIZE);
     pos += TAG_SIZE;
-    
+
     std::memcpy(&header.original_size, ciphertext_with_header.data() + pos, 8);
     pos += 8;
     std::memcpy(&header.encrypted_size, ciphertext_with_header.data() + pos, 8);
     pos += 8;
+
+    const size_t payload_size = ciphertext_with_header.size() - header_size;
+    if (header.encrypted_size != payload_size) {
+        spdlog::error("FileEncryptor: Encrypted payload size mismatch");
+        return std::nullopt;
+    }
     
     // Decrypt DEK
     auto dek = decrypt_dek(encrypted_key);
@@ -183,96 +225,200 @@ std::optional<std::vector<uint8_t>> FileEncryptor::decrypt(
     if (file_key.empty()) {
         return std::nullopt;
     }
-    
-    // Reconstruct full ciphertext with MAC
-    std::vector<uint8_t> full_ciphertext(crypto_secretbox_MACBYTES + 
-        ciphertext_with_header.size() - header_size);
-    std::memcpy(full_ciphertext.data(), header.tag.data(), crypto_secretbox_MACBYTES);
-    std::memcpy(full_ciphertext.data() + crypto_secretbox_MACBYTES,
-        ciphertext_with_header.data() + header_size,
-        ciphertext_with_header.size() - header_size);
-    
-    // Decrypt
-    std::vector<uint8_t> plaintext(header.original_size);
-    
-    // Reconstruct nonce
-    std::vector<uint8_t> nonce(crypto_secretbox_NONCEBYTES);
-    std::memcpy(nonce.data(), header.iv.data(), std::min(header.iv.size(), nonce.size()));
-    
-    if (crypto_secretbox_open_easy(plaintext.data(), full_ciphertext.data(),
-            full_ciphertext.size(), nonce.data(), file_key.data()) != 0) {
+
+    EvpCipherCtxGuard ctx;
+    if (!ctx.get()) {
+        spdlog::error("FileEncryptor: Failed to allocate OpenSSL cipher context");
+        return std::nullopt;
+    }
+
+    std::vector<uint8_t> plaintext(payload_size);
+    int update_len = 0;
+    int final_len = 0;
+
+    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+        spdlog::error("FileEncryptor: Failed to initialize AES-256-GCM decryptor");
+        return std::nullopt;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN,
+            static_cast<int>(header.iv.size()), nullptr) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM IV length");
+        return std::nullopt;
+    }
+
+    if (EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, file_key.data(), header.iv.data()) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM key and IV");
+        return std::nullopt;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG,
+            static_cast<int>(header.tag.size()), const_cast<uint8_t*>(header.tag.data())) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM authentication tag");
+        return std::nullopt;
+    }
+
+    if (payload_size > 0 && EVP_DecryptUpdate(ctx.get(), plaintext.data(), &update_len,
+            ciphertext_with_header.data() + header_size, static_cast<int>(payload_size)) != 1) {
+        spdlog::error("FileEncryptor: AES-256-GCM decryption failed");
+        return std::nullopt;
+    }
+
+    if (EVP_DecryptFinal_ex(ctx.get(), plaintext.data() + update_len, &final_len) != 1) {
         spdlog::error("FileEncryptor: Decryption failed (authentication error)");
         return std::nullopt;
     }
-    
+
+    const size_t plaintext_size = static_cast<size_t>(update_len + final_len);
+    if (plaintext_size != header.original_size) {
+        spdlog::error("FileEncryptor: Decrypted plaintext size mismatch");
+        return std::nullopt;
+    }
+
+    plaintext.resize(plaintext_size);
+
     return plaintext;
 }
 
 std::optional<FileEncryptor::EncryptedKey> FileEncryptor::encrypt_dek(
     const std::vector<uint8_t>& dek) {
-    
+
     EncryptedKey result;
     randombytes_buf(result.iv.data(), result.iv.size());
-    randombytes_buf(result.tag.data(), result.tag.size());
-    
+
     // Generate ephemeral salt
     std::array<uint8_t, SALT_SIZE> salt;
     randombytes_buf(salt.data(), salt.size());
-    
+
     // Derive KEK from master key
     auto kek = derive_key(master_key_, salt);
     if (kek.empty()) {
         return std::nullopt;
     }
-    
-    // Encrypt DEK
-    result.ciphertext.resize(dek.size() + crypto_secretbox_MACBYTES);
-    
-    // Use tag as part of nonce for simplicity
-    std::vector<uint8_t> nonce(crypto_secretbox_NONCEBYTES);
-    std::memcpy(nonce.data(), result.iv.data(), std::min(result.iv.size(), nonce.size()));
-    
-    crypto_secretbox_easy(result.ciphertext.data(), dek.data(), dek.size(),
-        nonce.data(), kek.data());
-    
-    // Store salt at beginning of ciphertext for decryption
+
+    EvpCipherCtxGuard ctx;
+    if (!ctx.get()) {
+        spdlog::error("FileEncryptor: Failed to allocate OpenSSL cipher context");
+        return std::nullopt;
+    }
+
+    std::vector<uint8_t> encrypted_dek(dek.size());
+    int update_len = 0;
+    int final_len = 0;
+
+    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+        spdlog::error("FileEncryptor: Failed to initialize AES-256-GCM cipher for DEK");
+        return std::nullopt;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN,
+            static_cast<int>(result.iv.size()), nullptr) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM IV length for DEK");
+        return std::nullopt;
+    }
+
+    if (EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, kek.data(), result.iv.data()) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM key and IV for DEK");
+        return std::nullopt;
+    }
+
+    if (!dek.empty() && EVP_EncryptUpdate(ctx.get(), encrypted_dek.data(), &update_len,
+            dek.data(), static_cast<int>(dek.size())) != 1) {
+        spdlog::error("FileEncryptor: AES-256-GCM DEK encryption failed");
+        return std::nullopt;
+    }
+
+    if (EVP_EncryptFinal_ex(ctx.get(), encrypted_dek.data() + update_len, &final_len) != 1) {
+        spdlog::error("FileEncryptor: AES-256-GCM DEK finalization failed");
+        return std::nullopt;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG,
+            static_cast<int>(result.tag.size()), result.tag.data()) != 1) {
+        spdlog::error("FileEncryptor: Failed to read AES-256-GCM DEK authentication tag");
+        return std::nullopt;
+    }
+
+    encrypted_dek.resize(static_cast<size_t>(update_len + final_len));
+
     result.ciphertext.insert(result.ciphertext.begin(), salt.begin(), salt.end());
-    
+    result.ciphertext.insert(result.ciphertext.end(), encrypted_dek.begin(), encrypted_dek.end());
+
     return result;
 }
 
 std::optional<std::vector<uint8_t>> FileEncryptor::decrypt_dek(
     const EncryptedKey& encrypted_key) {
-    
-    if (encrypted_key.ciphertext.size() < SALT_SIZE + DEK_SIZE + crypto_secretbox_MACBYTES) {
+
+    if (encrypted_key.ciphertext.size() < SALT_SIZE + DEK_SIZE) {
         spdlog::error("FileEncryptor: Encrypted DEK too small");
         return std::nullopt;
     }
-    
+
     // Extract salt
     std::array<uint8_t, SALT_SIZE> salt;
     std::memcpy(salt.data(), encrypted_key.ciphertext.data(), SALT_SIZE);
-    
+
     // Derive KEK
     auto kek = derive_key(master_key_, salt);
     if (kek.empty()) {
         return std::nullopt;
     }
-    
-    // Decrypt DEK
-    std::vector<uint8_t> dek(DEK_SIZE);
-    
-    std::vector<uint8_t> nonce(crypto_secretbox_NONCEBYTES);
-    std::memcpy(nonce.data(), encrypted_key.iv.data(), std::min(encrypted_key.iv.size(), nonce.size()));
-    
-    if (crypto_secretbox_open_easy(dek.data(),
+
+    const size_t ciphertext_size = encrypted_key.ciphertext.size() - SALT_SIZE;
+    EvpCipherCtxGuard ctx;
+    if (!ctx.get()) {
+        spdlog::error("FileEncryptor: Failed to allocate OpenSSL cipher context");
+        return std::nullopt;
+    }
+
+    std::vector<uint8_t> dek(ciphertext_size);
+    int update_len = 0;
+    int final_len = 0;
+
+    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+        spdlog::error("FileEncryptor: Failed to initialize AES-256-GCM decryptor for DEK");
+        return std::nullopt;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN,
+            static_cast<int>(encrypted_key.iv.size()), nullptr) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM IV length for DEK");
+        return std::nullopt;
+    }
+
+    if (EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, kek.data(), encrypted_key.iv.data()) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM key and IV for DEK");
+        return std::nullopt;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG,
+            static_cast<int>(encrypted_key.tag.size()),
+            const_cast<uint8_t*>(encrypted_key.tag.data())) != 1) {
+        spdlog::error("FileEncryptor: Failed to set AES-256-GCM DEK authentication tag");
+        return std::nullopt;
+    }
+
+    if (ciphertext_size > 0 && EVP_DecryptUpdate(ctx.get(), dek.data(), &update_len,
             encrypted_key.ciphertext.data() + SALT_SIZE,
-            encrypted_key.ciphertext.size() - SALT_SIZE,
-            nonce.data(), kek.data()) != 0) {
+            static_cast<int>(ciphertext_size)) != 1) {
+        spdlog::error("FileEncryptor: AES-256-GCM DEK decryption failed");
+        return std::nullopt;
+    }
+
+    if (EVP_DecryptFinal_ex(ctx.get(), dek.data() + update_len, &final_len) != 1) {
         spdlog::error("FileEncryptor: DEK decryption failed");
         return std::nullopt;
     }
-    
+
+    const size_t dek_size = static_cast<size_t>(update_len + final_len);
+    if (dek_size != DEK_SIZE) {
+        spdlog::error("FileEncryptor: Decrypted DEK size mismatch");
+        return std::nullopt;
+    }
+
+    dek.resize(dek_size);
+
     return dek;
 }
 
@@ -327,8 +473,8 @@ std::optional<FileEncryptor::EncryptedKey> FileEncryptor::deserialize_encrypted_
 std::vector<uint8_t> FileEncryptor::derive_key(
     const std::vector<uint8_t>& master_key,
     const std::array<uint8_t, SALT_SIZE>& salt) {
-    
-    std::vector<uint8_t> result(crypto_secretbox_KEYBYTES);
+
+    std::vector<uint8_t> result(MASTER_KEY_SIZE);  // 32 bytes for AES-256
     
     // Use Argon2id via libsodium's crypto_pwhash
     // This is intentionally slow to deter brute force

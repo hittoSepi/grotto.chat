@@ -14,6 +14,7 @@
 
 // Forward declarations
 namespace grotto::crypto { class CryptoEngine; }
+namespace grotto::client::file { class FileTransferManager; }
 namespace grotto::voice  { class VoiceEngine;  }
 namespace grotto::net    { class NetClient;     }
 struct Message;
@@ -45,6 +46,9 @@ public:
     using CommandResponseFn = std::function<void(const CommandResponse&)>;
     void set_command_response_callback(CommandResponseFn fn) { command_response_fn_ = std::move(fn); }
 
+    // File transfer manager (optional)
+    void set_file_transfer_manager(client::file::FileTransferManager* ftm) { file_mgr_ = ftm; }
+
     // Called after auth OK: send KEY_UPLOAD
     void on_auth_ok();
 
@@ -73,6 +77,10 @@ private:
     void handle_ping(const Envelope& env);
     void handle_error(const Envelope& env);
     void handle_command_response(const Envelope& env);
+    void handle_file_chunk(const Envelope& env);
+    void handle_file_progress(const Envelope& env);
+    void handle_file_complete(const Envelope& env);
+    void handle_file_error(const Envelope& env);
 
     // Helpers
     void send_envelope(MessageType type, const google::protobuf::Message& msg);
@@ -85,6 +93,7 @@ private:
 
     NetClient*           net_client_   = nullptr;
     voice::VoiceEngine*  voice_engine_ = nullptr;
+    client::file::FileTransferManager* file_mgr_ = nullptr;
     PersistMsgFn         persist_fn_;
     TraceFn              trace_fn_;
     CommandResponseFn    command_response_fn_;

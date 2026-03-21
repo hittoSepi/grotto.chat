@@ -1,6 +1,7 @@
 #include "grotto/api/auth.hpp"
 
 #include <openssl/evp.h>
+#include <openssl/hmac.h>
 #include <openssl/rand.h>
 #include <spdlog/spdlog.h>
 

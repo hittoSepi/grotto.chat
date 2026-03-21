@@ -59,6 +59,10 @@ namespace grotto {
 		// Get server config
 		const ServerConfig& config() const { return config_; }
 
+		// Get listener (for admin command routing)
+		net::Listener* listener() { return listener_.get(); }
+		const net::Listener* listener() const { return listener_.get(); }
+
 	private:
 		void setup_logging();
 		void create_thread_pool();
