@@ -273,7 +273,7 @@ CommandResponse CommandHandler::cmd_nick(const std::vector<std::string>& args, S
     return make_response(true, "You are now known as " + new_nick, "nick");
 }
 
-CommandResponse CommandHandler::cmd_whois(const std::vector<std::string>& args, SessionPtr session) {
+CommandResponse CommandHandler::cmd_whois(const std::vector<std::string>& args, SessionPtr /*session*/) {
     if (args.empty()) {
         return make_response(false, "Usage: /whois <nick>", "whois");
     }
@@ -590,11 +590,11 @@ CommandResponse CommandHandler::cmd_mode(const std::vector<std::string>& args, S
 // Helper functions
 // ============================================================================
 
-void CommandHandler::notify_channel_join(const std::string& channel, const std::string& user_id) {
+void CommandHandler::notify_channel_join(const std::string& channel, const std::string& /*user_id*/) {
     broadcast_user_list(channel);
 }
 
-void CommandHandler::notify_channel_part(const std::string& channel, const std::string& user_id, const std::string& reason) {
+void CommandHandler::notify_channel_part(const std::string& channel, const std::string& /*user_id*/, const std::string& /*reason*/) {
     broadcast_user_list(channel);
 }
 
