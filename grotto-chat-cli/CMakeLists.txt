@@ -15,8 +15,8 @@ if(WIN32)
 endif()
 
 # ── grotto-server-tui (AdminSocketClient, protocol) ──
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../grotto-server-tui
-                 ${CMAKE_CURRENT_BINARY_DIR}/grotto-server-tui)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../grotto-chat-server-tui
+                 ${CMAKE_CURRENT_BINARY_DIR}/grotto-chat-server-tui)
 
 # ── Sources ──────────────────────────────────────────
 set(CLI_SOURCES

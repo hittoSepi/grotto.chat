@@ -189,24 +189,15 @@ endif()
 option(GROTTO_CHAT_SERVER_TUI "Build with TUI support" ON)
 
 if(GROTTO_CHAT_SERVER_TUI)
-    include(FetchContent)
-    
-    # Check for local copy first (development workflow)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../grotto-server-tui/CMakeLists.txt")
-        message(STATUS "TUI support: Enabled (using local grotto-server-tui)")
-        add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../grotto-server-tui ${CMAKE_BINARY_DIR}/grotto-server-tui)
+    # Monorepo workflow: prefer local TUI project and avoid stale fetches to the old split repo.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../grotto-chat-server-tui/CMakeLists.txt")
+        message(STATUS "TUI support: Enabled (using local grotto-chat-server-tui)")
+        add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../grotto-chat-server-tui ${CMAKE_BINARY_DIR}/grotto-chat-server-tui)
+        target_link_libraries(grotto-server PRIVATE grotto-server-tui)
+        target_compile_definitions(grotto-server PRIVATE GROTTO_CHAT_HAS_TUI)
     else()
-        message(STATUS "TUI support: Enabled (fetching from git)")
-        FetchContent_Declare(
-            grotto-server-tui
-            GIT_REPOSITORY https://github.com/hittoSepi/grotto-server-tui.git
-            GIT_TAG main
-        )
-        FetchContent_MakeAvailable(grotto-server-tui)
+        message(WARNING "TUI support requested, but local grotto-chat-server-tui was not found. Building server without TUI support.")
     endif()
-    
-    target_link_libraries(grotto-server PRIVATE grotto-server-tui)
-    target_compile_definitions(grotto-server PRIVATE GROTTO_CHAT_HAS_TUI)
 else()
     message(STATUS "TUI support: Disabled (enable with -DGROTTO_CHAT_SERVER_TUI=ON)")
 endif()

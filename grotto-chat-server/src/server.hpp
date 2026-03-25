@@ -118,6 +118,10 @@ namespace grotto {
 		std::chrono::steady_clock::time_point start_time_;
 
 		void handle_admin_command(const nlohmann::json& cmd);
+		void send_admin_response(const std::string& cmd,
+		                         bool ok,
+		                         const nlohmann::json& data = {},
+		                         const std::string& error = {});
 		void send_periodic_state();
 #endif
 	};
