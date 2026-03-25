@@ -16,7 +16,7 @@ const char* kIndicatorOff     = "\u26AA";       // ⚪ White circle
 
 Element render_user_entry(const ChannelUserInfo& user, const std::string& local_user_id) {
     std::string prefix = user.prefix();
-    std::string display = prefix + user.user_id;
+    std::string display = " " + prefix + user.user_id;  // 1-space left pad
     
     // Color based on role
     Color name_color;
@@ -60,6 +60,7 @@ Element render_voice_user(const std::string& user_id, ChannelUserInfo::VoiceStat
     Color name_color = (user_id == local_user_id) ? palette::cyan() : palette::fg();
     
     return hbox({
+        text(" "),                             // 1-space left pad
         text(indicator) | color(indicator_color),
         text(" ") | color(palette::fg()),
         text(user_id) | color(name_color),
@@ -69,7 +70,7 @@ Element render_voice_user(const std::string& user_id, ChannelUserInfo::VoiceStat
 } // anonymous namespace
 
 Element render_toggle_button(bool collapsed) {
-    // ">>" when panel is visible (click to collapse), "<<" when hidden (click to expand)
+    // "<<" when panel is visible (click to collapse), ">>" when hidden (click to expand)
     // Padded so it reads as a button; F2 also toggles
     std::string label = collapsed ? " >> " : " << ";
     return text(label) | color(palette::blue()) | bold;
@@ -145,7 +146,7 @@ Element render_user_list_panel(
     Elements panel_content;
     
     // ── USERS: header ──────────────────────────────────────────────────────
-    std::string users_header = "USERS: " + std::to_string(users.size());
+    std::string users_header = " USERS: " + std::to_string(users.size());
     panel_content.push_back(text(users_header) | bold | color(palette::fg_dark()));
     panel_content.push_back(separator() | color(palette::bg_highlight()));
     current_y += 2;  // Header + separator
@@ -164,7 +165,7 @@ Element render_user_list_panel(
     if (voice_count > 0) {
         panel_content.push_back(text(""));  // Spacer
         current_y++;
-        std::string voice_header = "VOICE: " + std::to_string(voice_count);
+        std::string voice_header = " VOICE: " + std::to_string(voice_count);
         panel_content.push_back(text(voice_header) | bold | color(palette::fg_dark()));
         panel_content.push_back(separator() | color(palette::bg_highlight()));
         current_y += 2;
@@ -195,10 +196,12 @@ Element render_user_list_panel(
     // This is set by the caller based on layout
     out_panel_divider_x = config.width;
     
-    // Build the panel with border
+    // Build the panel — no box border (separator() in the parent hbox already
+    // draws the left edge); use a subtle background tint to distinguish the
+    // user-list area from the message view.
     auto panel = vbox(std::move(panel_content));
-    
-    return panel | border | color(palette::bg_dark());
+
+    return panel | bgcolor(palette::bg_dark());
 }
 
 } // namespace grotto::ui

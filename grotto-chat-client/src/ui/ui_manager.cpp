@@ -476,11 +476,13 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
                                                   state_.local_user_id(), user_positions_, 
                                                   panel_divider_x_, mouse_tracker_.message_region().y);
     
-    // Combine message view and user list panel horizontally
+    // Combine message view and user list panel horizontally.
+    // HEIGHT LESS_THAN keeps a long user list from overflowing the content area.
     return hbox({
         msg_el | flex,
         separator(),
-        user_list_el | size(WIDTH, EQUAL, panel_width),
+        user_list_el | size(WIDTH, EQUAL, panel_width)
+                     | size(HEIGHT, LESS_THAN, msg_rows + 1),
     });
 }
 
