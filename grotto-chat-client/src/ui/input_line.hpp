@@ -20,6 +20,12 @@ public:
     // Delete character at cursor (delete key)
     void del_forward();
 
+    // Delete from cursor to end of current line (Ctrl+K, readline kill-to-end)
+    void kill_to_end();
+
+    // Delete one word backward (Ctrl+W, readline unix-word-rubout)
+    void delete_word_backward();
+
     // Cursor movement
     void move_left();
     void move_right();

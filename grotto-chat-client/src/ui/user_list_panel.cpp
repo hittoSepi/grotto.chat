@@ -69,7 +69,10 @@ Element render_voice_user(const std::string& user_id, ChannelUserInfo::VoiceStat
 } // anonymous namespace
 
 Element render_toggle_button(bool collapsed) {
-    return text(collapsed ? ">>" : "<<") | color(palette::blue()) | bold;
+    // ">>" when panel is visible (click to collapse), "<<" when hidden (click to expand)
+    // Padded so it reads as a button; F2 also toggles
+    std::string label = collapsed ? " >> " : " << ";
+    return text(label) | color(palette::blue()) | bold;
 }
 
 int get_panel_width(const UserListConfig& config, int term_cols) {

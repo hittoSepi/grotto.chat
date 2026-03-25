@@ -526,7 +526,12 @@ Element UIManager::build_document(int term_rows) {
     std::vector<int> unread;
     for (auto& c : channels) unread.push_back(state_.unread_count(c));
     tab_positions_.clear();
-    auto tab_el = render_tab_bar(channels, active_ch, unread, tab_positions_);
+    auto tab_inner = render_tab_bar(channels, active_ch, unread, tab_positions_);
+    // Append the user-list toggle button to the right of the tab bar
+    auto tab_el = hbox({
+        tab_inner | flex,
+        render_toggle_button(user_list_config_.collapsed),
+    }) | bgcolor(palette::bg_dark());
 
     // Build main content (messages + user list panel)
     auto main_content = build_main_content(active_ch, msg_rows, term_cols);
@@ -742,9 +747,32 @@ void UIManager::run(SubmitFn on_submit,
             input_line_.move_home();
             return true;
         }
-        // Ctrl+A = move to beginning of line
+        // Ctrl+A — move to beginning of line (readline: move-beginning-of-line)
         if (event.input() == "\x01") {
             input_line_.move_home();
+            return true;
+        }
+        // Ctrl+E — move to end of line (readline: move-end-of-line)
+        if (event.input() == "\x05") {
+            input_line_.move_end();
+            return true;
+        }
+        // Ctrl+K — kill from cursor to end of line (readline: kill-line)
+        if (event.input() == "\x0b") {
+            tab_completer_.reset();
+            input_line_.kill_to_end();
+            return true;
+        }
+        // Ctrl+U — kill whole input line (readline: unix-line-discard)
+        if (event.input() == "\x15") {
+            tab_completer_.reset();
+            input_line_.clear();
+            return true;
+        }
+        // Ctrl+W — delete word backward (readline: unix-word-rubout)
+        if (event.input() == "\x17") {
+            tab_completer_.reset();
+            input_line_.delete_word_backward();
             return true;
         }
         if (event == Event::End) {

@@ -34,6 +34,37 @@ void InputLine::del_forward() {
     buf_.erase(cursor_, 1);
 }
 
+void InputLine::kill_to_end() {
+    if (cursor_ >= buf_.size()) return;
+    // Find next newline on this line
+    size_t end = buf_.find(U'\n', cursor_);
+    if (end == std::u32string::npos) {
+        // No newline - delete to end of buffer
+        buf_.erase(cursor_);
+    } else if (end == cursor_) {
+        // Cursor is sitting on the newline itself - delete it
+        buf_.erase(cursor_, 1);
+    } else {
+        // Delete from cursor up to (but not including) the newline
+        buf_.erase(cursor_, end - cursor_);
+    }
+}
+
+void InputLine::delete_word_backward() {
+    if (cursor_ == 0) return;
+    size_t pos = cursor_;
+    // Step back over trailing spaces (but not newlines)
+    while (pos > 0 && buf_[pos - 1] == U' ') {
+        --pos;
+    }
+    // Step back over non-whitespace word characters (stop at space or newline)
+    while (pos > 0 && buf_[pos - 1] != U' ' && buf_[pos - 1] != U'\n') {
+        --pos;
+    }
+    buf_.erase(pos, cursor_ - pos);
+    cursor_ = pos;
+}
+
 void InputLine::move_left() {
     if (cursor_ > 0) --cursor_;
 }
