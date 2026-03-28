@@ -285,6 +285,7 @@ bool App::init(const std::filesystem::path& config_path,
     cb.on_disconnected = [this](const std::string& reason) {
         state_.set_connected(false);
         msg_handler_->on_transport_disconnected();
+        crypto_->reset_group_sessions();  // Re-send SKDM on next connection
         clear_pending_channel_commands();
         log_server_event("Disconnected: " + reason, true);
     };
@@ -300,6 +301,9 @@ bool App::init(const std::filesystem::path& config_path,
     });
     msg_handler_->set_command_response_callback([this](const CommandResponse& response) {
         handle_command_response(response);
+    });
+    msg_handler_->set_preview_callback([this](const std::string& channel_id, const std::string& text) {
+        trigger_previews(channel_id, text);
     });
 
     file_mgr_ = std::make_unique<client::file::FileTransferManager>();
@@ -716,27 +720,31 @@ void App::send_chat(const std::string& text) {
         net_client_->send(wire);
     }
 
-    // Link preview
-    if (previewer_) {
-        static const std::regex url_re(R"(https?://\S{3,})");
-        std::sregex_iterator it(text.begin(), text.end(), url_re);
-        for (; it != std::sregex_iterator{}; ++it) {
-            std::string url = (*it)[0].str();
-            previewer_->fetch(url, [this, active](PreviewResult r) {
-                if (!r.success) return;
-                state_.post_ui([this, active, r = std::move(r)]() mutable {
-                    Message pm;
-                    pm.type      = Message::Type::System;
-                    pm.sender_id = "preview";
-                    pm.content   = "\u250C " + r.title +
-                                   (r.description.empty() ? "" : " \u2014 " + r.description);
-                    pm.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::system_clock::now().time_since_epoch()).count();
-                    state_.push_message(active, std::move(pm));
-                });
-                if (ui_) ui_->notify();
+    trigger_previews(active, text);
+}
+
+void App::trigger_previews(const std::string& channel_id, const std::string& text) {
+    if (!previewer_) return;
+    static const std::regex url_re(R"(https?://\S{3,})");
+    std::sregex_iterator it(text.begin(), text.end(), url_re);
+    for (; it != std::sregex_iterator{}; ++it) {
+        std::string url = (*it)[0].str();
+        spdlog::debug("preview: fetching {}", url);
+        previewer_->fetch(url, [this, channel_id](PreviewResult r) {
+            spdlog::debug("preview: result for {} success={} title='{}'", r.url, r.success, r.title);
+            if (!r.success) return;
+            state_.post_ui([this, channel_id, r = std::move(r)]() mutable {
+                Message pm;
+                pm.type      = Message::Type::System;
+                pm.sender_id = "preview";
+                pm.content   = "\u250C " + r.title +
+                               (r.description.empty() ? "" : " \u2014 " + r.description);
+                pm.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+                state_.push_message(channel_id, std::move(pm));
             });
-        }
+            if (ui_) ui_->notify();
+        });
     }
 }
 

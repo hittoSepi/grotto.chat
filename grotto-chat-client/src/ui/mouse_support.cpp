@@ -13,6 +13,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <shellapi.h>
 #endif
 
 namespace grotto::ui {
@@ -246,12 +247,9 @@ bool is_url(const std::string& text) {
 }
 
 void open_url(const std::string& url) {
-    std::string command;
-    
 #ifdef _WIN32
-    // Windows: use start command
-    command = "start \"\" \"" + url + "\"";
-    std::system(command.c_str());
+    // Windows: ShellExecuteA is non-blocking and works from console apps
+    ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #elif __APPLE__
     // macOS: use open command
     command = "open \"" + url + "\" 2>/dev/null &";

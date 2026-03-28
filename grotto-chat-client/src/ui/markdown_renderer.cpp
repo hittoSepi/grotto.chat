@@ -5,6 +5,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <regex>
 
 using namespace ftxui;
 
@@ -47,6 +48,24 @@ Element parse_inline(const std::string& line) {
     };
 
     while (i < line.size()) {
+        // URL: https:// or http://
+        if (i + 7 < line.size() &&
+            (line.substr(i, 8) == "https://" || line.substr(i, 7) == "http://")) {
+            flush_buf();
+            // Find end of URL (space, newline, or end of string)
+            size_t end = i;
+            while (end < line.size() && line[end] != ' ' && line[end] != '\t') ++end;
+            std::string url = line.substr(i, end - i);
+            // Strip trailing punctuation that's unlikely part of the URL
+            while (!url.empty() && (url.back() == '.' || url.back() == ',' ||
+                                    url.back() == ')' || url.back() == ']')) {
+                url.pop_back();
+                end--;
+            }
+            parts.push_back(text(url) | color(palette::cyan()) | underlined);
+            i = end;
+            continue;
+        }
         // Bold: **text**
         if (i + 1 < line.size() && line[i] == '*' && line[i + 1] == '*') {
             flush_buf();

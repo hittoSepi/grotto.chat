@@ -12,6 +12,7 @@
 #include <chrono>
 #include <algorithm>
 #include <cstdlib>
+#include <regex>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -200,9 +201,39 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
         return;
     }
     
-    // Check message area clicks (start text selection)
+    // Check message area clicks (start text selection / open URL)
     if (mouse_tracker_.is_over_message_area()) {
-        if (!is_right_click) {
+        if (is_right_click) {
+            // Right-click: find and open nearest URL around clicked line
+            int line_y = mouse_y - mouse_tracker_.message_region().y;
+            auto ch = state_.active_channel();
+            if (ch) {
+                auto ch_state = state_.channel_snapshot(*ch);
+                int total = static_cast<int>(ch_state.messages.size());
+                if (total > 0) {
+                    int visible_rows = mouse_tracker_.message_region().height;
+                    int bottom_idx = total - 1 - ch_state.scroll_offset;
+                    bottom_idx = std::clamp(bottom_idx, 0, total - 1);
+                    int top_idx = std::max(0, bottom_idx - visible_rows + 1);
+                    int msg_idx = std::clamp(top_idx + line_y, top_idx, bottom_idx);
+
+                    static const std::regex url_re(R"(https?://\S{3,})");
+                    // Search clicked line first, then scan nearby messages for a URL
+                    for (int delta = 0; delta <= 3; ++delta) {
+                        for (int d : {delta, -delta}) {
+                            if (d == 0 && delta != 0) continue;
+                            int idx = msg_idx + d;
+                            if (idx < top_idx || idx > bottom_idx) continue;
+                            std::smatch m;
+                            if (std::regex_search(ch_state.messages[idx].content, m, url_re)) {
+                                open_url(m[0].str());
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
             mouse_tracker_.start_selection(mouse_x, mouse_y);
         }
         return;
@@ -387,7 +418,11 @@ void UIManager::end_text_selection() {
 }
 
 void UIManager::copy_selection_to_clipboard() {
-    // Selection is automatically copied on end_selection
+    // If there is no active mouse selection, copy the input line contents
+    std::string text = input_line_.text();
+    if (!text.empty()) {
+        copy_to_clipboard(text);
+    }
 }
 
 void UIManager::notify() {
@@ -653,7 +688,17 @@ void UIManager::run(SubmitFn on_submit,
                     ChannelCycleFn on_channel_cycle,
                     PttToggleFn on_ptt_toggle,
                     OpenSettingsFn on_open_settings) {
-    screen_.ForceHandleCtrlC(false);
+    screen_.ForceHandleCtrlC(true);  // Let app handle Ctrl+C via CatchEvent (\x03)
+
+#ifdef _WIN32
+    // Disable QuickEdit mode so right-click doesn't open the system context menu.
+    // This allows FTXUI to receive right-click mouse events properly.
+    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD mode = 0;
+    if (GetConsoleMode(hin, &mode)) {
+        SetConsoleMode(hin, mode & ~ENABLE_QUICK_EDIT_MODE);
+    }
+#endif
 
     auto renderer = Renderer([&] {
         // Drain cross-thread UI updates before rendering
@@ -680,7 +725,11 @@ void UIManager::run(SubmitFn on_submit,
             }
             return true;
         }
-        if (event.input() == "\x03" || event.input() == "\x04") {
+        if (event.input() == "\x03") {
+            copy_selection_to_clipboard();
+            return true;
+        }
+        if (event.input() == "\x04") {
             return true;
         }
         // F1 — PTT toggle (since FTXUI doesn't support key-release, use toggle)

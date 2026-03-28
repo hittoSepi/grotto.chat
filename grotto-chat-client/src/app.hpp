@@ -46,6 +46,7 @@ private:
     // Called by UIManager on Alt+1..9; index is 0-based into sorted channel list.
     void switch_to_channel_by_index(int index);
     void persist_message(const std::string& channel_id, const Message& msg);
+    void trigger_previews(const std::string& channel_id, const std::string& text);
     void log_system_message(const std::string& channel_id,
                             const std::string& text,
                             bool activate_channel = false);

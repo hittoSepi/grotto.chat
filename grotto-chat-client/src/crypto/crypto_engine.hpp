@@ -76,6 +76,11 @@ public:
     // ── Safety number ─────────────────────────────────────────────────────
     std::string safety_number(const std::string& peer_id, db::LocalStore& store);
 
+    // ── Session reset ─────────────────────────────────────────────────────
+    // Call on disconnect so group sessions are re-established (SKDM re-sent)
+    // on the next connection.
+    void reset_group_sessions() { sent_skdm_channels_.clear(); }
+
     const Identity& identity() const { return identity_; }
 
 private:

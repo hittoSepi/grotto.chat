@@ -331,7 +331,9 @@ ChatEnvelope CryptoEngine::encrypt(const std::string& sender_id,
             env.set_ciphertext_type(4);  // SENDER_KEY_MESSAGE
             return env;
         } catch (const std::exception& e) {
-            spdlog::error("Group encrypt failed for {}: {}", recipient_id, e.what());
+            spdlog::error("Group encrypt failed for {}: {} — resetting session, next message will re-send SKDM", recipient_id, e.what());
+            // Drop the broken session so the next send creates a fresh one with SKDM
+            sent_skdm_channels_.erase(recipient_id);
             return {};
         }
     }

@@ -88,7 +88,7 @@ std::vector<uint8_t> GroupSession::encrypt(const std::string& channel_id,
     ciphertext_message* encrypted = nullptr;
     rc = group_cipher_encrypt(cipher, plaintext.data(), plaintext.size(), &encrypted);
     group_cipher_free(cipher);
-    if (rc != SG_SUCCESS) throw std::runtime_error("group_cipher_encrypt failed");
+    if (rc != SG_SUCCESS) throw std::runtime_error("group_cipher_encrypt failed (rc=" + std::to_string(rc) + ")");
 
     signal_buffer* buf = ciphertext_message_get_serialized(encrypted);
     std::vector<uint8_t> result(signal_buffer_data(buf),

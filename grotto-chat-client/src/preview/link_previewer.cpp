@@ -76,11 +76,23 @@ void LinkPreviewer::worker_loop() {
 size_t LinkPreviewer::write_callback(char* ptr, size_t size, size_t nmemb, void* userdata) {
     auto* body = static_cast<std::string*>(userdata);
     size_t bytes = size * nmemb;
+
+    // Cap total body size
+    if (body->size() >= kMaxBodyBytes) {
+        return 0;  // Signal abort — we have enough
+    }
     if (body->size() + bytes > kMaxBodyBytes) {
         bytes = kMaxBodyBytes - body->size();
     }
     body->append(ptr, bytes);
-    return size * nmemb;  // tell curl we consumed it all
+
+    // Abort once </head> is seen — OG tags only appear in <head>
+    if (body->find("</head>") != std::string::npos ||
+        body->find("</HEAD>") != std::string::npos) {
+        return 0;  // Signal abort to curl
+    }
+
+    return size * nmemb;
 }
 
 PreviewResult LinkPreviewer::fetch_sync(const std::string& url) {
@@ -104,16 +116,22 @@ PreviewResult LinkPreviewer::fetch_sync(const std::string& url) {
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(fetch_timeout_s_));
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "grotto-client/0.1 (link preview bot)");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT,
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
 
     // Stop once we have enough to find OG tags
     // (write_callback caps at kMaxBodyBytes)
 
+    // Add separate connect timeout for faster failure on unreachable hosts
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
+
     CURLcode rc = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
 
-    if (rc != CURLE_OK) {
+    // CURLE_WRITE_ERROR is expected when we abort early after finding </head>
+    if (rc != CURLE_OK && rc != CURLE_WRITE_ERROR) {
         spdlog::debug("curl fetch failed for {}: {}", url, curl_easy_strerror(rc));
         return result;
     }

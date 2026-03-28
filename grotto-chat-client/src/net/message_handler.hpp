@@ -41,6 +41,9 @@ public:
     // Callback for message persistence (optional)
     using PersistMsgFn = std::function<void(const std::string& channel_id, const Message& msg)>;
     void set_persist_callback(PersistMsgFn fn) { persist_fn_ = std::move(fn); }
+    // Callback for link preview fetching on received messages (optional)
+    using PreviewFn = std::function<void(const std::string& channel_id, const std::string& text)>;
+    void set_preview_callback(PreviewFn fn) { preview_fn_ = std::move(fn); }
     using TraceFn = std::function<void(const std::string&)>;
     void set_trace_callback(TraceFn fn) { trace_fn_ = std::move(fn); }
     using CommandResponseFn = std::function<void(const CommandResponse&)>;
@@ -95,6 +98,7 @@ private:
     voice::VoiceEngine*  voice_engine_ = nullptr;
     client::file::FileTransferManager* file_mgr_ = nullptr;
     PersistMsgFn         persist_fn_;
+    PreviewFn            preview_fn_;
     TraceFn              trace_fn_;
     CommandResponseFn    command_response_fn_;
 

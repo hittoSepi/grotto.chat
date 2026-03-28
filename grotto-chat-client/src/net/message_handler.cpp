@@ -173,6 +173,11 @@ void MessageHandler::handle_chat(const Envelope& env) {
     state_.post_ui([this, channel_id, m = std::move(msg)]() mutable {
         state_.push_message(channel_id, std::move(m));
     });
+
+    // Trigger link preview AFTER message is queued so preview appears below
+    if (preview_fn_) {
+        preview_fn_(channel_id, plaintext);
+    }
 }
 
 void MessageHandler::handle_key_bundle(const Envelope& env) {
