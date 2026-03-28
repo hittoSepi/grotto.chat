@@ -22,6 +22,14 @@ docker-compose logs -f
 docker-compose down
 ```
 
+To run only the directory service:
+
+```bash
+docker compose -f directory-docker-compose.yml up -d --build
+docker compose -f directory-docker-compose.yml logs -f
+docker compose -f directory-docker-compose.yml down
+```
+
 Services:
 - Directory API: `http://localhost:3000`
 - Landing Page: `http://localhost:8080`

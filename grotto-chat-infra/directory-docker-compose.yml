@@ -1,0 +1,23 @@
+services:
+  directory:
+    build:
+      context: ./grotto-chat-directory
+      dockerfile: Dockerfile
+    container_name: grotto-directory
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - directory-data:/app/data
+    networks:
+      - grotto-network
+
+volumes:
+  directory-data:
+
+networks:
+  grotto-network:
+    driver: bridge
