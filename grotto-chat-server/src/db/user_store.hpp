@@ -19,6 +19,7 @@ struct User {
 struct SignedPrekey {
     std::vector<uint8_t> spk_pub;
     std::vector<uint8_t> spk_sig;
+    uint32_t spk_id = 0;
 };
 
 class UserStore {
@@ -73,14 +74,18 @@ public:
 
     void upsert_signed_prekey(const std::string& user_id,
                                const std::vector<uint8_t>& spk_pub,
-                               const std::vector<uint8_t>& spk_sig);
+                               const std::vector<uint8_t>& spk_sig,
+                               uint32_t spk_id);
 
     std::optional<SignedPrekey> get_signed_prekey(const std::string& user_id);
 
-    void store_opk(const std::string& user_id, const std::vector<uint8_t>& opk_pub);
+    void store_opk(const std::string& user_id,
+                   const std::vector<uint8_t>& opk_pub,
+                   uint32_t opk_id);
 
-    // Returns one unused OPK and marks it used; returns empty if none available
-    std::vector<uint8_t> consume_opk(const std::string& user_id);
+    // Returns {opk_id, opk_pub} for one unused OPK and marks it used.
+    // Returns {0, {}} if none available.
+    std::pair<uint32_t, std::vector<uint8_t>> consume_opk(const std::string& user_id);
 
 private:
     Database& db_;

@@ -186,6 +186,7 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
                                   signal_buffer** private_data, void* ud) {
     // libsignal calls this to get our X3DH identity key pair.
     // Signal Protocol uses X25519 (Curve25519) keys.
+    // libsignal's curve_decode_point expects a 33-byte key with 0x05 prefix.
     auto* self = static_cast<SignalStore*>(ud);
     
     // Use cached identity key if set (needed for group sessions)
@@ -206,7 +207,12 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
             return SG_ERR_UNKNOWN;
         }
         
-        *public_data  = signal_buffer_create(x25519_pub.data(), x25519_pub.size());
+        // Prepend 0x05 (DJB_TYPE) for libsignal compatibility
+        std::array<uint8_t, 33> pub_with_prefix{};
+        pub_with_prefix[0] = 0x05;
+        std::memcpy(pub_with_prefix.data() + 1, x25519_pub.data(), 32);
+        
+        *public_data  = signal_buffer_create(pub_with_prefix.data(), pub_with_prefix.size());
         *private_data = signal_buffer_create(x25519_priv.data(), x25519_priv.size());
         return (*public_data && *private_data) ? SG_SUCCESS : SG_ERR_NOMEM;
     }
@@ -216,15 +222,19 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
     if (!row) return SG_ERR_UNKNOWN;
 
     // Try to convert the public key from Ed25519 to X25519
-    std::array<uint8_t, 32> x25519_pub;
+    std::array<uint8_t, 33> pub_with_prefix{};
+    pub_with_prefix[0] = 0x05;
     if (row->identity_pub.size() == 32 &&
-        crypto_sign_ed25519_pk_to_curve25519(x25519_pub.data(),
+        crypto_sign_ed25519_pk_to_curve25519(pub_with_prefix.data() + 1,
                                               row->identity_pub.data()) == 0) {
-        *public_data = signal_buffer_create(x25519_pub.data(), x25519_pub.size());
+        *public_data = signal_buffer_create(pub_with_prefix.data(), pub_with_prefix.size());
     } else {
-        // Fallback: use as-is (may not work properly)
-        *public_data = signal_buffer_create(row->identity_pub.data(),
-                                             row->identity_pub.size());
+        // Fallback: use as-is with prefix (may not work properly)
+        std::vector<uint8_t> raw_with_prefix;
+        raw_with_prefix.reserve(row->identity_pub.size() + 1);
+        raw_with_prefix.push_back(0x05);
+        raw_with_prefix.insert(raw_with_prefix.end(), row->identity_pub.begin(), row->identity_pub.end());
+        *public_data = signal_buffer_create(raw_with_prefix.data(), raw_with_prefix.size());
     }
     
     // Private key not available - group sessions will fail

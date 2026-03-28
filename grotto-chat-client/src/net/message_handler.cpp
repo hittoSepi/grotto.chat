@@ -63,6 +63,7 @@ void MessageHandler::handle_auth_challenge(const Envelope& env) {
     resp.set_signature(sig.data(), sig.size());
     resp.set_signed_prekey(spk_inf.pub.data(), spk_inf.pub.size());
     resp.set_spk_sig(spk_inf.sig.data(), spk_inf.sig.size());
+    resp.set_spk_id(spk_inf.id);
     // Include password for key recovery if configured
     if (!cfg_.identity.password.empty()) {
         resp.set_password(cfg_.identity.password);

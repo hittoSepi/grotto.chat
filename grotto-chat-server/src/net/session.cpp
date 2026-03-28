@@ -512,7 +512,8 @@ void Session::handle_auth_response(const AuthResponse& auth) {
             us.upsert_signed_prekey(
                 auth.user_id(),
                 std::vector<uint8_t>(auth.signed_prekey().begin(), auth.signed_prekey().end()),
-                std::vector<uint8_t>(auth.spk_sig().begin(), auth.spk_sig().end()));
+                std::vector<uint8_t>(auth.spk_sig().begin(), auth.spk_sig().end()),
+                auth.spk_id());
         }
         if (!auth.password().empty() && !us.set_password(auth.user_id(), auth.password())) {
             spdlog::warn("[{}] Failed to store recovery password for new user: {}",
@@ -537,7 +538,8 @@ void Session::handle_auth_response(const AuthResponse& auth) {
                         us.upsert_signed_prekey(
                             auth.user_id(),
                             std::vector<uint8_t>(auth.signed_prekey().begin(), auth.signed_prekey().end()),
-                            std::vector<uint8_t>(auth.spk_sig().begin(), auth.spk_sig().end()));
+                            std::vector<uint8_t>(auth.spk_sig().begin(), auth.spk_sig().end()),
+                            auth.spk_id());
                     }
                 } else {
                     Error err;
@@ -732,13 +734,15 @@ void Session::handle_key_upload(const KeyUpload& ku) {
         us.upsert_signed_prekey(
             user_id_,
             std::vector<uint8_t>(ku.signed_prekey().begin(), ku.signed_prekey().end()),
-            std::vector<uint8_t>(ku.spk_signature().begin(), ku.spk_signature().end()));
+            std::vector<uint8_t>(ku.spk_signature().begin(), ku.spk_signature().end()),
+            ku.spk_id());
     }
 
     // Store one-time pre-keys
-    for (const auto& opk_bytes : ku.one_time_prekeys()) {
+    for (int i = 0; i < ku.one_time_prekeys_size() && i < ku.opk_ids_size(); ++i) {
         us.store_opk(user_id_,
-            std::vector<uint8_t>(opk_bytes.begin(), opk_bytes.end()));
+            std::vector<uint8_t>(ku.one_time_prekeys(i).begin(), ku.one_time_prekeys(i).end()),
+            ku.opk_ids(i));
     }
 
     spdlog::info("[{}] KEY_UPLOAD: {} OPKs uploaded by {}",
@@ -755,7 +759,7 @@ void Session::handle_key_request(const KeyRequest& kr) {
     }
 
     auto spk = us.get_signed_prekey(kr.user_id());
-    auto opk = us.consume_opk(kr.user_id());
+    auto [opk_id, opk] = us.consume_opk(kr.user_id());
 
     KeyBundle bundle;
     bundle.set_identity_pub(target->identity_pub.data(),
@@ -764,10 +768,12 @@ void Session::handle_key_request(const KeyRequest& kr) {
     if (spk) {
         bundle.set_signed_prekey(spk->spk_pub.data(), spk->spk_pub.size());
         bundle.set_spk_signature(spk->spk_sig.data(), spk->spk_sig.size());
+        bundle.set_spk_id(spk->spk_id);
     }
 
     if (!opk.empty()) {
         bundle.set_one_time_prekey(opk.data(), opk.size());
+        bundle.set_opk_id(opk_id);
     }
 
     bundle.set_recipient_for(kr.user_id());

@@ -28,19 +28,23 @@ void Database::execute_schema() {
         "  user_id     TEXT NOT NULL REFERENCES users(user_id),"
         "  spk_pub     BLOB NOT NULL,"
         "  spk_sig     BLOB NOT NULL,"
+        "  spk_id      INTEGER NOT NULL DEFAULT 0,"
         "  uploaded_at INTEGER NOT NULL,"
         "  PRIMARY KEY (user_id)"
         ")"
     );
+    db_.exec("ALTER TABLE signed_prekeys ADD COLUMN IF NOT EXISTS spk_id INTEGER NOT NULL DEFAULT 0");
 
     db_.exec(
         "CREATE TABLE IF NOT EXISTS one_time_prekeys ("
         "  id       INTEGER PRIMARY KEY AUTOINCREMENT,"
         "  user_id  TEXT NOT NULL REFERENCES users(user_id),"
         "  opk_pub  BLOB NOT NULL,"
+        "  opk_id   INTEGER NOT NULL DEFAULT 0,"
         "  used     INTEGER NOT NULL DEFAULT 0"
         ")"
     );
+    db_.exec("ALTER TABLE one_time_prekeys ADD COLUMN IF NOT EXISTS opk_id INTEGER NOT NULL DEFAULT 0");
 
     db_.exec(
         "CREATE TABLE IF NOT EXISTS offline_messages ("

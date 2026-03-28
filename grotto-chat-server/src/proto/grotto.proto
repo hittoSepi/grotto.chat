@@ -85,6 +85,7 @@ message AuthResponse {
   bytes   signed_prekey = 4;  // X25519 signed pre-key (first registration)
   bytes   spk_sig       = 5;  // Identity key signature over SPK
   string  password      = 6;  // Password for identity key recovery (optional)
+  uint32  spk_id        = 7;  // Signed pre-key ID
 }
 
 // Key distribution messages

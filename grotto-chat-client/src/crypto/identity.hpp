@@ -37,10 +37,13 @@ public:
                                         const std::string& user_id) const;
 
     // Generate a signed pre-key (X25519), sign with identity key.
+    // NOTE: For libsignal-protocol-c compatibility, CryptoEngine now generates
+    // and signs the SPK directly using XEdDSA. This method is kept for struct
+    // definition but produces Ed25519 signatures which are NOT compatible.
     struct SignedPreKey {
         uint32_t             id;
         X25519KeyPair        key_pair;
-        std::vector<uint8_t> signature;  // Ed25519 sign(SPK pub)
+        std::vector<uint8_t> signature;  // XEdDSA sign(SPK pub) for libsignal
     };
     SignedPreKey generate_signed_prekey(uint32_t id) const;
 

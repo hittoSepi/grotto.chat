@@ -232,13 +232,73 @@ bool CryptoEngine::init(db::LocalStore& store, const ClientConfig& cfg,
         }
     }
 
-    // Generate SPK
-    spk_        = identity_.generate_signed_prekey(1);
-    next_opk_id_ = 1;
-
     // Set identity key in signal store (needed for group sessions)
     const auto& ed_keys = identity_.ed25519();
     signal_store_->set_identity_key(ed_keys.pub, ed_keys.priv);
+
+    // Generate SPK using libsignal-compatible XEdDSA signing
+    {
+        spk_.id = 1;
+        if (crypto_box_keypair(spk_.key_pair.pub.data(), spk_.key_pair.priv.data()) != 0) {
+            spdlog::error("Failed to generate X25519 SPK");
+            return false;
+        }
+
+        // Convert Ed25519 identity private key to Curve25519 for libsignal signing
+        std::array<uint8_t, 32> x25519_identity_priv{};
+        if (crypto_sign_ed25519_sk_to_curve25519(x25519_identity_priv.data(), ed_keys.priv.data()) != 0) {
+            spdlog::error("Failed to convert Ed25519 identity key to Curve25519");
+            return false;
+        }
+
+        ec_private_key* identity_priv_key = nullptr;
+        if (curve_decode_private_point(&identity_priv_key, x25519_identity_priv.data(),
+                                       x25519_identity_priv.size(), signal_ctx_) != 0) {
+            spdlog::error("Failed to decode identity private key for SPK signing");
+            return false;
+        }
+
+        // Build ec_public_key for the SPK from raw 32-byte pub + 0x05 prefix
+        std::array<uint8_t, 33> spk_prefixed{};
+        spk_prefixed[0] = 0x05;
+        std::memcpy(spk_prefixed.data() + 1, spk_.key_pair.pub.data(), 32);
+
+        ec_public_key* spk_pub_key = nullptr;
+        if (curve_decode_point(&spk_pub_key, spk_prefixed.data(), spk_prefixed.size(), signal_ctx_) != 0) {
+            spdlog::error("Failed to decode SPK public key for signing");
+            SIGNAL_UNREF(identity_priv_key);
+            return false;
+        }
+
+        // Serialize the SPK public key to get the message to sign (33 bytes with 0x05 prefix)
+        signal_buffer* spk_serialized = nullptr;
+        if (ec_public_key_serialize(&spk_serialized, spk_pub_key) != 0) {
+            spdlog::error("Failed to serialize SPK public key for signing");
+            SIGNAL_UNREF(identity_priv_key);
+            SIGNAL_UNREF(spk_pub_key);
+            return false;
+        }
+
+        // Sign using libsignal's curve_calculate_signature (XEdDSA)
+        signal_buffer* sig_buf = nullptr;
+        if (curve_calculate_signature(signal_ctx_, &sig_buf, identity_priv_key,
+                signal_buffer_data(spk_serialized), signal_buffer_len(spk_serialized)) != 0) {
+            spdlog::error("Failed to sign SPK with libsignal");
+            signal_buffer_free(spk_serialized);
+            SIGNAL_UNREF(identity_priv_key);
+            SIGNAL_UNREF(spk_pub_key);
+            return false;
+        }
+
+        spk_.signature.assign(signal_buffer_data(sig_buf),
+                              signal_buffer_data(sig_buf) + signal_buffer_len(sig_buf));
+
+        signal_buffer_free(sig_buf);
+        signal_buffer_free(spk_serialized);
+        SIGNAL_UNREF(identity_priv_key);
+        SIGNAL_UNREF(spk_pub_key);
+    }
+    next_opk_id_ = 1;
 
     // Group session
     group_session_ = std::make_unique<GroupSession>(store_ctx_, signal_ctx_);
@@ -286,7 +346,8 @@ std::vector<uint8_t> CryptoEngine::identity_pub() const {
 CryptoEngine::SpkInfo CryptoEngine::current_spk() const {
     return {
         {spk_.key_pair.pub.begin(), spk_.key_pair.pub.end()},
-        spk_.signature
+        spk_.signature,
+        spk_.id
     };
 }
 
@@ -465,7 +526,11 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
 // ── Key bundle handling ───────────────────────────────────────────────────────
 
 bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& recipient_id) {
-    // Build session_pre_key_bundle from the KeyBundle proto
+    // Build session_pre_key_bundle from the KeyBundle proto.
+    // libsignal's curve_decode_point expects 33-byte keys with a 0x05 prefix.
+    // The identity_pub sent by the server is Ed25519 (32 bytes), so we convert
+    // it to Curve25519 first. signed_prekey and one_time_prekey are already
+    // X25519 but also need the 0x05 prefix.
     ec_public_key* identity_key   = nullptr;
     ec_public_key* signed_pre_key = nullptr;
     ec_public_key* one_time_key   = nullptr;
@@ -474,13 +539,56 @@ bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
     const auto& spk_str    = bundle.signed_prekey();
     const auto& opk_str    = bundle.one_time_prekey();
 
-    curve_decode_point(&identity_key,
-        reinterpret_cast<const uint8_t*>(id_pub_str.data()), id_pub_str.size(), signal_ctx_);
-    curve_decode_point(&signed_pre_key,
-        reinterpret_cast<const uint8_t*>(spk_str.data()), spk_str.size(), signal_ctx_);
+    // --- identity key: Ed25519 -> Curve25519 + 0x05 prefix ---
+    if (id_pub_str.size() == 32) {
+        std::array<uint8_t, 32> x25519_pub{};
+        if (crypto_sign_ed25519_pk_to_curve25519(x25519_pub.data(),
+            reinterpret_cast<const uint8_t*>(id_pub_str.data())) == 0) {
+            std::array<uint8_t, 33> prefixed{};
+            prefixed[0] = 0x05;
+            std::memcpy(prefixed.data() + 1, x25519_pub.data(), 32);
+            int rc = curve_decode_point(&identity_key, prefixed.data(), prefixed.size(), signal_ctx_);
+            if (rc != 0) {
+                spdlog::error("curve_decode_point failed for identity key of {}: {}", recipient_id, rc);
+            }
+        } else {
+            spdlog::error("Ed25519->Curve25519 conversion failed for identity key of {}", recipient_id);
+        }
+    } else {
+        spdlog::error("Unexpected identity_pub size for {}: {} (expected 32)", recipient_id, id_pub_str.size());
+    }
+
+    // --- signed pre-key: add 0x05 prefix ---
+    if (!spk_str.empty()) {
+        std::vector<uint8_t> prefixed;
+        prefixed.reserve(spk_str.size() + 1);
+        prefixed.push_back(0x05);
+        prefixed.insert(prefixed.end(), spk_str.begin(), spk_str.end());
+        int rc = curve_decode_point(&signed_pre_key, prefixed.data(), prefixed.size(), signal_ctx_);
+        if (rc != 0) {
+            spdlog::error("curve_decode_point failed for signed pre-key of {}: {}", recipient_id, rc);
+        }
+    }
+
+    // --- one-time pre-key: add 0x05 prefix ---
     if (!opk_str.empty()) {
-        curve_decode_point(&one_time_key,
-            reinterpret_cast<const uint8_t*>(opk_str.data()), opk_str.size(), signal_ctx_);
+        std::vector<uint8_t> prefixed;
+        prefixed.reserve(opk_str.size() + 1);
+        prefixed.push_back(0x05);
+        prefixed.insert(prefixed.end(), opk_str.begin(), opk_str.end());
+        int rc = curve_decode_point(&one_time_key, prefixed.data(), prefixed.size(), signal_ctx_);
+        if (rc != 0) {
+            spdlog::error("curve_decode_point failed for one-time pre-key of {}: {}", recipient_id, rc);
+        }
+    }
+
+    if (!identity_key || !signed_pre_key) {
+        spdlog::error("Missing required keys in KeyBundle for {} (identity={}, signed_pre_key={})",
+            recipient_id, identity_key != nullptr, signed_pre_key != nullptr);
+        SIGNAL_UNREF(identity_key);
+        SIGNAL_UNREF(signed_pre_key);
+        if (one_time_key) SIGNAL_UNREF(one_time_key);
+        return false;
     }
 
     const auto& spk_sig = bundle.spk_signature();

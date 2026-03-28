@@ -114,24 +114,26 @@ void UserStore::clear_key_material(const std::string& user_id) {
 
 void UserStore::upsert_signed_prekey(const std::string& user_id,
                                       const std::vector<uint8_t>& spk_pub,
-                                      const std::vector<uint8_t>& spk_sig) {
+                                      const std::vector<uint8_t>& spk_sig,
+                                      uint32_t spk_id) {
     std::lock_guard<std::mutex> lock(db_.mutex());
     SQLite::Statement q(db_.get(),
-        "INSERT OR REPLACE INTO signed_prekeys (user_id, spk_pub, spk_sig, uploaded_at)"
-        " VALUES (?, ?, ?, ?)");
+        "INSERT OR REPLACE INTO signed_prekeys (user_id, spk_pub, spk_sig, spk_id, uploaded_at)"
+        " VALUES (?, ?, ?, ?, ?)");
     q.bind(1, user_id);
     q.bind(2, spk_pub.data(), static_cast<int>(spk_pub.size()));
     q.bind(3, spk_sig.data(), static_cast<int>(spk_sig.size()));
-    q.bind(4, now_unix());
+    q.bind(4, static_cast<int>(spk_id));
+    q.bind(5, now_unix());
     q.exec();
-    spdlog::debug("UserStore: upserted SPK for user {}", user_id);
+    spdlog::debug("UserStore: upserted SPK for user {} (spk_id={})", user_id, spk_id);
 }
 
 std::optional<SignedPrekey> UserStore::get_signed_prekey(const std::string& user_id) {
     std::lock_guard<std::mutex> lock(db_.mutex());
     try {
         SQLite::Statement q(db_.get(),
-            "SELECT spk_pub, spk_sig FROM signed_prekeys WHERE user_id = ?");
+            "SELECT spk_pub, spk_sig, spk_id FROM signed_prekeys WHERE user_id = ?");
         q.bind(1, user_id);
         if (q.executeStep()) {
             SignedPrekey spk;
@@ -141,6 +143,7 @@ std::optional<SignedPrekey> UserStore::get_signed_prekey(const std::string& user
             const uint8_t* sig_data = reinterpret_cast<const uint8_t*>(sig.getBlob());
             spk.spk_pub.assign(pub_data, pub_data + pub.getBytes());
             spk.spk_sig.assign(sig_data, sig_data + sig.getBytes());
+            spk.spk_id = static_cast<uint32_t>(q.getColumn(2).getInt());
             return spk;
         }
         return std::nullopt;
@@ -150,27 +153,31 @@ std::optional<SignedPrekey> UserStore::get_signed_prekey(const std::string& user
     }
 }
 
-void UserStore::store_opk(const std::string& user_id, const std::vector<uint8_t>& opk_pub) {
+void UserStore::store_opk(const std::string& user_id,
+                            const std::vector<uint8_t>& opk_pub,
+                            uint32_t opk_id) {
     std::lock_guard<std::mutex> lock(db_.mutex());
     SQLite::Statement q(db_.get(),
-        "INSERT INTO one_time_prekeys (user_id, opk_pub, used) VALUES (?, ?, 0)");
+        "INSERT INTO one_time_prekeys (user_id, opk_pub, opk_id, used) VALUES (?, ?, ?, 0)");
     q.bind(1, user_id);
     q.bind(2, opk_pub.data(), static_cast<int>(opk_pub.size()));
+    q.bind(3, static_cast<int>(opk_id));
     q.exec();
 }
 
-std::vector<uint8_t> UserStore::consume_opk(const std::string& user_id) {
+std::pair<uint32_t, std::vector<uint8_t>> UserStore::consume_opk(const std::string& user_id) {
     std::lock_guard<std::mutex> lock(db_.mutex());
     try {
         SQLite::Statement q(db_.get(),
-            "SELECT id, opk_pub FROM one_time_prekeys"
+            "SELECT id, opk_pub, opk_id FROM one_time_prekeys"
             " WHERE user_id = ? AND used = 0 LIMIT 1");
         q.bind(1, user_id);
         if (!q.executeStep()) {
-            return {};
+            return {0, {}};
         }
         int64_t id = q.getColumn(0).getInt64();
         auto blob  = q.getColumn(1);
+        uint32_t opk_id = static_cast<uint32_t>(q.getColumn(2).getInt());
         const uint8_t* data = reinterpret_cast<const uint8_t*>(blob.getBlob());
         std::vector<uint8_t> opk(data, data + blob.getBytes());
 
@@ -179,10 +186,10 @@ std::vector<uint8_t> UserStore::consume_opk(const std::string& user_id) {
         upd.bind(1, static_cast<int64_t>(id));
         upd.exec();
 
-        return opk;
+        return {opk_id, opk};
     } catch (const SQLite::Exception& e) {
         spdlog::error("UserStore::consume_opk failed: {}", e.what());
-        return {};
+        return {0, {}};
     }
 }
 

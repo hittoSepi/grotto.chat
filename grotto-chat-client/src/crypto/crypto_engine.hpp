@@ -50,10 +50,11 @@ public:
     // Public key (Ed25519, 32 bytes)
     std::vector<uint8_t> identity_pub() const;
 
-    // Signed pre-key pub + sig for AuthResponse
+    // Signed pre-key pub + sig + id for AuthResponse
     struct SpkInfo {
         std::vector<uint8_t> pub;
         std::vector<uint8_t> sig;
+        uint32_t              id = 0;
     };
     SpkInfo current_spk() const;
 
