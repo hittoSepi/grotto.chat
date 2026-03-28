@@ -101,11 +101,16 @@ img {
 }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 42px;
   padding: 0 16px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line-strong);
   font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .btn-primary {
@@ -322,8 +327,7 @@ h3 {
 
   .btn {
     width: 100%;
-    text-align: center;
-    padding-top: 10px;
+    padding: 10px 16px;
   }
 
   .section {
