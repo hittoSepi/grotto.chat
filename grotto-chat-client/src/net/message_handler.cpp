@@ -138,7 +138,18 @@ void MessageHandler::handle_chat(const Envelope& env) {
 
     if (!decrypted) return;
 
-    std::string channel_id = chat.recipient_id();
+    // Determine channel_id: for DMs, use the OTHER person's name
+    std::string channel_id;
+    if (!chat.recipient_id().empty() && chat.recipient_id()[0] == '#') {
+        // Channel message: use recipient_id (the channel name)
+        channel_id = chat.recipient_id();
+    } else if (chat.recipient_id() == cfg_.identity.user_id) {
+        // DM received by me: use sender_id (the other person)
+        channel_id = chat.sender_id();
+    } else {
+        // DM sent by me: use recipient_id (the other person)
+        channel_id = chat.recipient_id();
+    }
     if (channel_id.empty()) channel_id = chat.sender_id();
 
     state_.ensure_channel(channel_id);
@@ -168,6 +179,32 @@ void MessageHandler::handle_chat(const Envelope& env) {
             info.role = UserRole::Regular;
             info.presence = PresenceStatus::Online;
             state_.add_channel_user(channel_id, info);
+        }
+    }
+    // For DMs: ensure both participants appear in the user list
+    else if (!channel_id.empty() && channel_id[0] != '#' && !sender.empty()) {
+        // Add the sender (the other person) if not already present
+        if (sender != cfg_.identity.user_id) {
+            auto existing = state_.channel_user(channel_id, sender);
+            if (!existing.has_value()) {
+                ChannelUserInfo info;
+                info.user_id = sender;
+                info.role = UserRole::Regular;
+                info.presence = PresenceStatus::Online;
+                state_.add_channel_user(channel_id, info);
+            }
+        }
+        // Also ensure the recipient (other person) is in the list
+        std::string other = chat.recipient_id();
+        if (other != cfg_.identity.user_id && !other.empty()) {
+            auto existing = state_.channel_user(channel_id, other);
+            if (!existing.has_value()) {
+                ChannelUserInfo info;
+                info.user_id = other;
+                info.role = UserRole::Regular;
+                info.presence = PresenceStatus::Online;
+                state_.add_channel_user(channel_id, info);
+            }
         }
     }
 
