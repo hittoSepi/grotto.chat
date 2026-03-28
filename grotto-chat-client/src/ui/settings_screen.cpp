@@ -81,7 +81,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     load_settings_from_config(cfg);
     build_ui();
     
-    screen.ForceHandleCtrlC(false);
+    screen.ForceHandleCtrlC(true);
     auto exit_closure = screen.ExitLoopClosure();
     
     // Main renderer

@@ -3,6 +3,11 @@
 #include <string>
 #include <filesystem>
 #include <optional>
+#include <csignal>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 // Parse ircord:// URL and return host:port
 // Format: ircord://host:port or ircord://host (default port 6697)
@@ -55,6 +60,19 @@ static void print_help(const char* argv0) {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    // Prevent Windows Console from killing the process on Ctrl+C.
+    // FTXUI will receive it as \x03 and we handle it in CatchEvent.
+    SetConsoleCtrlHandler([](DWORD ctrl_type) -> BOOL {
+        return (ctrl_type == CTRL_C_EVENT) ? TRUE : FALSE;
+    }, TRUE);
+#else
+    // Ignore SIGINT globally so Ctrl+C reaches FTXUI as \x03 instead of
+    // terminating the process. This applies to login screen, settings, and
+    // the main UI.
+    std::signal(SIGINT, SIG_IGN);
+#endif
+
     std::filesystem::path config_path;
     std::string           user_id_override;
     bool                  clear_creds = false;

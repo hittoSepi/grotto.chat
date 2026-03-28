@@ -13,9 +13,6 @@
 #include <algorithm>
 #include <cstdlib>
 #include <regex>
-#ifndef _WIN32
-#include <csignal>
-#endif
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -696,12 +693,6 @@ void UIManager::run(SubmitFn on_submit,
                     PttToggleFn on_ptt_toggle,
                     OpenSettingsFn on_open_settings) {
     screen_.ForceHandleCtrlC(true);  // Let app handle Ctrl+C via CatchEvent (\x03)
-
-#ifndef _WIN32
-    // On Linux/macOS, ignore SIGINT so it reaches CatchEvent as \x03 instead
-    // of killing the process. FTXUI's ForceHandleCtrlC alone is not enough.
-    std::signal(SIGINT, SIG_IGN);
-#endif
 
 #ifdef _WIN32
     // Disable QuickEdit mode so right-click doesn't open the system context menu.

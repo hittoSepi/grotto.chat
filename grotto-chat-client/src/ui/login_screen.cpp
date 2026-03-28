@@ -134,7 +134,7 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
     }
 
     // Get exit closure before building UI
-    screen.ForceHandleCtrlC(false);
+    screen.ForceHandleCtrlC(true);
     auto exit_closure = screen.ExitLoopClosure();
 
     host_input_ = Input(&host_, "chat.rausku.com");
