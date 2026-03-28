@@ -251,15 +251,11 @@ void open_url(const std::string& url) {
     // Windows: ShellExecuteA is non-blocking and works from console apps
     ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #elif __APPLE__
-    // macOS: use open command
-    command = "open \"" + url + "\" 2>/dev/null &";
-    std::system(command.c_str());
+    std::system(("open \"" + url + "\" 2>/dev/null &").c_str());
 #else
-    // Linux: try xdg-open, then specific browsers
-    command = "xdg-open \"" + url + "\" 2>/dev/null || "
-              "firefox \"" + url + "\" 2>/dev/null || "
-              "chromium \"" + url + "\" 2>/dev/null &";
-    std::system(command.c_str());
+    std::system(("xdg-open \"" + url + "\" 2>/dev/null || "
+                 "firefox \"" + url + "\" 2>/dev/null || "
+                 "chromium \"" + url + "\" 2>/dev/null &").c_str());
 #endif
 }
 
