@@ -134,7 +134,26 @@ bool LocalStore::contains_pre_key(uint32_t id) {
     return load_pre_key(id).has_value();
 }
 
-// ── Signed pre-keys ───────────────────────────────────────────────────────────
+uint32_t LocalStore::load_pre_key_counter() {
+    std::lock_guard lk(mu_);
+    try {
+        SQLite::Statement q(db_, "SELECT value FROM metadata WHERE key='pre_key_counter'");
+        if (q.executeStep()) {
+            return static_cast<uint32_t>(q.getColumn(0).getInt64());
+        }
+    } catch (...) {}
+    return 1;  // Default starting ID
+}
+
+void LocalStore::store_pre_key_counter(uint32_t counter) {
+    std::lock_guard lk(mu_);
+    SQLite::Statement q(db_, "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)");
+    q.bind(1, "pre_key_counter");
+    q.bind(2, static_cast<int64_t>(counter));
+    q.exec();
+}
+
+// ── Signed pre-keys ─────────────────────────────────────────────────────────__"
 
 std::optional<std::vector<uint8_t>> LocalStore::load_signed_pre_key(uint32_t id) {
     std::lock_guard lk(mu_);

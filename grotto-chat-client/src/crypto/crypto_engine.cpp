@@ -333,7 +333,9 @@ bool CryptoEngine::init(db::LocalStore& store, const ClientConfig& cfg,
             if (spk_pub_key) SIGNAL_UNREF(spk_pub_key);
         }
     }
-    next_opk_id_ = 1;
+    // Load persisted counter to avoid reusing pre-key IDs after restart
+    next_opk_id_ = local_store_->load_pre_key_counter();
+    if (next_opk_id_ == 0) next_opk_id_ = 1;
 
     // Group session
     group_session_ = std::make_unique<GroupSession>(store_ctx_, signal_ctx_);
