@@ -3,7 +3,7 @@
 
 namespace grotto::db {
 
-static constexpr int kCurrentVersion = 4;
+static constexpr int kCurrentVersion = 5;
 
 // Migration 1: core message & identity tables
 static void migration_1(SQLite::Database& db) {
@@ -129,6 +129,16 @@ static void migration_4(SQLite::Database& db) {
     db.exec("CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id, timestamp_ms);");
 }
 
+// Migration 5: metadata table for client state (pre-key counter, etc.)
+static void migration_5(SQLite::Database& db) {
+    db.exec(R"(
+        CREATE TABLE IF NOT EXISTS metadata (
+            key   TEXT PRIMARY KEY,
+            value INTEGER NOT NULL
+        );
+    )");
+}
+
 void apply_migrations(SQLite::Database& db) {
     // Enable WAL mode for performance
     db.exec("PRAGMA journal_mode=WAL;");
@@ -154,6 +164,10 @@ void apply_migrations(SQLite::Database& db) {
     if (version < 4) {
         spdlog::info("Applying DB migration 4");
         migration_4(db);
+    }
+    if (version < 5) {
+        spdlog::info("Applying DB migration 5");
+        migration_5(db);
     }
 
     if (version < kCurrentVersion) {
