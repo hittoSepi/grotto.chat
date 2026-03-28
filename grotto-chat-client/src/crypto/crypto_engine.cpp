@@ -297,6 +297,41 @@ bool CryptoEngine::init(db::LocalStore& store, const ClientConfig& cfg,
         signal_buffer_free(spk_serialized);
         SIGNAL_UNREF(identity_priv_key);
         SIGNAL_UNREF(spk_pub_key);
+
+        // Store SPK in libsignal format so we can decrypt incoming PreKeySignalMessages
+        {
+            std::array<uint8_t, 33> spk_prefixed{};
+            spk_prefixed[0] = 0x05;
+            std::memcpy(spk_prefixed.data() + 1, spk_.key_pair.pub.data(), 32);
+
+            ec_public_key*   spk_pub_key   = nullptr;
+            ec_private_key*  spk_priv_key  = nullptr;
+            ec_key_pair*     spk_key_pair  = nullptr;
+            session_signed_pre_key* spk_record = nullptr;
+            signal_buffer*   spk_serialized2 = nullptr;
+
+            if (curve_decode_point(&spk_pub_key, spk_prefixed.data(), spk_prefixed.size(), signal_ctx_) == 0 &&
+                curve_decode_private_point(&spk_priv_key, spk_.key_pair.priv.data(), spk_.key_pair.priv.size(), signal_ctx_) == 0 &&
+                ec_key_pair_create(&spk_key_pair, spk_pub_key, spk_priv_key) == 0 &&
+                session_signed_pre_key_create(&spk_record, spk_.id,
+                    static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count()),
+                    spk_key_pair, spk_.signature.data(), spk_.signature.size()) == 0 &&
+                session_signed_pre_key_serialize(&spk_serialized2, spk_record) == 0) {
+                local_store_->store_signed_pre_key(spk_.id,
+                    std::vector<uint8_t>(signal_buffer_data(spk_serialized2),
+                                         signal_buffer_data(spk_serialized2) + signal_buffer_len(spk_serialized2)));
+                spdlog::debug("Stored local signed pre-key id={}", spk_.id);
+            } else {
+                spdlog::error("Failed to serialize/store local signed pre-key");
+            }
+
+            if (spk_serialized2) signal_buffer_free(spk_serialized2);
+            if (spk_record) SIGNAL_UNREF(spk_record);
+            if (spk_key_pair) SIGNAL_UNREF(spk_key_pair);
+            if (spk_priv_key) SIGNAL_UNREF(spk_priv_key);
+            if (spk_pub_key) SIGNAL_UNREF(spk_pub_key);
+        }
     }
     next_opk_id_ = 1;
 
@@ -319,16 +354,35 @@ KeyUpload CryptoEngine::prepare_key_upload(int num_opks) {
         ku.add_one_time_prekeys(kp.pub.data(), kp.pub.size());
         ku.add_opk_ids(id);
 
-        // Store OPK private key in the pre_key store
-        // Serialization: [id 4 bytes LE] [pub 32 bytes] [priv 32 bytes]
-        std::vector<uint8_t> key_data(4 + 32 + 32);
-        key_data[0] = (id >> 0) & 0xFF;
-        key_data[1] = (id >> 8) & 0xFF;
-        key_data[2] = (id >> 16) & 0xFF;
-        key_data[3] = (id >> 24) & 0xFF;
-        std::copy(kp.pub.begin(),  kp.pub.end(),  key_data.begin() + 4);
-        std::copy(kp.priv.begin(), kp.priv.end(), key_data.begin() + 36);
-        local_store_->store_pre_key(id, key_data);
+        // Store OPK in libsignal serialized format so incoming PreKeySignalMessages
+        // can load the matching private key during X3DH.
+        std::array<uint8_t, 33> opk_prefixed{};
+        opk_prefixed[0] = 0x05;
+        std::memcpy(opk_prefixed.data() + 1, kp.pub.data(), 32);
+
+        ec_public_key*  opk_pub_key  = nullptr;
+        ec_private_key* opk_priv_key = nullptr;
+        ec_key_pair*    opk_key_pair = nullptr;
+        session_pre_key* opk_record  = nullptr;
+        signal_buffer*   opk_serialized = nullptr;
+
+        if (curve_decode_point(&opk_pub_key, opk_prefixed.data(), opk_prefixed.size(), signal_ctx_) == 0 &&
+            curve_decode_private_point(&opk_priv_key, kp.priv.data(), kp.priv.size(), signal_ctx_) == 0 &&
+            ec_key_pair_create(&opk_key_pair, opk_pub_key, opk_priv_key) == 0 &&
+            session_pre_key_create(&opk_record, id, opk_key_pair) == 0 &&
+            session_pre_key_serialize(&opk_serialized, opk_record) == 0) {
+            local_store_->store_pre_key(id,
+                std::vector<uint8_t>(signal_buffer_data(opk_serialized),
+                                     signal_buffer_data(opk_serialized) + signal_buffer_len(opk_serialized)));
+        } else {
+            spdlog::error("Failed to serialize/store one-time pre-key id={}", id);
+        }
+
+        if (opk_serialized) signal_buffer_free(opk_serialized);
+        if (opk_record) SIGNAL_UNREF(opk_record);
+        if (opk_key_pair) SIGNAL_UNREF(opk_key_pair);
+        if (opk_priv_key) SIGNAL_UNREF(opk_priv_key);
+        if (opk_pub_key) SIGNAL_UNREF(opk_pub_key);
     }
     next_opk_id_ += num_opks;
     return ku;
