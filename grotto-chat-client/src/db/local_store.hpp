@@ -51,6 +51,7 @@ public:
     void save_peer_identity(const std::string& name,
                             const std::vector<uint8_t>& identity_pub,
                             const std::string& trust_status = "unverified");
+    void delete_peer_identity(const std::string& name);
     std::string get_trust_status(const std::string& name);
 
     // ── Signal: Sender keys ───────────────────────────────────────────────

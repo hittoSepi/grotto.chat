@@ -186,6 +186,13 @@ void LocalStore::save_peer_identity(const std::string& name,
     q.exec();
 }
 
+void LocalStore::delete_peer_identity(const std::string& name) {
+    std::lock_guard lk(mu_);
+    SQLite::Statement q(db_, "DELETE FROM peer_identities WHERE name=?");
+    q.bind(1, name);
+    q.exec();
+}
+
 std::string LocalStore::get_trust_status(const std::string& name) {
     std::lock_guard lk(mu_);
     SQLite::Statement q(db_, "SELECT trust_status FROM peer_identities WHERE name=?");

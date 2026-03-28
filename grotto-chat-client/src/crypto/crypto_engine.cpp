@@ -514,6 +514,19 @@ bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
         session_builder_free(builder);
     }
 
+    if (rc == SG_ERR_UNTRUSTED_IDENTITY && local_store_) {
+        // Stale/wrong identity key in local DB — clear it and retry once (re-TOFU)
+        spdlog::warn("Untrusted identity for {} — clearing stale key and retrying", recipient_id);
+        local_store_->delete_peer_identity(recipient_id);
+
+        session_builder* builder2 = nullptr;
+        rc = session_builder_create(&builder2, store_ctx_, &addr, signal_ctx_);
+        if (rc == SG_SUCCESS) {
+            rc = session_builder_process_pre_key_bundle(builder2, pkb);
+            session_builder_free(builder2);
+        }
+    }
+
     SIGNAL_UNREF(pkb);
     SIGNAL_UNREF(identity_key);
     SIGNAL_UNREF(signed_pre_key);
