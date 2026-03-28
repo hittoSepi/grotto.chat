@@ -3,7 +3,7 @@
 
 namespace grotto::db {
 
-static constexpr int kCurrentVersion = 5;
+static constexpr int kCurrentVersion = 6;
 
 // Migration 1: core message & identity tables
 static void migration_1(SQLite::Database& db) {
@@ -139,6 +139,19 @@ static void migration_5(SQLite::Database& db) {
     )");
 }
 
+// Migration 6: persist the currently active SPK so restarts do not rotate it.
+static void migration_6(SQLite::Database& db) {
+    db.exec(R"(
+        CREATE TABLE IF NOT EXISTS local_signed_prekey_state (
+            slot     INTEGER PRIMARY KEY CHECK (slot = 1),
+            spk_id   INTEGER NOT NULL,
+            spk_pub  BLOB    NOT NULL,
+            spk_priv BLOB    NOT NULL,
+            spk_sig  BLOB    NOT NULL
+        );
+    )");
+}
+
 void apply_migrations(SQLite::Database& db) {
     // Enable WAL mode for performance
     db.exec("PRAGMA journal_mode=WAL;");
@@ -168,6 +181,10 @@ void apply_migrations(SQLite::Database& db) {
     if (version < 5) {
         spdlog::info("Applying DB migration 5");
         migration_5(db);
+    }
+    if (version < 6) {
+        spdlog::info("Applying DB migration 6");
+        migration_6(db);
     }
 
     if (version < kCurrentVersion) {

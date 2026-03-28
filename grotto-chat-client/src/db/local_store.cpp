@@ -182,6 +182,39 @@ bool LocalStore::contains_signed_pre_key(uint32_t id) {
     return load_signed_pre_key(id).has_value();
 }
 
+std::optional<LocalStore::LocalSignedPreKeyState> LocalStore::load_local_signed_pre_key_state() {
+    std::lock_guard lk(mu_);
+    SQLite::Statement q(db_,
+        "SELECT spk_id, spk_pub, spk_priv, spk_sig "
+        "FROM local_signed_prekey_state WHERE slot = 1");
+    if (!q.executeStep()) return std::nullopt;
+
+    LocalSignedPreKeyState state;
+    state.id        = static_cast<uint32_t>(q.getColumn(0).getInt64());
+    state.pub       = blob_to_vec(q.getColumn(1));
+    state.priv      = blob_to_vec(q.getColumn(2));
+    state.signature = blob_to_vec(q.getColumn(3));
+    return state;
+}
+
+void LocalStore::store_local_signed_pre_key_state(const LocalSignedPreKeyState& state) {
+    std::lock_guard lk(mu_);
+    SQLite::Statement q(db_,
+        "INSERT OR REPLACE INTO local_signed_prekey_state "
+        "(slot, spk_id, spk_pub, spk_priv, spk_sig) VALUES (1, ?, ?, ?, ?)");
+    q.bind(1, static_cast<int64_t>(state.id));
+    q.bind(2, state.pub.data(), static_cast<int>(state.pub.size()));
+    q.bind(3, state.priv.data(), static_cast<int>(state.priv.size()));
+    q.bind(4, state.signature.data(), static_cast<int>(state.signature.size()));
+    q.exec();
+}
+
+void LocalStore::clear_local_signed_pre_key_state() {
+    std::lock_guard lk(mu_);
+    SQLite::Statement q(db_, "DELETE FROM local_signed_prekey_state WHERE slot = 1");
+    q.exec();
+}
+
 // ── Peer identities ───────────────────────────────────────────────────────────
 
 std::optional<std::vector<uint8_t>> LocalStore::load_peer_identity(const std::string& name) {

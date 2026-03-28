@@ -10,6 +10,8 @@
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <chrono>
+#include <algorithm>
+#include <cstring>
 
 // libsignal-protocol-c requires a crypto provider backed by libsodium
 extern "C" {
@@ -19,6 +21,49 @@ extern "C" {
 }
 
 namespace grotto::crypto {
+
+namespace {
+
+bool store_spk_record(signal_context* signal_ctx,
+                      db::LocalStore* local_store,
+                      const Identity::SignedPreKey& spk) {
+    if (!signal_ctx || !local_store) return false;
+
+    std::array<uint8_t, 33> spk_prefixed{};
+    spk_prefixed[0] = 0x05;
+    std::memcpy(spk_prefixed.data() + 1, spk.key_pair.pub.data(), 32);
+
+    ec_public_key* spk_pub_key = nullptr;
+    ec_private_key* spk_priv_key = nullptr;
+    ec_key_pair* spk_key_pair = nullptr;
+    session_signed_pre_key* spk_record = nullptr;
+    signal_buffer* spk_serialized = nullptr;
+
+    bool ok =
+        curve_decode_point(&spk_pub_key, spk_prefixed.data(), spk_prefixed.size(), signal_ctx) == 0 &&
+        curve_decode_private_point(&spk_priv_key, spk.key_pair.priv.data(), spk.key_pair.priv.size(), signal_ctx) == 0 &&
+        ec_key_pair_create(&spk_key_pair, spk_pub_key, spk_priv_key) == 0 &&
+        session_signed_pre_key_create(&spk_record, spk.id,
+            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count()),
+            spk_key_pair, spk.signature.data(), spk.signature.size()) == 0 &&
+        session_signed_pre_key_serialize(&spk_serialized, spk_record) == 0;
+
+    if (ok) {
+        local_store->store_signed_pre_key(spk.id,
+            std::vector<uint8_t>(signal_buffer_data(spk_serialized),
+                                 signal_buffer_data(spk_serialized) + signal_buffer_len(spk_serialized)));
+    }
+
+    if (spk_serialized) signal_buffer_free(spk_serialized);
+    if (spk_record) SIGNAL_UNREF(spk_record);
+    if (spk_key_pair) SIGNAL_UNREF(spk_key_pair);
+    if (spk_priv_key) SIGNAL_UNREF(spk_priv_key);
+    if (spk_pub_key) SIGNAL_UNREF(spk_pub_key);
+    return ok;
+}
+
+} // namespace
 
 // ── libsignal-protocol-c crypto provider (OpenSSL-backed) ────────────────────
 
@@ -236,8 +281,25 @@ bool CryptoEngine::init(db::LocalStore& store, const ClientConfig& cfg,
     const auto& ed_keys = identity_.ed25519();
     signal_store_->set_identity_key(ed_keys.pub, ed_keys.priv);
 
-    // Generate SPK using libsignal-compatible XEdDSA signing
-    {
+    // Load persisted SPK if available; otherwise generate once and persist it.
+    if (auto persisted_spk = local_store_->load_local_signed_pre_key_state();
+        persisted_spk &&
+        persisted_spk->pub.size() == spk_.key_pair.pub.size() &&
+        persisted_spk->priv.size() == spk_.key_pair.priv.size() &&
+        !persisted_spk->signature.empty()) {
+        spk_.id = persisted_spk->id;
+        std::copy(persisted_spk->pub.begin(), persisted_spk->pub.end(), spk_.key_pair.pub.begin());
+        std::copy(persisted_spk->priv.begin(), persisted_spk->priv.end(), spk_.key_pair.priv.begin());
+        spk_.signature = persisted_spk->signature;
+
+        if (!store_spk_record(signal_ctx_, local_store_, spk_)) {
+            spdlog::error("Failed to restore persisted signed pre-key id={}", spk_.id);
+            return false;
+        }
+
+        spdlog::info("Loaded persisted signed pre-key id={}", spk_.id);
+    } else {
+        // Generate SPK using libsignal-compatible XEdDSA signing
         spk_.id = 1;
         if (crypto_box_keypair(spk_.key_pair.pub.data(), spk_.key_pair.priv.data()) != 0) {
             spdlog::error("Failed to generate X25519 SPK");
@@ -298,40 +360,18 @@ bool CryptoEngine::init(db::LocalStore& store, const ClientConfig& cfg,
         SIGNAL_UNREF(identity_priv_key);
         SIGNAL_UNREF(spk_pub_key);
 
-        // Store SPK in libsignal format so we can decrypt incoming PreKeySignalMessages
-        {
-            std::array<uint8_t, 33> spk_prefixed{};
-            spk_prefixed[0] = 0x05;
-            std::memcpy(spk_prefixed.data() + 1, spk_.key_pair.pub.data(), 32);
-
-            ec_public_key*   spk_pub_key   = nullptr;
-            ec_private_key*  spk_priv_key  = nullptr;
-            ec_key_pair*     spk_key_pair  = nullptr;
-            session_signed_pre_key* spk_record = nullptr;
-            signal_buffer*   spk_serialized2 = nullptr;
-
-            if (curve_decode_point(&spk_pub_key, spk_prefixed.data(), spk_prefixed.size(), signal_ctx_) == 0 &&
-                curve_decode_private_point(&spk_priv_key, spk_.key_pair.priv.data(), spk_.key_pair.priv.size(), signal_ctx_) == 0 &&
-                ec_key_pair_create(&spk_key_pair, spk_pub_key, spk_priv_key) == 0 &&
-                session_signed_pre_key_create(&spk_record, spk_.id,
-                    static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
-                        std::chrono::system_clock::now().time_since_epoch()).count()),
-                    spk_key_pair, spk_.signature.data(), spk_.signature.size()) == 0 &&
-                session_signed_pre_key_serialize(&spk_serialized2, spk_record) == 0) {
-                local_store_->store_signed_pre_key(spk_.id,
-                    std::vector<uint8_t>(signal_buffer_data(spk_serialized2),
-                                         signal_buffer_data(spk_serialized2) + signal_buffer_len(spk_serialized2)));
-                spdlog::debug("Stored local signed pre-key id={}", spk_.id);
-            } else {
-                spdlog::error("Failed to serialize/store local signed pre-key");
-            }
-
-            if (spk_serialized2) signal_buffer_free(spk_serialized2);
-            if (spk_record) SIGNAL_UNREF(spk_record);
-            if (spk_key_pair) SIGNAL_UNREF(spk_key_pair);
-            if (spk_priv_key) SIGNAL_UNREF(spk_priv_key);
-            if (spk_pub_key) SIGNAL_UNREF(spk_pub_key);
+        if (!store_spk_record(signal_ctx_, local_store_, spk_)) {
+            spdlog::error("Failed to serialize/store local signed pre-key");
+            return false;
         }
+
+        db::LocalStore::LocalSignedPreKeyState state;
+        state.id = spk_.id;
+        state.pub.assign(spk_.key_pair.pub.begin(), spk_.key_pair.pub.end());
+        state.priv.assign(spk_.key_pair.priv.begin(), spk_.key_pair.priv.end());
+        state.signature = spk_.signature;
+        local_store_->store_local_signed_pre_key_state(state);
+        spdlog::info("Generated and persisted signed pre-key id={}", spk_.id);
     }
     // Load persisted counter to avoid reusing pre-key IDs after restart
     next_opk_id_ = local_store_->load_pre_key_counter();
@@ -549,10 +589,18 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
 
     signal_buffer* plaintext_buf = nullptr;
 
+    bool had_session_before_decrypt = signal_protocol_session_contains_session(store_ctx_, &addr) == 1;
+    spdlog::debug("Decrypting DM from '{}' type={} had_session={} current_spk_id={}",
+                  env.sender_id(), env.ciphertext_type(), had_session_before_decrypt, spk_.id);
+
     if (env.ciphertext_type() == 3) {  // PRE_KEY_SIGNAL_MESSAGE
         pre_key_signal_message* msg = nullptr;
         rc = pre_key_signal_message_deserialize(&msg, ct, ct_len, signal_ctx_);
         if (rc == SG_SUCCESS) {
+            spdlog::debug("PRE_KEY message from '{}' local_spk_present={} local_prekey_counter_next={}",
+                          env.sender_id(),
+                          local_store_ && local_store_->contains_signed_pre_key(spk_.id),
+                          next_opk_id_);
             rc = session_cipher_decrypt_pre_key_signal_message(cipher, msg, nullptr, &plaintext_buf);
             SIGNAL_UNREF(msg);
         }
@@ -568,7 +616,10 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
     session_cipher_free(cipher);
 
     if (rc != SG_SUCCESS || !plaintext_buf) {
-        spdlog::warn("Decryption failed for message from {}: {}", env.sender_id(), rc);
+        bool has_session_after_decrypt = signal_protocol_session_contains_session(store_ctx_, &addr) == 1;
+        spdlog::warn("Decryption failed for message from {}: rc={} type={} had_session_before={} has_session_after={} local_spk_id={}",
+                     env.sender_id(), rc, env.ciphertext_type(),
+                     had_session_before_decrypt, has_session_after_decrypt, spk_.id);
         return result;
     }
 

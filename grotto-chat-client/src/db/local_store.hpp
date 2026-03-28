@@ -47,6 +47,15 @@ public:
     void store_signed_pre_key(uint32_t id, const std::vector<uint8_t>& key_data);
     void remove_signed_pre_key(uint32_t id);
     bool contains_signed_pre_key(uint32_t id);
+    struct LocalSignedPreKeyState {
+        uint32_t             id = 0;
+        std::vector<uint8_t> pub;
+        std::vector<uint8_t> priv;
+        std::vector<uint8_t> signature;
+    };
+    std::optional<LocalSignedPreKeyState> load_local_signed_pre_key_state();
+    void store_local_signed_pre_key_state(const LocalSignedPreKeyState& state);
+    void clear_local_signed_pre_key_state();
 
     // ── Signal: Peer identities ───────────────────────────────────────────
     std::optional<std::vector<uint8_t>> load_peer_identity(const std::string& name);
