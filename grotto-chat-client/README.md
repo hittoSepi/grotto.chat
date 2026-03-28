@@ -153,6 +153,49 @@ Options:
 
 ## Building from Source
 
+### Prerequisites
+
+- **CMake** 3.20+
+- **C++20 compiler**: MSVC 2022+ (Windows) or GCC 11+ / Clang 13+ (Linux)
+- **vcpkg** — dependencies are fetched automatically via vcpkg manifest
+
+### Windows
+
+```bat
+git clone https://github.com/hittoSepi/grotto.chat.git
+cd grotto.chat\grotto-chat-client
+mkdir build && cd build
+cmake .. -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
+cmake --build . --config Release
+```
+
+The executable is at `build\Release\grotto-client.exe`.
+Copy `client.toml` from the same directory and edit it before running.
+
+> **Note:** If `VCPKG_ROOT` is not set, vcpkg will bootstrap itself automatically from the repo's `vcpkg` submodule if present, or you can pass the toolchain file path explicitly.
+
+### Linux
+
+```bash
+git clone https://github.com/hittoSepi/grotto.chat.git
+cd grotto.chat/grotto-chat-client
+mkdir build && cd build
+cmake .. -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+         -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+```
+
+The executable is at `build/grotto-client`.
+
+### Running multiple instances on the same machine
+
+Each instance needs its own config directory to avoid sharing identity keys and SQLite databases. Use `--config`:
+
+```bash
+grotto-client --config ~/.config/grotto-alice/client.toml
+grotto-client --config ~/.config/grotto-bob/client.toml
+```
+
 ## Voice / ICE Setup
 
 If `[voice].ice_servers` is empty, the client falls back to public Google STUN servers. That is acceptable for quick testing, but it is not reliable enough for real-world NAT traversal.
