@@ -33,7 +33,20 @@ void Database::execute_schema() {
         "  PRIMARY KEY (user_id)"
         ")"
     );
-    db_.exec("ALTER TABLE signed_prekeys ADD COLUMN IF NOT EXISTS spk_id INTEGER NOT NULL DEFAULT 0");
+    // Compatibility: older SQLite doesn't support ALTER TABLE ... ADD COLUMN IF NOT EXISTS
+    {
+        bool has_spk_id = false;
+        SQLite::Statement pragma(db_, "PRAGMA table_info(signed_prekeys)");
+        while (pragma.executeStep()) {
+            if (pragma.getColumn(1).getString() == std::string("spk_id")) {
+                has_spk_id = true;
+                break;
+            }
+        }
+        if (!has_spk_id) {
+            db_.exec("ALTER TABLE signed_prekeys ADD COLUMN spk_id INTEGER NOT NULL DEFAULT 0");
+        }
+    }
 
     db_.exec(
         "CREATE TABLE IF NOT EXISTS one_time_prekeys ("
@@ -44,7 +57,19 @@ void Database::execute_schema() {
         "  used     INTEGER NOT NULL DEFAULT 0"
         ")"
     );
-    db_.exec("ALTER TABLE one_time_prekeys ADD COLUMN IF NOT EXISTS opk_id INTEGER NOT NULL DEFAULT 0");
+    {
+        bool has_opk_id = false;
+        SQLite::Statement pragma(db_, "PRAGMA table_info(one_time_prekeys)");
+        while (pragma.executeStep()) {
+            if (pragma.getColumn(1).getString() == std::string("opk_id")) {
+                has_opk_id = true;
+                break;
+            }
+        }
+        if (!has_opk_id) {
+            db_.exec("ALTER TABLE one_time_prekeys ADD COLUMN opk_id INTEGER NOT NULL DEFAULT 0");
+        }
+    }
 
     db_.exec(
         "CREATE TABLE IF NOT EXISTS offline_messages ("
