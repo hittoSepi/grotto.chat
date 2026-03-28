@@ -13,6 +13,9 @@
 #include <algorithm>
 #include <cstdlib>
 #include <regex>
+#ifndef _WIN32
+#include <csignal>
+#endif
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -204,8 +207,9 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
     // Check message area clicks (start text selection / open URL)
     if (mouse_tracker_.is_over_message_area()) {
         if (is_right_click) {
-            // Right-click: find and open nearest URL around clicked line
-            int line_y = mouse_y - mouse_tracker_.message_region().y;
+            // Right-click: open the most recently visible URL.
+            // We can't accurately map click Y to message index when messages wrap,
+            // so scan all visible messages from bottom up and open the first URL found.
             auto ch = state_.active_channel();
             if (ch) {
                 auto ch_state = state_.channel_snapshot(*ch);
@@ -215,14 +219,17 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
                     int bottom_idx = total - 1 - ch_state.scroll_offset;
                     bottom_idx = std::clamp(bottom_idx, 0, total - 1);
                     int top_idx = std::max(0, bottom_idx - visible_rows + 1);
-                    int msg_idx = std::clamp(top_idx + line_y, top_idx, bottom_idx);
+
+                    // Estimate clicked message — use Y position as a hint
+                    int line_y = mouse_y - mouse_tracker_.message_region().y;
+                    int hint_idx = std::clamp(top_idx + line_y, top_idx, bottom_idx);
 
                     static const std::regex url_re(R"(https?://\S{3,})");
-                    // Search clicked line first, then scan nearby messages for a URL
-                    for (int delta = 0; delta <= 3; ++delta) {
+                    // Search from hint outward across all visible messages
+                    for (int delta = 0; delta <= (bottom_idx - top_idx); ++delta) {
                         for (int d : {delta, -delta}) {
-                            if (d == 0 && delta != 0) continue;
-                            int idx = msg_idx + d;
+                            if (d != 0 && d == -delta) continue; // avoid duplicating delta=0
+                            int idx = hint_idx + d;
                             if (idx < top_idx || idx > bottom_idx) continue;
                             std::smatch m;
                             if (std::regex_search(ch_state.messages[idx].content, m, url_re)) {
@@ -689,6 +696,12 @@ void UIManager::run(SubmitFn on_submit,
                     PttToggleFn on_ptt_toggle,
                     OpenSettingsFn on_open_settings) {
     screen_.ForceHandleCtrlC(true);  // Let app handle Ctrl+C via CatchEvent (\x03)
+
+#ifndef _WIN32
+    // On Linux/macOS, ignore SIGINT so it reaches CatchEvent as \x03 instead
+    // of killing the process. FTXUI's ForceHandleCtrlC alone is not enough.
+    std::signal(SIGINT, SIG_IGN);
+#endif
 
 #ifdef _WIN32
     // Disable QuickEdit mode so right-click doesn't open the system context menu.
