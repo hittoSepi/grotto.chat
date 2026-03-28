@@ -62,7 +62,8 @@ Element parse_inline(const std::string& line) {
                 url.pop_back();
                 end--;
             }
-            parts.push_back(text(url) | color(palette::cyan()) | underlined);
+            // Wrap in hbox to prevent the underline from extending to full element width
+            parts.push_back(hbox({text(url) | color(palette::cyan()) | underlined}));
             i = end;
             continue;
         }
