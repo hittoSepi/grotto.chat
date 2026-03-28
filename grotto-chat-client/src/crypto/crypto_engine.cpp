@@ -464,7 +464,7 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
 
 // ── Key bundle handling ───────────────────────────────────────────────────────
 
-void CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& recipient_id) {
+bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& recipient_id) {
     // Build session_pre_key_bundle from the KeyBundle proto
     ec_public_key* identity_key   = nullptr;
     ec_public_key* signed_pre_key = nullptr;
@@ -499,7 +499,7 @@ void CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
         SIGNAL_UNREF(identity_key);
         SIGNAL_UNREF(signed_pre_key);
         if (one_time_key) SIGNAL_UNREF(one_time_key);
-        return;
+        return false;
     }
 
     signal_protocol_address addr{};
@@ -521,10 +521,11 @@ void CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
 
     if (rc != SG_SUCCESS) {
         spdlog::error("session_builder_process_pre_key_bundle failed for {}: {}", recipient_id, rc);
-        return;
+        return false;
     }
 
     spdlog::info("Established X3DH session with '{}'", recipient_id);
+    return true;
 }
 
 std::string CryptoEngine::safety_number(const std::string& peer_id, db::LocalStore& store) {

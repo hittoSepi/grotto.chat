@@ -209,8 +209,10 @@ void MessageHandler::handle_key_bundle(const Envelope& env) {
     }
 
     // Establish X3DH session with the recipient
-    crypto_.on_key_bundle(bundle, recipient_id);
-    spdlog::info("Established X3DH session with '{}'", recipient_id);
+    if (!crypto_.on_key_bundle(bundle, recipient_id)) {
+        push_system("Failed to establish session with " + recipient_id + " (key mismatch?)");
+        return;
+    }
 
     // Flush all pending plaintexts queued while waiting for this bundle
     auto it = pending_sends_.find(recipient_id);

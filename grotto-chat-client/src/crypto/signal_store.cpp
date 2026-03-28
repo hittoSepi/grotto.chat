@@ -260,19 +260,13 @@ int SignalStore::id_is_trusted(const signal_protocol_address* addr,
             std::vector<uint8_t>(key_data, key_data + key_len));
         return 1;
     }
-    // Verify the key matches what we stored
-    // Note: stored keys are Ed25519 format, but Signal Protocol sends X25519
-    // We need to handle both cases for backwards compatibility
-    if (stored->size() == 32 && key_len == 32) {
-        // Try to convert stored Ed25519 key to X25519 for comparison
-        std::array<uint8_t, 32> x25519_stored;
-        if (crypto_sign_ed25519_pk_to_curve25519(x25519_stored.data(),
-                                                  stored->data()) == 0) {
-            return (std::memcmp(x25519_stored.data(), key_data, 32) == 0) ? 1 : 0;
-        }
-        // Fallback: direct comparison
+    // libsignal always passes X25519 (Curve25519) keys here; stored keys are
+    // also X25519 (saved as-is by id_save_identity and the TOFU path above).
+    // Direct byte comparison is correct — no conversion needed.
+    if (stored->size() != key_len) {
+        spdlog::warn("Identity key size mismatch for {}: stored={} incoming={}", name, stored->size(), key_len);
+        return 0;
     }
-    if (stored->size() != key_len) return 0;
     return (std::memcmp(stored->data(), key_data, key_len) == 0) ? 1 : 0;
 }
 

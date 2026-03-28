@@ -71,7 +71,7 @@ public:
 
     // ── Key bundle handling ────────────────────────────────────────────────
     // Called when KEY_BUNDLE arrives. Establishes X3DH session.
-    void on_key_bundle(const KeyBundle& bundle, const std::string& recipient_id);
+    bool on_key_bundle(const KeyBundle& bundle, const std::string& recipient_id);
 
     // ── Safety number ─────────────────────────────────────────────────────
     std::string safety_number(const std::string& peer_id, db::LocalStore& store);
