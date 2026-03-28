@@ -387,6 +387,7 @@ KeyUpload CryptoEngine::prepare_key_upload(int num_opks) {
         if (opk_pub_key) SIGNAL_UNREF(opk_pub_key);
     }
     next_opk_id_ += num_opks;
+    local_store_->store_pre_key_counter(next_opk_id_);
     return ku;
 }
 
