@@ -28,6 +28,27 @@ using namespace ftxui;
 
 namespace grotto::ui {
 
+namespace {
+
+std::optional<std::string> extract_bracketed_paste(std::string_view input) {
+    constexpr std::string_view kStart = "\x1b[200~";
+    constexpr std::string_view kEnd = "\x1b[201~";
+    if (!input.starts_with(kStart)) {
+        return std::nullopt;
+    }
+    auto end_pos = input.rfind(kEnd);
+    if (end_pos == std::string_view::npos || end_pos < kStart.size()) {
+        return std::nullopt;
+    }
+    return std::string(input.substr(kStart.size(), end_pos - kStart.size()));
+}
+
+bool is_shift_insert_paste(std::string_view input) {
+    return input == "\x1b[2;2~" || input == "\x1b[2~";
+}
+
+} // namespace
+
 UIManager::UIManager(AppState& state, ClientConfig& cfg)
     : state_(state), cfg_(cfg) {
     // Initialize user list panel config from persisted settings
@@ -724,6 +745,18 @@ void UIManager::run(SubmitFn on_submit,
         
         if (event == Event::Custom) {
             // Posted by notify() — just triggers a redraw
+            return true;
+        }
+        if (auto pasted = extract_bracketed_paste(event.input())) {
+            tab_completer_.reset();
+            input_line_.insert_text(*pasted);
+            return true;
+        }
+        if (is_shift_insert_paste(event.input())) {
+            if (auto clipboard = read_from_clipboard()) {
+                tab_completer_.reset();
+                input_line_.insert_text(*clipboard);
+            }
             return true;
         }
         if (event.input() == "\x16") {
