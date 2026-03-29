@@ -253,7 +253,8 @@ bool App::init(const std::filesystem::path& config_path,
     // ── Link Previewer ────────────────────────────────────────────────────
     if (cfg_.preview.enabled) {
         previewer_ = std::make_unique<LinkPreviewer>(
-            *store_, cfg_.preview.fetch_timeout, cfg_.preview.max_cache);
+            *store_, cfg_.preview.fetch_timeout, cfg_.preview.max_cache,
+            cfg_.preview.inline_images, cfg_.preview.image_columns, cfg_.preview.image_rows);
         previewer_->start();
     }
 
@@ -753,10 +754,20 @@ void App::trigger_previews(const std::string& channel_id, const std::string& tex
             if (!r.success) return;
             state_.post_ui([this, channel_id, r = std::move(r)]() mutable {
                 Message pm;
-                pm.type      = Message::Type::System;
+                pm.type      = r.is_image ? Message::Type::Preview : Message::Type::System;
                 pm.sender_id = "preview";
-                pm.content   = "\u250C " + r.title +
-                               (r.description.empty() ? "" : " \u2014 " + r.description);
+                if (r.is_image) {
+                    pm.content = r.title;
+                    if (!r.description.empty()) {
+                        pm.content += "\n" + r.description;
+                    }
+                    if (!r.image_preview.empty()) {
+                        pm.content += "\n" + r.image_preview;
+                    }
+                } else {
+                    pm.content = "\u250C " + r.title +
+                                 (r.description.empty() ? "" : " \u2014 " + r.description);
+                }
                 pm.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count();
                 state_.push_message(channel_id, std::move(pm));

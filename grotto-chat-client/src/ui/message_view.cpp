@@ -55,6 +55,42 @@ std::vector<RenderedLine> render_one_lines(const Message& msg,
     const std::string ts = format_ts(msg.timestamp_ms, ts_fmt) + " ";
     width = std::max(1, width);
 
+    if (msg.type == Message::Type::Preview) {
+        std::vector<RenderedLine> rows;
+        std::vector<std::string> preview_lines;
+        size_t start = 0;
+        while (start <= msg.content.size()) {
+            size_t end = msg.content.find('\n', start);
+            if (end == std::string::npos) {
+                preview_lines.push_back(msg.content.substr(start));
+                break;
+            }
+            preview_lines.push_back(msg.content.substr(start, end - start));
+            start = end + 1;
+        }
+        if (preview_lines.empty()) {
+            preview_lines.push_back("");
+        }
+
+        const int content_width = std::max(1, width - visible_width(ts));
+        for (size_t i = 0; i < preview_lines.size(); ++i) {
+            std::string line = preview_lines[i];
+            if (visible_width(line) > content_width) {
+                line.resize(static_cast<size_t>(content_width));
+            }
+            const std::string ts_prefix = (i == 0 ? ts : std::string(ts.size(), ' '));
+            rows.push_back({
+                message_index,
+                ts_prefix + line,
+                hbox({
+                    text(ts_prefix) | color(palette::comment()),
+                    text(line) | color(palette::blue1()) | flex,
+                })
+            });
+        }
+        return rows;
+    }
+
     if (msg.type == Message::Type::System || msg.type == Message::Type::VoiceEvent) {
         const std::string first_prefix = "• ";
         const std::string continuation_prefix(visible_width(first_prefix), ' ');

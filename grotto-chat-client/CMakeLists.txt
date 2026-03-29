@@ -144,6 +144,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(miniaudio)
 
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(stb)
+
 if(NOT TARGET miniaudio::miniaudio)
     add_library(miniaudio_hdr INTERFACE)
     target_include_directories(miniaudio_hdr INTERFACE ${miniaudio_SOURCE_DIR})
@@ -221,6 +229,7 @@ target_include_directories(grotto-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_BINARY_DIR}
     ${signal_protocol_c_SOURCE_DIR}/src
+    ${stb_SOURCE_DIR}
     ${Boost_INCLUDE_DIRS}
 )
 

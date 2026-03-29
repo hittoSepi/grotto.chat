@@ -49,6 +49,9 @@ struct PreviewConfig {
     bool enabled       = true;
     int  fetch_timeout = 5;
     int  max_cache     = 200;
+    bool inline_images = true;
+    int  image_columns = 40;
+    int  image_rows    = 16;
 };
 
 struct TlsConfig {

@@ -101,6 +101,9 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (p.contains("enabled"))       cfg.preview.enabled       = toml::find<bool>(p, "enabled");
             if (p.contains("fetch_timeout")) cfg.preview.fetch_timeout = toml::find<int>(p, "fetch_timeout");
             if (p.contains("max_cache"))     cfg.preview.max_cache     = toml::find<int>(p, "max_cache");
+            if (p.contains("inline_images")) cfg.preview.inline_images = toml::find<bool>(p, "inline_images");
+            if (p.contains("image_columns")) cfg.preview.image_columns = toml::find<int>(p, "image_columns");
+            if (p.contains("image_rows"))    cfg.preview.image_rows    = toml::find<int>(p, "image_rows");
         }
 
         if (data.contains("tls")) {
@@ -253,6 +256,9 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["preview"]["enabled"] = cfg.preview.enabled;
     data["preview"]["fetch_timeout"] = cfg.preview.fetch_timeout;
     data["preview"]["max_cache"] = cfg.preview.max_cache;
+    data["preview"]["inline_images"] = cfg.preview.inline_images;
+    data["preview"]["image_columns"] = cfg.preview.image_columns;
+    data["preview"]["image_rows"] = cfg.preview.image_rows;
 
     // Patch TLS section
     data["tls"]["verify_peer"] = cfg.tls.verify_peer;
@@ -384,6 +390,9 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             if (p.contains("enabled")) cfg.preview.enabled = toml::find<bool>(p, "enabled");
             if (p.contains("fetch_timeout")) cfg.preview.fetch_timeout = toml::find<int>(p, "fetch_timeout");
             if (p.contains("max_cache")) cfg.preview.max_cache = toml::find<int>(p, "max_cache");
+            if (p.contains("inline_images")) cfg.preview.inline_images = toml::find<bool>(p, "inline_images");
+            if (p.contains("image_columns")) cfg.preview.image_columns = toml::find<int>(p, "image_columns");
+            if (p.contains("image_rows")) cfg.preview.image_rows = toml::find<int>(p, "image_rows");
         }
         
         // Import TLS settings

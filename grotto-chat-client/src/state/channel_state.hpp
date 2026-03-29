@@ -11,7 +11,7 @@ struct Message {
     std::string content;
     int64_t     timestamp_ms = 0;
 
-    enum class Type { Chat, System, VoiceEvent } type = Type::Chat;
+    enum class Type { Chat, System, VoiceEvent, Preview } type = Type::Chat;
 
     // Pending link preview (filled asynchronously)
     struct Preview {

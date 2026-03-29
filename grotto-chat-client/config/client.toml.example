@@ -41,6 +41,9 @@ turn_password = "replace-with-your-turn-password"
 enabled = true
 fetch_timeout = 5
 max_cache = 200
+inline_images = true
+image_columns = 40
+image_rows = 16
 
 [tls]
 verify_peer = true

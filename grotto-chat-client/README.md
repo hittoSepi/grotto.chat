@@ -93,6 +93,9 @@ turn_password = "secret"       # Optional TURN credential
 enabled       = true           # Enable link previews
 fetch_timeout = 5              # Fetch timeout in seconds
 max_cache     = 200            # Number of previews to cache
+inline_images = true           # Try inline text thumbnails for direct image links
+image_columns = 40             # Width for generated image thumbnails
+image_rows    = 16             # Height for generated image thumbnails
 
 [tls]
 verify_peer = true             # Verify server TLS certificate (keep true in production)
