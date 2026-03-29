@@ -1,19 +1,24 @@
 # TODOS
 
-    - [ ] servulle jää quitanneet nimet kummitelemaan (servun ongelma)
+    - [ ] servulle jää quitanneet nimet kummitelemaan, vai pitäisikö ne näyttää jotenkin offline (servun ongelma)
     - [ ] servulle yhteyden tekeminen "hidas", katso `dev_docs/desktop-client/becoming-online.png`
       - voisi ainakin ilmoittaa paremmin että vielä connectaa
-    - [ ] ctrl+c sammuttaa vieläkin ohjelman.
+    - [ ] ctrl+c sammuttaa vieläkin ohjelman. (mahdoton ongelma?)
+    - [ ] aliaksia slash komennoille esim /join toimisi /j ja niin edelleen
+    - [ ] server tabissa ei tarvi näyttää käyttäjä sidepanelia 
+    - [ ] login ruutu on liian kapea, vähän leveämmänksi
     - [x] jos kirjoitat /help se ei mahdu koko ruutuun mutta rullausalue ei muutu
     - [x] ei koko ruudun levyistä underscorea, vain tekstin kohdalle. näyttää nyt vähä hölmöltä
     - [x] paste ei toimi ainakaan powershellillä ssh läpi clientille
-    - [x] tekstin valinta chat-ruutuun
+    - [~] tekstin valinta chat-ruutuun
+      - renderöi tekstin valinta että näkee valitun tekstin
     - [x] hiiren click koordinaatit saattavat olla väärin
     - [x] right click linkin avaus toimii aika randomisti, clientillä toimii ku right klikkaa vasempaan yläkulmaan ja ps ssh client ei ollenkaan.
+    - [x] safe native inline graphics v2 (kitty+sixel, auto-on) valmis ja manuaalitestattu
     - [x] priva viestin vastaanottajalla aukeaa tabi omalla nimellä, eikä sen kuka lähettänyty
     - [x] priva viestin vastaanottajalla ei päivity userlist
     - [x] jos msg vastaanottajaa ei ole, anna palautetta userille
-    - [x] parempi /help ja jotkin alkuohjeet miten toimia kun servulle päästy, peruskäyttäjä ei välttämättä tiedä että pitää /join #<kanava> ja niin edelleen
+    - [ ] parempi /help ja jotkin alkuohjeet miten toimia kun servulle päästy, peruskäyttäjä ei välttämättä tiedä että pitää /join #<kanava> ja niin edelleen
     - [x] käyttäjän viestin pituudessa pitää olla raja
       - client plaintext max 4096 tavua
       - server encrypted chat payload configurable `max_chat_payload_bytes`

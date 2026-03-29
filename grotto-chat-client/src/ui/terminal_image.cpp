@@ -21,13 +21,6 @@ namespace grotto::ui {
 
 namespace {
 
-enum class TerminalImageProtocol {
-    None,
-    Kitty,
-    ITerm2,
-    Sixel,
-};
-
 struct FetchedImage {
     std::string content_type;
     std::vector<unsigned char> bytes;
@@ -99,37 +92,51 @@ bool sixel_supported_environment() {
     return false;
 }
 
-TerminalImageProtocol detect_protocol() {
+bool kitty_supported_environment() {
+    if (const char* term_program = std::getenv("TERM_PROGRAM")) {
+        if (std::string(term_program) == "WezTerm") {
+            return true;
+        }
+    }
+
+    if (std::getenv("KITTY_WINDOW_ID")) {
+        return true;
+    }
+
+    if (const char* term = std::getenv("TERM")) {
+        std::string value = to_lower_ascii(term);
+        if (value.find("kitty") != std::string::npos) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+TerminalInlineProtocol detect_protocol() {
     if (g_terminal_graphics_mode == TerminalGraphicsMode::Off) {
-        return TerminalImageProtocol::None;
+        return TerminalInlineProtocol::None;
     }
 
     if (const char* term_program = std::getenv("TERM_PROGRAM")) {
         std::string value = term_program;
         if (value == "iTerm.app") {
-            return TerminalImageProtocol::ITerm2;
+            return TerminalInlineProtocol::ITerm2;
         }
         if (value == "WezTerm") {
-            return TerminalImageProtocol::Kitty;
+            return TerminalInlineProtocol::Kitty;
         }
     }
 
-    if (std::getenv("KITTY_WINDOW_ID")) {
-        return TerminalImageProtocol::Kitty;
-    }
-
-    if (const char* term = std::getenv("TERM")) {
-        std::string value = term;
-        if (value.find("kitty") != std::string::npos) {
-            return TerminalImageProtocol::Kitty;
-        }
+    if (kitty_supported_environment()) {
+        return TerminalInlineProtocol::Kitty;
     }
 
     if (sixel_supported_environment()) {
-        return TerminalImageProtocol::Sixel;
+        return TerminalInlineProtocol::Sixel;
     }
 
-    return TerminalImageProtocol::None;
+    return TerminalInlineProtocol::None;
 }
 
 std::optional<FetchedImage> fetch_image_bytes(const std::string& url) {
@@ -546,31 +553,40 @@ void configure_terminal_graphics(TerminalGraphicsMode mode) {
     g_terminal_graphics_mode = mode;
 }
 
+TerminalInlineProtocol terminal_inline_protocol() {
+    return detect_protocol();
+}
+
+TerminalInlineProtocol terminal_inline_protocol_for_compositor() {
+    if (g_terminal_graphics_mode != TerminalGraphicsMode::Auto) {
+        return TerminalInlineProtocol::None;
+    }
+
+    const TerminalInlineProtocol protocol = detect_protocol();
+    if (protocol == TerminalInlineProtocol::Kitty ||
+        protocol == TerminalInlineProtocol::Sixel) {
+        return protocol;
+    }
+
+    return TerminalInlineProtocol::None;
+}
+
 bool terminal_inline_images_supported() {
-    return detect_protocol() != TerminalImageProtocol::None;
+    return terminal_inline_protocol_for_compositor() != TerminalInlineProtocol::None;
 }
 
 bool terminal_uses_compact_image_preview() {
-    if (g_terminal_graphics_mode == TerminalGraphicsMode::Off ||
-        g_terminal_graphics_mode == TerminalGraphicsMode::ViewerOnly) {
-        return false;
-    }
-    return detect_protocol() == TerminalImageProtocol::Sixel;
+    return terminal_inline_protocol_for_compositor() == TerminalInlineProtocol::Sixel;
 }
 
 bool terminal_inline_native_graphics_enabled() {
-    const char* value = std::getenv("GROTTO_EXPERIMENTAL_INLINE_NATIVE_IMAGES");
-    if (!value) {
-        return false;
-    }
-    std::string normalized = to_lower_ascii(value);
-    return normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on";
+    return terminal_inline_protocol_for_compositor() != TerminalInlineProtocol::None;
 }
 
 bool display_inline_image_from_url(ftxui::ScreenInteractive& screen,
                                    const std::string& url) {
-    const TerminalImageProtocol protocol = detect_protocol();
-    if (protocol == TerminalImageProtocol::None) {
+    const TerminalInlineProtocol protocol = detect_protocol();
+    if (protocol == TerminalInlineProtocol::None) {
         return false;
     }
 
@@ -581,9 +597,9 @@ bool display_inline_image_from_url(ftxui::ScreenInteractive& screen,
 
     bool shown = false;
     auto show = screen.WithRestoredIO([&] {
-        if (protocol == TerminalImageProtocol::ITerm2) {
+        if (protocol == TerminalInlineProtocol::ITerm2) {
             shown = show_iterm2_image(*image);
-        } else if (protocol == TerminalImageProtocol::Kitty) {
+        } else if (protocol == TerminalInlineProtocol::Kitty) {
             shown = show_kitty_image(*image);
         } else {
             shown = show_sixel_image(*image);
@@ -601,8 +617,8 @@ bool display_inline_image_from_url(ftxui::ScreenInteractive& screen,
 bool display_inline_image(ftxui::ScreenInteractive& screen,
                           const InlineImageThumbnail& thumbnail,
                           const std::string& title) {
-    const TerminalImageProtocol protocol = detect_protocol();
-    if (protocol == TerminalImageProtocol::None ||
+    const TerminalInlineProtocol protocol = detect_protocol();
+    if (protocol == TerminalInlineProtocol::None ||
         thumbnail.rgba.empty() ||
         thumbnail.width <= 0 ||
         thumbnail.height <= 0) {
@@ -615,9 +631,9 @@ bool display_inline_image(ftxui::ScreenInteractive& screen,
             std::cout << title << "\n";
         }
 
-        if (protocol == TerminalImageProtocol::Sixel) {
+        if (protocol == TerminalInlineProtocol::Sixel) {
             shown = show_sixel_image(thumbnail.rgba.data(), thumbnail.width, thumbnail.height);
-        } else if (protocol == TerminalImageProtocol::Kitty) {
+        } else if (protocol == TerminalInlineProtocol::Kitty) {
             shown = show_kitty_rgba(thumbnail.rgba.data(), thumbnail.width, thumbnail.height);
         } else {
             shown = false;
@@ -634,7 +650,7 @@ bool display_inline_image(ftxui::ScreenInteractive& screen,
 }
 
 void clear_inline_graphics_layer() {
-    if (detect_protocol() == TerminalImageProtocol::Kitty) {
+    if (kitty_supported_environment()) {
         clear_kitty_inline_images();
         std::cout.flush();
     }

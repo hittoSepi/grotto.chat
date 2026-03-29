@@ -79,14 +79,11 @@ const GraphicsBackend& active_backend() {
     static const SixelBackend sixel_backend;
     static const KittyBackend kitty_backend;
 
-    if (!terminal_inline_native_graphics_enabled()) {
-        return color_backend;
-    }
-
-    if (terminal_uses_compact_image_preview()) {
+    const TerminalInlineProtocol protocol = terminal_inline_protocol_for_compositor();
+    if (protocol == TerminalInlineProtocol::Sixel) {
         return sixel_backend;
     }
-    if (terminal_inline_images_supported()) {
+    if (protocol == TerminalInlineProtocol::Kitty) {
         return kitty_backend;
     }
     return color_backend;

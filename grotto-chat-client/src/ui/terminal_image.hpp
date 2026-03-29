@@ -16,8 +16,17 @@ enum class TerminalGraphicsMode {
     ViewerOnly,
 };
 
+enum class TerminalInlineProtocol {
+    None,
+    Kitty,
+    ITerm2,
+    Sixel,
+};
+
 TerminalGraphicsMode parse_terminal_graphics_mode(std::string_view value);
 void configure_terminal_graphics(TerminalGraphicsMode mode);
+TerminalInlineProtocol terminal_inline_protocol();
+TerminalInlineProtocol terminal_inline_protocol_for_compositor();
 bool terminal_inline_images_supported();
 bool terminal_uses_compact_image_preview();
 bool terminal_inline_native_graphics_enabled();

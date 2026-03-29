@@ -6,13 +6,87 @@ namespace grotto::ui {
 
 namespace {
 
-bool has_native_commands(const GraphicsFrame& frame) {
+GraphicsBackendKind backend_for_protocol(TerminalInlineProtocol protocol) {
+    if (protocol == TerminalInlineProtocol::Kitty) {
+        return GraphicsBackendKind::Kitty;
+    }
+    if (protocol == TerminalInlineProtocol::Sixel) {
+        return GraphicsBackendKind::Sixel;
+    }
+    return GraphicsBackendKind::ColorBlocks;
+}
+
+bool has_backend_commands(const GraphicsFrame& frame, GraphicsBackendKind backend) {
     for (const auto& command : frame.commands) {
-        if (command.backend != GraphicsBackendKind::ColorBlocks) {
+        if (command.backend == backend) {
             return true;
         }
     }
     return false;
+}
+
+std::vector<GraphicsDrawCommand> filter_commands(const GraphicsFrame& frame,
+                                                 GraphicsBackendKind backend) {
+    std::vector<GraphicsDrawCommand> filtered;
+    for (const auto& command : frame.commands) {
+        if (command.backend == backend) {
+            filtered.push_back(command);
+        }
+    }
+    return filtered;
+}
+
+GraphicsBackendKind first_native_backend(const GraphicsFrame& frame) {
+    for (const auto& command : frame.commands) {
+        if (command.backend != GraphicsBackendKind::ColorBlocks) {
+            return command.backend;
+        }
+    }
+    return GraphicsBackendKind::ColorBlocks;
+}
+
+bool same_backend_commands(const GraphicsFrame& a,
+                           const GraphicsFrame& b,
+                           GraphicsBackendKind backend) {
+    if (a.viewport_x != b.viewport_x ||
+        a.viewport_y != b.viewport_y ||
+        a.viewport_width != b.viewport_width ||
+        a.viewport_height != b.viewport_height) {
+        return false;
+    }
+
+    size_t ia = 0;
+    size_t ib = 0;
+    while (true) {
+        while (ia < a.commands.size() &&
+               a.commands[ia].backend != backend) {
+            ++ia;
+        }
+        while (ib < b.commands.size() &&
+               b.commands[ib].backend != backend) {
+            ++ib;
+        }
+
+        const bool done_a = ia >= a.commands.size();
+        const bool done_b = ib >= b.commands.size();
+        if (done_a || done_b) {
+            return done_a == done_b;
+        }
+
+        const auto& ca = a.commands[ia];
+        const auto& cb = b.commands[ib];
+        if (ca.message_index != cb.message_index ||
+            ca.block_index != cb.block_index ||
+            ca.viewport_x != cb.viewport_x ||
+            ca.viewport_y != cb.viewport_y ||
+            ca.width != cb.width ||
+            ca.height != cb.height) {
+            return false;
+        }
+
+        ++ia;
+        ++ib;
+    }
 }
 
 } // namespace
@@ -25,27 +99,32 @@ bool GraphicsCompositor::needs_full_clear(const GraphicsFrame& frame) const {
 }
 
 void GraphicsCompositor::commit(GraphicsFrame frame) {
-    const bool native_enabled = terminal_inline_native_graphics_enabled();
-    const bool has_native = has_native_commands(frame);
+    const TerminalInlineProtocol protocol = terminal_inline_protocol_for_compositor();
+    const GraphicsBackendKind active_backend = backend_for_protocol(protocol);
+    const bool native_enabled = active_backend != GraphicsBackendKind::ColorBlocks;
+    const bool has_active_commands = has_backend_commands(frame, active_backend);
 
     if (needs_full_clear(frame)) {
         requires_full_clear_ = true;
     }
 
     if (!native_enabled) {
+        if (had_native_graphics_) {
+            clear_inline_graphics_layer();
+        }
         last_frame_ = std::move(frame);
-        had_native_graphics_ = has_native;
+        had_native_graphics_ = false;
         requires_full_clear_ = false;
         return;
     }
 
-    if (!has_native && !had_native_graphics_) {
+    if (!has_active_commands && !had_native_graphics_) {
         last_frame_ = std::move(frame);
         requires_full_clear_ = false;
         return;
     }
 
-    if (!has_native && had_native_graphics_) {
+    if (!has_active_commands && had_native_graphics_) {
         clear_inline_graphics_layer();
         had_native_graphics_ = false;
         last_frame_ = std::move(frame);
@@ -53,14 +132,23 @@ void GraphicsCompositor::commit(GraphicsFrame frame) {
         return;
     }
 
-    if (requires_full_clear_) {
+    const bool backend_changed = had_native_graphics_ &&
+                                 first_native_backend(last_frame_) != active_backend;
+
+    if (backend_changed || requires_full_clear_) {
         clear_inline_graphics_layer();
     }
 
-    // Native inline commit stays disabled for now until a proven safe
-    // main-thread draw path exists for the active terminal backend.
+    bool should_draw = requires_full_clear_ || !had_native_graphics_;
+    if (!should_draw) {
+        should_draw = !same_backend_commands(frame, last_frame_, active_backend);
+    }
+    if (should_draw) {
+        draw_inline_graphics_commands(filter_commands(frame, active_backend));
+    }
+
     last_frame_ = std::move(frame);
-    had_native_graphics_ = has_native;
+    had_native_graphics_ = true;
     requires_full_clear_ = false;
 }
 
