@@ -513,7 +513,8 @@ void Session::handle_auth_response(const AuthResponse& auth) {
                 auth.user_id(),
                 std::vector<uint8_t>(auth.signed_prekey().begin(), auth.signed_prekey().end()),
                 std::vector<uint8_t>(auth.spk_sig().begin(), auth.spk_sig().end()),
-                auth.spk_id());
+                auth.spk_id(),
+                0);
         }
         if (!auth.password().empty() && !us.set_password(auth.user_id(), auth.password())) {
             spdlog::warn("[{}] Failed to store recovery password for new user: {}",
@@ -539,7 +540,8 @@ void Session::handle_auth_response(const AuthResponse& auth) {
                             auth.user_id(),
                             std::vector<uint8_t>(auth.signed_prekey().begin(), auth.signed_prekey().end()),
                             std::vector<uint8_t>(auth.spk_sig().begin(), auth.spk_sig().end()),
-                            auth.spk_id());
+                            auth.spk_id(),
+                            0);
                     }
                 } else {
                     Error err;
@@ -573,7 +575,8 @@ void Session::handle_auth_response(const AuthResponse& auth) {
                 auth.user_id(),
                 std::vector<uint8_t>(auth.signed_prekey().begin(), auth.signed_prekey().end()),
                 std::vector<uint8_t>(auth.spk_sig().begin(), auth.spk_sig().end()),
-                auth.spk_id());
+                auth.spk_id(),
+                0);
             spdlog::debug("[{}] Refreshed SPK during auth for user {} (spk_id={})",
                           remote_endpoint_, auth.user_id(), auth.spk_id());
         }
@@ -748,7 +751,8 @@ void Session::handle_key_upload(const KeyUpload& ku) {
             user_id_,
             std::vector<uint8_t>(ku.signed_prekey().begin(), ku.signed_prekey().end()),
             std::vector<uint8_t>(ku.spk_signature().begin(), ku.spk_signature().end()),
-            ku.spk_id());
+            ku.spk_id(),
+            ku.registration_id());
     }
 
     // Replace the user's OPK pool with the newly uploaded batch so stale
@@ -786,6 +790,7 @@ void Session::handle_key_request(const KeyRequest& kr) {
         bundle.set_signed_prekey(spk->spk_pub.data(), spk->spk_pub.size());
         bundle.set_spk_signature(spk->spk_sig.data(), spk->spk_sig.size());
         bundle.set_spk_id(spk->spk_id);
+        bundle.set_registration_id(spk->registration_id);
     }
 
     if (!opk.empty()) {

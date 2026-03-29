@@ -48,6 +48,10 @@ void SignalStore::set_identity_key(const std::array<uint8_t, 32>& pub_key,
     identity_key_set_ = true;
 }
 
+void SignalStore::set_registration_id(uint32_t registration_id) {
+    registration_id_ = registration_id > 0 ? registration_id : 1;
+}
+
 void SignalStore::register_with_context(signal_protocol_store_context* ctx) {
     // ── Session store ─────────────────────────────────────────────────────
     session_store_.load_session_func            = session_load;
@@ -299,9 +303,9 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
     return *public_data ? SG_SUCCESS : SG_ERR_NOMEM;
 }
 
-int SignalStore::id_get_local_registration(void* /*ud*/, uint32_t* registration_id) {
-    // Use a fixed device id (single-device client)
-    *registration_id = 1;
+int SignalStore::id_get_local_registration(void* ud, uint32_t* registration_id) {
+    auto* self = static_cast<SignalStore*>(ud);
+    *registration_id = self->registration_id_;
     return SG_SUCCESS;
 }
 

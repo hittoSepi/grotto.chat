@@ -20,6 +20,7 @@ struct SignedPrekey {
     std::vector<uint8_t> spk_pub;
     std::vector<uint8_t> spk_sig;
     uint32_t spk_id = 0;
+    uint32_t registration_id = 0;
 };
 
 class UserStore {
@@ -75,7 +76,8 @@ public:
     void upsert_signed_prekey(const std::string& user_id,
                                const std::vector<uint8_t>& spk_pub,
                                const std::vector<uint8_t>& spk_sig,
-                               uint32_t spk_id);
+                               uint32_t spk_id,
+                               uint32_t registration_id);
 
     std::optional<SignedPrekey> get_signed_prekey(const std::string& user_id);
 

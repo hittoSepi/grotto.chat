@@ -115,25 +115,28 @@ void UserStore::clear_key_material(const std::string& user_id) {
 void UserStore::upsert_signed_prekey(const std::string& user_id,
                                       const std::vector<uint8_t>& spk_pub,
                                       const std::vector<uint8_t>& spk_sig,
-                                      uint32_t spk_id) {
+                                      uint32_t spk_id,
+                                      uint32_t registration_id) {
     std::lock_guard<std::mutex> lock(db_.mutex());
     SQLite::Statement q(db_.get(),
-        "INSERT OR REPLACE INTO signed_prekeys (user_id, spk_pub, spk_sig, spk_id, uploaded_at)"
-        " VALUES (?, ?, ?, ?, ?)");
+        "INSERT OR REPLACE INTO signed_prekeys (user_id, spk_pub, spk_sig, spk_id, registration_id, uploaded_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)");
     q.bind(1, user_id);
     q.bind(2, spk_pub.data(), static_cast<int>(spk_pub.size()));
     q.bind(3, spk_sig.data(), static_cast<int>(spk_sig.size()));
     q.bind(4, static_cast<int>(spk_id));
-    q.bind(5, now_unix());
+    q.bind(5, static_cast<int>(registration_id));
+    q.bind(6, now_unix());
     q.exec();
-    spdlog::debug("UserStore: upserted SPK for user {} (spk_id={})", user_id, spk_id);
+    spdlog::debug("UserStore: upserted SPK for user {} (spk_id={}, registration_id={})",
+                  user_id, spk_id, registration_id);
 }
 
 std::optional<SignedPrekey> UserStore::get_signed_prekey(const std::string& user_id) {
     std::lock_guard<std::mutex> lock(db_.mutex());
     try {
         SQLite::Statement q(db_.get(),
-            "SELECT spk_pub, spk_sig, spk_id FROM signed_prekeys WHERE user_id = ?");
+            "SELECT spk_pub, spk_sig, spk_id, registration_id FROM signed_prekeys WHERE user_id = ?");
         q.bind(1, user_id);
         if (q.executeStep()) {
             SignedPrekey spk;
@@ -144,6 +147,7 @@ std::optional<SignedPrekey> UserStore::get_signed_prekey(const std::string& user
             spk.spk_pub.assign(pub_data, pub_data + pub.getBytes());
             spk.spk_sig.assign(sig_data, sig_data + sig.getBytes());
             spk.spk_id = static_cast<uint32_t>(q.getColumn(2).getInt());
+            spk.registration_id = static_cast<uint32_t>(q.getColumn(3).getInt());
             return spk;
         }
         return std::nullopt;

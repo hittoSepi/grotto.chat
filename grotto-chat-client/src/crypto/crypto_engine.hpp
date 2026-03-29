@@ -97,6 +97,7 @@ private:
     // Current SPK (generated during init)
     Identity::SignedPreKey        spk_;
     uint32_t                      next_opk_id_ = 1;
+    uint32_t                      registration_id_ = 1;
 
     // Pending: recipients we're waiting for key bundles for
     std::unordered_map<std::string, std::string> pending_plaintexts_;

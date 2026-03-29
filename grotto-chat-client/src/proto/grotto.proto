@@ -95,6 +95,7 @@ message KeyBundle {
   bytes  one_time_prekey    = 5;  // X25519 one-time pre-key (removed after use)
   uint32 opk_id             = 6;
   string recipient_for      = 7;  // user_id whose bundle was requested (echoed by server)
+  uint32 registration_id    = 8;  // Signal registration id for this device
 }
 
 message KeyUpload {
@@ -103,6 +104,7 @@ message KeyUpload {
   uint32             spk_id           = 3;
   repeated bytes     one_time_prekeys  = 4;
   repeated uint32    opk_ids          = 5;
+  uint32             registration_id   = 6;
 }
 
 message KeyRequest {

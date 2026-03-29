@@ -24,6 +24,7 @@ public:
     // The private key is needed for group session operations.
     void set_identity_key(const std::array<uint8_t, 32>& pub_key,
                           const std::array<uint8_t, 64>& priv_key);
+    void set_registration_id(uint32_t registration_id);
 
 private:
     db::LocalStore&  local_store_;
@@ -33,6 +34,7 @@ private:
     std::array<uint8_t, 32> identity_pub_{};
     std::array<uint8_t, 64> identity_priv_{};
     bool identity_key_set_ = false;
+    uint32_t registration_id_ = 1;
 
     signal_protocol_session_store        session_store_{};
     signal_protocol_pre_key_store        pre_key_store_{};

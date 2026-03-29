@@ -42,6 +42,8 @@ public:
     bool contains_pre_key(uint32_t id);
     uint32_t load_pre_key_counter();  // Returns next pre-key ID to use
     void store_pre_key_counter(uint32_t counter);
+    uint32_t load_registration_id();
+    void store_registration_id(uint32_t registration_id);
 
     // ── Signal: Signed pre-keys ───────────────────────────────────────────
     std::optional<std::vector<uint8_t>> load_signed_pre_key(uint32_t id);

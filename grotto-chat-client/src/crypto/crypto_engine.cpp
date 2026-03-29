@@ -572,6 +572,16 @@ bool CryptoEngine::init(db::LocalStore& store, const ClientConfig& cfg,
     next_opk_id_ = local_store_->load_pre_key_counter();
     if (next_opk_id_ == 0) next_opk_id_ = 1;
 
+    registration_id_ = local_store_->load_registration_id();
+    if (registration_id_ == 0) {
+        registration_id_ = static_cast<uint32_t>(randombytes_uniform(16380)) + 1;
+        local_store_->store_registration_id(registration_id_);
+        spdlog::info("Generated persisted registration id={}", registration_id_);
+    } else {
+        spdlog::info("Loaded persisted registration id={}", registration_id_);
+    }
+    signal_store_->set_registration_id(registration_id_);
+
     // Group session
     group_session_ = std::make_unique<GroupSession>(store_ctx_, signal_ctx_);
     group_session_->set_local_identity(user_id);
@@ -585,6 +595,7 @@ KeyUpload CryptoEngine::prepare_key_upload(int num_opks) {
     ku.set_signed_prekey(spk_.key_pair.pub.data(), spk_.key_pair.pub.size());
     ku.set_spk_signature(spk_.signature.data(), spk_.signature.size());
     ku.set_spk_id(spk_.id);
+    ku.set_registration_id(registration_id_);
 
     auto opks = identity_.generate_one_time_prekeys(next_opk_id_, num_opks);
     for (auto& [id, kp] : opks) {
@@ -1042,7 +1053,7 @@ bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
 
     session_pre_key_bundle* pkb = nullptr;
     int rc = session_pre_key_bundle_create(&pkb,
-        1,  // registration_id
+        bundle.registration_id() > 0 ? bundle.registration_id() : 1,
         1,  // device_id
         bundle.opk_id(), one_time_key,
         bundle.spk_id(), signed_pre_key,

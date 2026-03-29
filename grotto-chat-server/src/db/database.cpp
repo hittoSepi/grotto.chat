@@ -29,6 +29,7 @@ void Database::execute_schema() {
         "  spk_pub     BLOB NOT NULL,"
         "  spk_sig     BLOB NOT NULL,"
         "  spk_id      INTEGER NOT NULL DEFAULT 0,"
+        "  registration_id INTEGER NOT NULL DEFAULT 0,"
         "  uploaded_at INTEGER NOT NULL,"
         "  PRIMARY KEY (user_id)"
         ")"
@@ -36,15 +37,21 @@ void Database::execute_schema() {
     // Compatibility: older SQLite doesn't support ALTER TABLE ... ADD COLUMN IF NOT EXISTS
     {
         bool has_spk_id = false;
+        bool has_registration_id = false;
         SQLite::Statement pragma(db_, "PRAGMA table_info(signed_prekeys)");
         while (pragma.executeStep()) {
             if (pragma.getColumn(1).getString() == std::string("spk_id")) {
                 has_spk_id = true;
-                break;
+            }
+            if (pragma.getColumn(1).getString() == std::string("registration_id")) {
+                has_registration_id = true;
             }
         }
         if (!has_spk_id) {
             db_.exec("ALTER TABLE signed_prekeys ADD COLUMN spk_id INTEGER NOT NULL DEFAULT 0");
+        }
+        if (!has_registration_id) {
+            db_.exec("ALTER TABLE signed_prekeys ADD COLUMN registration_id INTEGER NOT NULL DEFAULT 0");
         }
     }
 
