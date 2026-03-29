@@ -307,6 +307,34 @@ target_link_libraries(test-config PRIVATE
 )
 add_test(NAME config-tests COMMAND test-config)
 
+add_executable(test-signal-prekey-roundtrip
+    tests/test_signal_prekey_roundtrip.cpp
+    src/crypto/crypto_engine.cpp
+    src/crypto/identity.cpp
+    src/crypto/signal_store.cpp
+    src/crypto/group_session.cpp
+    src/db/local_store.cpp
+    src/db/migrations.cpp
+    ${PROTO_SRCS}
+)
+target_include_directories(test-signal-prekey-roundtrip PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${signal_protocol_c_SOURCE_DIR}/src
+    ${Boost_INCLUDE_DIRS}
+)
+target_link_libraries(test-signal-prekey-roundtrip PRIVATE
+    Catch2::Catch2WithMain
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    protobuf::libprotobuf
+    SQLiteCpp
+    unofficial-sodium::sodium
+    spdlog::spdlog
+    signal-protocol-c
+    miniaudio::miniaudio
+)
+
 set(Creating zip file  `grotto-latest.zipI)
 set(RELEASE_ARCHIVE_NAME "grotto-latest.zip" CACHE STRING "Release archive file name")
 set(RELEASE_ARCHIVE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/release" CACHE PATH "Directory where the release zip is generated")
