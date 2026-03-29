@@ -608,6 +608,30 @@ ChatEnvelope CryptoEngine::encrypt(const std::string& sender_id,
     signal_buffer* buf = ciphertext_message_get_serialized(encrypted);
     env.set_ciphertext(signal_buffer_data(buf), signal_buffer_len(buf));
     env.set_ciphertext_type(ciphertext_message_get_type(encrypted));
+
+    if (env.ciphertext_type() == 3) {
+        pre_key_signal_message* msg = nullptr;
+        int parse_rc = pre_key_signal_message_deserialize(
+            &msg,
+            reinterpret_cast<const uint8_t*>(env.ciphertext().data()),
+            env.ciphertext().size(),
+            signal_ctx_);
+        if (parse_rc == SG_SUCCESS) {
+            const bool has_pre_key_id = pre_key_signal_message_has_pre_key_id(msg) == 1;
+            spdlog::debug(
+                "Outgoing PRE_KEY message to '{}': version={} registration_id={} signed_pre_key_id={} has_pre_key_id={} pre_key_id={}",
+                recipient_id,
+                static_cast<unsigned>(pre_key_signal_message_get_message_version(msg)),
+                pre_key_signal_message_get_registration_id(msg),
+                pre_key_signal_message_get_signed_pre_key_id(msg),
+                has_pre_key_id,
+                has_pre_key_id ? pre_key_signal_message_get_pre_key_id(msg) : 0);
+            SIGNAL_UNREF(msg);
+        } else {
+            spdlog::warn("Failed to deserialize outgoing PRE_KEY message for {}: {}", recipient_id, parse_rc);
+        }
+    }
+
     SIGNAL_UNREF(encrypted);
 
     return env;
@@ -841,6 +865,11 @@ bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
     addr.name      = recipient_id.c_str();
     addr.name_len  = recipient_id.size();
     addr.device_id = 1;
+
+    if (signal_protocol_session_contains_session(store_ctx_, &addr) == 1) {
+        spdlog::debug("Dropping existing DM session with '{}' before processing new KeyBundle", recipient_id);
+        reset_dm_session(recipient_id);
+    }
 
     session_builder* builder = nullptr;
     rc = session_builder_create(&builder, store_ctx_, &addr, signal_ctx_);
