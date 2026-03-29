@@ -51,6 +51,10 @@ bool is_shift_insert_paste(std::string_view input) {
     return input == "\x1b[2;2~" || input == "\x1b[2~";
 }
 
+bool is_server_channel(std::string_view channel_id) {
+    return channel_id == "server";
+}
+
 int effective_message_width(const MouseTracker& mouse_tracker,
                             const UserListConfig& user_list_config,
                             int term_cols) {
@@ -641,9 +645,11 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
         state_.ensure_channel_users_from_online(active_ch);
     }
 
+    const bool show_user_list = !user_list_config_.collapsed && !is_server_channel(active_ch);
+
     int user_panel_width = 0;
     int msg_width = term_cols;
-    if (!user_list_config_.collapsed) {
+    if (show_user_list) {
         user_panel_width = get_panel_width(user_list_config_, term_cols);
         msg_width = std::max(1, term_cols - user_panel_width - 1);
     }
@@ -673,7 +679,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
                                         mouse_tracker_.message_region().y);
     
     // If user list is collapsed, just return the message view
-    if (user_list_config_.collapsed) {
+    if (!show_user_list) {
         mouse_tracker_.set_user_list_region({0, 0, 0, 0});  // Clear user list region
         mouse_tracker_.set_panel_divider_region({0, 0, 0, 0});
         return msg_el | flex;

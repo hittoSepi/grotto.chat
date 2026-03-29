@@ -5,7 +5,7 @@
       - voisi ainakin ilmoittaa paremmin että vielä connectaa
     - [ ] ctrl+c sammuttaa vieläkin ohjelman. (mahdoton ongelma?)
     - [ ] aliaksia slash komennoille esim /join toimisi /j ja niin edelleen
-    - [ ] server tabissa ei tarvi näyttää käyttäjä sidepanelia 
+    - [x] server tabissa ei tarvi näyttää käyttäjä sidepanelia 
     - [ ] login ruutu on liian kapea, vähän leveämmänksi
     - [x] jos kirjoitat /help se ei mahdu koko ruutuun mutta rullausalue ei muutu
     - [x] ei koko ruudun levyistä underscorea, vain tekstin kohdalle. näyttää nyt vähä hölmöltä
