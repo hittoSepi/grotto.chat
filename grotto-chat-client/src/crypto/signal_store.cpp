@@ -222,6 +222,7 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
         // Convert Ed25519 keys to X25519 format for Signal Protocol
         std::array<uint8_t, 32> x25519_pub;
         std::array<uint8_t, 32> x25519_priv;
+        std::array<uint8_t, 32> derived_pub_from_priv{};
         
         // Convert public key: Ed25519 -> X25519
         if (crypto_sign_ed25519_pk_to_curve25519(x25519_pub.data(), 
@@ -234,16 +235,25 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
                                                   self->identity_priv_.data()) != 0) {
             return SG_ERR_UNKNOWN;
         }
+
+        if (crypto_scalarmult_base(derived_pub_from_priv.data(), x25519_priv.data()) != 0) {
+            return SG_ERR_UNKNOWN;
+        }
         
         // Prepend 0x05 (DJB_TYPE) for libsignal compatibility
         std::array<uint8_t, 33> pub_with_prefix{};
         pub_with_prefix[0] = 0x05;
         std::memcpy(pub_with_prefix.data() + 1, x25519_pub.data(), 32);
 
+        const bool pair_matches = std::memcmp(
+            derived_pub_from_priv.data(), x25519_pub.data(), x25519_pub.size()) == 0;
+
         spdlog::debug(
-            "Identity keypair for libsignal (cached) user='{}': x25519_pub={} x25519_priv_fp={} ed25519_pub={}",
+            "Identity keypair for libsignal (cached) user='{}': x25519_pub={} derived_pub={} pair_matches={} x25519_priv_fp={} ed25519_pub={}",
             self->local_user_id_,
             short_hex(x25519_pub.data(), x25519_pub.size()),
+            short_hex(derived_pub_from_priv.data(), derived_pub_from_priv.size()),
+            pair_matches,
             private_fingerprint(x25519_priv.data(), x25519_priv.size()),
             short_hex(self->identity_pub_.data(), self->identity_pub_.size()));
         
