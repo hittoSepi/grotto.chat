@@ -97,21 +97,6 @@ std::string ascii_lower_copy(std::string text) {
     return text;
 }
 
-template <typename PushFn>
-void push_multiline_system_message(PushFn&& push_fn, const std::string& content) {
-    std::istringstream stream(content);
-    std::string line;
-    bool emitted = false;
-    while (std::getline(stream, line)) {
-        push_fn(line);
-        emitted = true;
-    }
-
-    if (!emitted) {
-        push_fn(content);
-    }
-}
-
 }  // namespace
 
 App::App() = default;
@@ -450,9 +435,7 @@ void App::handle_command(const ParsedCommand& cmd) {
         if (cmd.args.empty()) {
             auto content = help_ ? help_->get("help") : std::nullopt;
             if (content) {
-                push_multiline_system_message([this](const std::string& line) {
-                    ui_->push_system_msg(line);
-                }, *content);
+                ui_->push_system_msg(*content);
             } else {
                 // Fallback if help.md not found
                 auto topics = help_ ? help_->topics() : std::vector<std::string>{};
@@ -466,9 +449,7 @@ void App::handle_command(const ParsedCommand& cmd) {
             std::string topic = cmd.args[0];
             auto content = help_ ? help_->get(topic) : std::nullopt;
             if (content) {
-                push_multiline_system_message([this](const std::string& line) {
-                    ui_->push_system_msg(line);
-                }, *content);
+                ui_->push_system_msg(*content);
             } else {
                 ui_->push_system_msg(i18n::tr(i18n::I18nKey::TOPIC_NOT_FOUND, topic));
                 auto topics = help_ ? help_->topics() : std::vector<std::string>{};

@@ -467,12 +467,19 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     if (!active_ch.empty()) {
         state_.ensure_channel_users_from_online(active_ch);
     }
+
+    int panel_width = 0;
+    int msg_width = term_cols;
+    if (!user_list_config_.collapsed) {
+        panel_width = get_panel_width(user_list_config_, term_cols);
+        msg_width = std::max(1, term_cols - panel_width - 1);  // -1 for separator
+    }
     
     // Message area
     Element msg_el;
     if (!active_ch.empty()) {
         auto ch_state = state_.channel_snapshot(active_ch);
-        msg_el = render_messages(ch_state, cfg_.ui.timestamp_format, msg_rows);
+        msg_el = render_messages(ch_state, cfg_.ui.timestamp_format, msg_rows, msg_width);
     } else {
         msg_el = text("") | flex;
     }
@@ -498,10 +505,6 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
         }
         voice_sec = build_voice_section(users, vs.participants, vs.speaking_peers, muted_users);
     }
-    
-    // Calculate panel width
-    int panel_width = get_panel_width(user_list_config_, term_cols);
-    int msg_width = term_cols - panel_width - 1;  // -1 for separator
     
     // Update user list region for mouse hit testing
     user_positions_.clear();

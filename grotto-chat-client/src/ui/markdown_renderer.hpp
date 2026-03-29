@@ -1,6 +1,7 @@
 #pragma once
 #include <ftxui/dom/elements.hpp>
 #include <string>
+#include <vector>
 
 namespace grotto::ui {
 
@@ -8,5 +9,6 @@ namespace grotto::ui {
 // Supports: **bold**, *italic*, `inline code`, ```code blocks```,
 // # headings, - bullet lists, > blockquotes
 ftxui::Element render_markdown(const std::string& text);
+std::vector<ftxui::Element> render_markdown_lines(const std::string& text, int width);
 
 } // namespace grotto::ui
