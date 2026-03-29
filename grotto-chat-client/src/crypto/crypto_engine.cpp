@@ -729,6 +729,36 @@ bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
     }
 
     const auto& spk_sig = bundle.spk_signature();
+    spdlog::debug(
+        "KeyBundle for '{}': identity_pub_size={} signed_prekey_size={} spk_sig_size={} spk_id={} opk_present={} opk_id={}",
+        recipient_id,
+        id_pub_str.size(),
+        spk_str.size(),
+        spk_sig.size(),
+        bundle.spk_id(),
+        !opk_str.empty(),
+        bundle.opk_id());
+
+    signal_buffer* serialized_signed_pre_key = nullptr;
+    int verify_rc = ec_public_key_serialize(&serialized_signed_pre_key, signed_pre_key);
+    if (verify_rc == SG_SUCCESS) {
+        verify_rc = curve_verify_signature(
+            identity_key,
+            signal_buffer_data(serialized_signed_pre_key),
+            signal_buffer_len(serialized_signed_pre_key),
+            reinterpret_cast<const uint8_t*>(spk_sig.data()),
+            spk_sig.size());
+        spdlog::debug(
+            "KeyBundle signature check for '{}': verify_rc={} serialized_spk_size={}",
+            recipient_id,
+            verify_rc,
+            signal_buffer_len(serialized_signed_pre_key));
+    } else {
+        spdlog::error("Failed to serialize signed pre-key from bundle for {}: {}", recipient_id, verify_rc);
+    }
+    if (serialized_signed_pre_key) {
+        signal_buffer_free(serialized_signed_pre_key);
+    }
 
     session_pre_key_bundle* pkb = nullptr;
     int rc = session_pre_key_bundle_create(&pkb,
