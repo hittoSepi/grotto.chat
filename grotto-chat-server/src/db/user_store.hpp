@@ -79,6 +79,8 @@ public:
 
     std::optional<SignedPrekey> get_signed_prekey(const std::string& user_id);
 
+    void clear_opks(const std::string& user_id);
+
     void store_opk(const std::string& user_id,
                    const std::vector<uint8_t>& opk_pub,
                    uint32_t opk_id);

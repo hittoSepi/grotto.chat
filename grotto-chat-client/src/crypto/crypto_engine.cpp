@@ -597,10 +597,23 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
         pre_key_signal_message* msg = nullptr;
         rc = pre_key_signal_message_deserialize(&msg, ct, ct_len, signal_ctx_);
         if (rc == SG_SUCCESS) {
+            const bool has_pre_key_id = pre_key_signal_message_has_pre_key_id(msg) == 1;
+            const uint32_t pre_key_id = has_pre_key_id ? pre_key_signal_message_get_pre_key_id(msg) : 0;
+            const uint32_t signed_pre_key_id = pre_key_signal_message_get_signed_pre_key_id(msg);
             spdlog::debug("PRE_KEY message from '{}' local_spk_present={} local_prekey_counter_next={}",
                           env.sender_id(),
                           local_store_ && local_store_->contains_signed_pre_key(spk_.id),
                           next_opk_id_);
+            spdlog::debug(
+                "PRE_KEY metadata from '{}': version={} registration_id={} signed_pre_key_id={} local_signed_pre_key_present={} has_pre_key_id={} pre_key_id={} local_pre_key_present={}",
+                env.sender_id(),
+                static_cast<unsigned>(pre_key_signal_message_get_message_version(msg)),
+                pre_key_signal_message_get_registration_id(msg),
+                signed_pre_key_id,
+                local_store_ && local_store_->contains_signed_pre_key(signed_pre_key_id),
+                has_pre_key_id,
+                pre_key_id,
+                has_pre_key_id && local_store_ && local_store_->contains_pre_key(pre_key_id));
             rc = session_cipher_decrypt_pre_key_signal_message(cipher, msg, nullptr, &plaintext_buf);
             SIGNAL_UNREF(msg);
         }

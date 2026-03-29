@@ -153,6 +153,14 @@ std::optional<SignedPrekey> UserStore::get_signed_prekey(const std::string& user
     }
 }
 
+void UserStore::clear_opks(const std::string& user_id) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    SQLite::Statement q(db_.get(),
+        "DELETE FROM one_time_prekeys WHERE user_id = ?");
+    q.bind(1, user_id);
+    q.exec();
+}
+
 void UserStore::store_opk(const std::string& user_id,
                             const std::vector<uint8_t>& opk_pub,
                             uint32_t opk_id) {
@@ -170,7 +178,8 @@ std::pair<uint32_t, std::vector<uint8_t>> UserStore::consume_opk(const std::stri
     try {
         SQLite::Statement q(db_.get(),
             "SELECT id, opk_pub, opk_id FROM one_time_prekeys"
-            " WHERE user_id = ? AND used = 0 LIMIT 1");
+            " WHERE user_id = ? AND used = 0"
+            " ORDER BY id DESC LIMIT 1");
         q.bind(1, user_id);
         if (!q.executeStep()) {
             return {0, {}};

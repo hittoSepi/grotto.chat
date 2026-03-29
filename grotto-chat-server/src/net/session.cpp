@@ -738,6 +738,10 @@ void Session::handle_key_upload(const KeyUpload& ku) {
             ku.spk_id());
     }
 
+    // Replace the user's OPK pool with the newly uploaded batch so stale
+    // unused pre-keys from older client versions cannot be served forever.
+    us.clear_opks(user_id_);
+
     // Store one-time pre-keys
     for (int i = 0; i < ku.one_time_prekeys_size() && i < ku.opk_ids_size(); ++i) {
         us.store_opk(user_id_,
