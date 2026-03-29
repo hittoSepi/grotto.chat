@@ -91,6 +91,8 @@ namespace grotto {
 			const auto &limits = data.at( "limits" );
 			config.max_message_bytes = static_cast<size_t>(
 				get_optional<int64_t>( limits, "max_message_bytes", 65536 ) );
+			config.max_chat_payload_bytes = static_cast<size_t>(
+				get_optional<int64_t>( limits, "max_chat_payload_bytes", 8192 ) );
 			config.ping_interval_sec  = get_optional<int>( limits, "ping_interval_sec", 30 );
 			config.ping_timeout_sec   = get_optional<int>( limits, "ping_timeout_sec", 60 );
 			config.msg_rate_per_sec   = get_optional<int>( limits, "msg_rate_per_sec", 20 );
@@ -236,6 +238,11 @@ namespace grotto {
 
 		if ( config.max_message_bytes == 0 || config.max_message_bytes > 1024 * 1024 ) {
 			throw std::runtime_error( "Invalid config: max_message_bytes must be between 1 and 1MB" );
+		}
+		if ( config.max_chat_payload_bytes == 0 ||
+		     config.max_chat_payload_bytes > config.max_message_bytes ) {
+			throw std::runtime_error(
+				"Invalid config: max_chat_payload_bytes must be between 1 and max_message_bytes" );
 		}
 
 		if ( config.ping_interval_sec <= 0 || config.ping_interval_sec > 300 ) {

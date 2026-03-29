@@ -195,6 +195,7 @@ public:
     virtual int ping_interval_sec() const = 0;
     virtual int ping_timeout_sec() const = 0;
     virtual int msg_rate_per_sec() const = 0;
+    virtual size_t max_chat_payload_bytes() const = 0;
     virtual const std::string& motd() const = 0;
 };
 

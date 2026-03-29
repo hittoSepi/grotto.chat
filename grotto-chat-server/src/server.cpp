@@ -104,6 +104,7 @@ Server::Server(const ServerConfig& config)
     listener_->set_rate_limits(
         config_.msg_rate_per_sec,
         config_.conn_rate_per_min);
+    listener_->set_max_chat_payload_bytes(config_.max_chat_payload_bytes);
     listener_->set_max_connections(config_.max_connections);
     listener_->set_motd(config_.motd);
 

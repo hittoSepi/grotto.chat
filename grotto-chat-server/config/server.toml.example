@@ -35,6 +35,10 @@ path = "./ircord.db"
 # Maximum message size in bytes (64 KB default)
 max_message_bytes = 65536
 
+# Maximum serialized encrypted chat payload size in bytes.
+# This applies to ChatEnvelope payloads only, not files or key uploads.
+max_chat_payload_bytes = 8192
+
 # Ping interval in seconds (server sends PING)
 ping_interval_sec = 30
 

@@ -646,6 +646,14 @@ void Session::handle_ping(const Envelope& env) {
 void Session::handle_chat(const ChatEnvelope& chat, const Envelope& raw) {
     spdlog::info("[{}] handle_chat: sender={}, claimed={}, user_id_={}",
         remote_endpoint_, chat.sender_id(), chat.sender_id(), user_id_);
+
+    const size_t chat_payload_size = raw.payload().size();
+    if (chat_payload_size > server_ctx_.max_chat_payload_bytes()) {
+        spdlog::warn("[{}] Chat payload too large from {}: {} bytes (limit {})",
+            remote_endpoint_, user_id_, chat_payload_size, server_ctx_.max_chat_payload_bytes());
+        send_error(4035, "Chat message too large");
+        return;
+    }
     
     // Reject sender spoofing
     if (chat.sender_id() != user_id_) {

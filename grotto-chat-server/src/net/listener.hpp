@@ -65,11 +65,13 @@ public:
     int ping_interval_sec() const override { return ping_interval_sec_; }
     int ping_timeout_sec() const override { return ping_timeout_sec_; }
     int msg_rate_per_sec() const override { return msg_rate_per_sec_; }
+    size_t max_chat_payload_bytes() const override { return max_chat_payload_bytes_; }
     const std::string& motd() const override { return motd_; }
 
     // Set limits from config
     void set_ping_intervals(int interval_sec, int timeout_sec);
     void set_rate_limits(int msg_rate_per_sec, int conn_rate_per_min);
+    void set_max_chat_payload_bytes(size_t max_chat_payload_bytes) { max_chat_payload_bytes_ = max_chat_payload_bytes; }
     void set_max_connections(int max_connections);
     void set_motd(const std::string& motd) { motd_ = motd; }
 
@@ -123,6 +125,7 @@ private:
     int msg_rate_per_sec_ = 20;
     int conn_rate_per_min_ = 10;
     int max_connections_ = 100;
+    size_t max_chat_payload_bytes_ = 8192;
 
     // Total active connections (pre-auth + authenticated)
     std::atomic<int> active_connections_{0};

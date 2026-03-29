@@ -54,6 +54,9 @@ path = "./grotto.db"
 # Maximum message size in bytes (64 KB default)
 max_message_bytes = 65536
 
+# Maximum serialized chat payload size in bytes (encrypted ChatEnvelope only)
+max_chat_payload_bytes = 8192
+
 # Ping interval in seconds (server sends PING)
 ping_interval_sec = 30
 
@@ -111,6 +114,7 @@ struct ServerConfig {
 
     // [limits]
     size_t max_message_bytes = 65536;        // 64 KB
+    size_t max_chat_payload_bytes = 8192;    // 8 KB serialized encrypted ChatEnvelope
     int ping_interval_sec = 30;
     int ping_timeout_sec = 60;
     int msg_rate_per_sec = 20;               // max messages/sec per authenticated user

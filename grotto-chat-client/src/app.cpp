@@ -23,6 +23,8 @@ namespace grotto {
 
 namespace {
 
+constexpr size_t kMaxPlaintextMessageBytes = 4096;
+
 bool is_server_channel(std::string_view channel_id) {
     if (channel_id.size() != 6) {
         return false;
@@ -688,6 +690,13 @@ void App::send_chat(const std::string& text) {
     }
     if (is_server_channel(active)) {
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::CANNOT_SEND_MESSAGES_HERE));
+        return;
+    }
+    if (text.size() > kMaxPlaintextMessageBytes) {
+        ui_->push_system_msg(i18n::tr(
+            i18n::I18nKey::MESSAGE_TOO_LONG,
+            std::to_string(text.size()),
+            std::to_string(kMaxPlaintextMessageBytes)));
         return;
     }
 
