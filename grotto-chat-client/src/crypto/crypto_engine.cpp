@@ -165,6 +165,29 @@ KeyPairDiagnostics inspect_key_pair(ec_key_pair* key_pair) {
     return info;
 }
 
+std::optional<X25519KeyPair> generate_libsignal_x25519_key_pair(signal_context* signal_ctx) {
+    if (!signal_ctx) return std::nullopt;
+
+    ec_key_pair* key_pair = nullptr;
+    if (curve_generate_key_pair(signal_ctx, &key_pair) != 0 || !key_pair) {
+        return std::nullopt;
+    }
+
+    const auto public_key = extract_public_key_no_prefix(ec_key_pair_get_public(key_pair));
+    const auto private_key = extract_private_key(ec_key_pair_get_private(key_pair));
+
+    std::optional<X25519KeyPair> result;
+    if (public_key.size() == 32 && private_key.size() == 32) {
+        X25519KeyPair kp{};
+        std::copy(public_key.begin(), public_key.end(), kp.pub.begin());
+        std::copy(private_key.begin(), private_key.end(), kp.priv.begin());
+        result = kp;
+    }
+
+    SIGNAL_UNREF(key_pair);
+    return result;
+}
+
 std::vector<uint8_t> load_local_signed_pre_key_public(db::LocalStore* local_store,
                                                       signal_context* signal_ctx,
                                                       uint32_t id) {
@@ -494,10 +517,12 @@ bool CryptoEngine::init(db::LocalStore& store, const ClientConfig& cfg,
     if (spk_.signature.empty()) {
         // Generate SPK using libsignal-compatible XEdDSA signing
         spk_.id = 1;
-        if (crypto_box_keypair(spk_.key_pair.pub.data(), spk_.key_pair.priv.data()) != 0) {
-            spdlog::error("Failed to generate X25519 SPK");
+        auto spk_key_pair = generate_libsignal_x25519_key_pair(signal_ctx_);
+        if (!spk_key_pair) {
+            spdlog::error("Failed to generate libsignal X25519 SPK");
             return false;
         }
+        spk_.key_pair = *spk_key_pair;
 
         // Convert Ed25519 identity private key to Curve25519 for libsignal signing
         std::array<uint8_t, 32> x25519_identity_priv{};
@@ -597,8 +622,14 @@ KeyUpload CryptoEngine::prepare_key_upload(int num_opks) {
     ku.set_spk_id(spk_.id);
     ku.set_registration_id(registration_id_);
 
-    auto opks = identity_.generate_one_time_prekeys(next_opk_id_, num_opks);
-    for (auto& [id, kp] : opks) {
+    for (int i = 0; i < num_opks; ++i) {
+        const uint32_t id = next_opk_id_ + static_cast<uint32_t>(i);
+        auto maybe_kp = generate_libsignal_x25519_key_pair(signal_ctx_);
+        if (!maybe_kp) {
+            spdlog::error("Failed to generate libsignal X25519 one-time pre-key id={}", id);
+            continue;
+        }
+        auto& kp = *maybe_kp;
         ku.add_one_time_prekeys(kp.pub.data(), kp.pub.size());
         ku.add_opk_ids(id);
 
