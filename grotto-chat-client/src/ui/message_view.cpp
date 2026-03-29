@@ -4,6 +4,7 @@
 #include "i18n/strings.hpp"
 #include <ftxui/dom/elements.hpp>
 #include <algorithm>
+#include <cstdlib>
 #include <ctime>
 #include <string>
 #include <vector>
@@ -48,6 +49,102 @@ int visible_width(const std::string& text) {
     return width;
 }
 
+bool supports_truecolor_preview() {
+#ifdef _WIN32
+    return true;
+#else
+    const char* color_term = std::getenv("COLORTERM");
+    if (color_term) {
+        std::string value = color_term;
+        if (value.find("truecolor") != std::string::npos ||
+            value.find("24bit") != std::string::npos) {
+            return true;
+        }
+    }
+
+    const char* term_program = std::getenv("TERM_PROGRAM");
+    if (term_program) {
+        std::string value = term_program;
+        if (value == "iTerm.app" || value == "WezTerm" || value == "vscode") {
+            return true;
+        }
+    }
+
+    const char* term = std::getenv("TERM");
+    if (term) {
+        std::string value = term;
+        if (value.find("direct") != std::string::npos || value.find("kitty") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+#endif
+}
+
+std::vector<RenderedLine> render_color_preview(const Message& msg,
+                                               int message_index,
+                                               const std::string& ts,
+                                               int width) {
+    std::vector<RenderedLine> rows;
+
+    std::vector<std::string> header_lines;
+    size_t start = 0;
+    while (start <= msg.content.size()) {
+        size_t end = msg.content.find('\n', start);
+        std::string line = (end == std::string::npos)
+            ? msg.content.substr(start)
+            : msg.content.substr(start, end - start);
+        if (line.empty()) {
+            break;
+        }
+        header_lines.push_back(line);
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+
+    const int content_width = std::max(1, width - visible_width(ts));
+    for (size_t i = 0; i < header_lines.size(); ++i) {
+        std::string line = header_lines[i];
+        if (visible_width(line) > content_width) {
+            line.resize(static_cast<size_t>(content_width));
+        }
+        const std::string ts_prefix = (i == 0 ? ts : std::string(ts.size(), ' '));
+        rows.push_back({
+            message_index,
+            ts_prefix + line,
+            hbox({
+                text(ts_prefix) | color(palette::comment()),
+                text(line) | color(palette::blue1()) | flex,
+            })
+        });
+    }
+
+    const auto& thumbnail = *msg.inline_image;
+    for (int y = 0; y < thumbnail.height; y += 2) {
+        Elements cells;
+        const std::string ts_prefix = rows.empty() && y == 0 ? ts : std::string(ts.size(), ' ');
+        cells.push_back(text(ts_prefix) | color(palette::comment()));
+
+        for (int x = 0; x < thumbnail.width; ++x) {
+            size_t top = static_cast<size_t>((y * thumbnail.width + x) * 4);
+            size_t bottom = static_cast<size_t>(((std::min(y + 1, thumbnail.height - 1)) * thumbnail.width + x) * 4);
+            ftxui::Color fg = Color::RGB(thumbnail.rgba[top + 0], thumbnail.rgba[top + 1], thumbnail.rgba[top + 2]);
+            ftxui::Color bg = Color::RGB(thumbnail.rgba[bottom + 0], thumbnail.rgba[bottom + 1], thumbnail.rgba[bottom + 2]);
+            cells.push_back(text("▀") | color(fg) | bgcolor(bg));
+        }
+
+        rows.push_back({
+            message_index,
+            ts_prefix + std::string(static_cast<size_t>(thumbnail.width), '#'),
+            hbox(std::move(cells))
+        });
+    }
+
+    return rows;
+}
+
 std::vector<RenderedLine> render_one_lines(const Message& msg,
                                            int message_index,
                                            const std::string& ts_fmt,
@@ -56,6 +153,10 @@ std::vector<RenderedLine> render_one_lines(const Message& msg,
     width = std::max(1, width);
 
     if (msg.type == Message::Type::Preview) {
+        if (msg.inline_image && supports_truecolor_preview()) {
+            return render_color_preview(msg, message_index, ts, width);
+        }
+
         std::vector<RenderedLine> rows;
         std::vector<std::string> preview_lines;
         size_t start = 0;

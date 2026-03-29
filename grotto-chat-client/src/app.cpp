@@ -764,6 +764,9 @@ void App::trigger_previews(const std::string& channel_id, const std::string& tex
                     if (!r.image_preview.empty()) {
                         pm.content += "\n" + r.image_preview;
                     }
+                    if (!r.thumbnail.rgba.empty()) {
+                        pm.inline_image = std::move(r.thumbnail);
+                    }
                 } else {
                     pm.content = "\u250C " + r.title +
                                  (r.description.empty() ? "" : " \u2014 " + r.description);

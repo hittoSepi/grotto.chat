@@ -1,5 +1,6 @@
 #pragma once
 #include "db/local_store.hpp"
+#include "state/channel_state.hpp"
 #include <curl/curl.h>
 #include <functional>
 #include <memory>
@@ -8,6 +9,7 @@
 #include <thread>
 #include <queue>
 #include <condition_variable>
+#include <vector>
 
 namespace grotto {
 
@@ -16,6 +18,7 @@ struct PreviewResult {
     std::string title;
     std::string description;
     std::string image_preview;
+    InlineImageThumbnail thumbnail;
     bool        is_image = false;
     bool        success = false;
 };
@@ -54,9 +57,9 @@ private:
     // OG tag extraction
     static std::string extract_og(const std::string& html, const std::string& property);
     static bool is_likely_image_url(const std::string& url);
+    InlineImageThumbnail build_image_thumbnail(const std::string& body) const;
     std::string render_image_preview(const std::string& url,
-                                     const std::string& body,
-                                     const std::string& content_type) const;
+                                     const InlineImageThumbnail& thumbnail) const;
 
     // libcurl write callback
     static size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdata);

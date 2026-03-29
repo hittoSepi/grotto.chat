@@ -3,8 +3,15 @@
 #include <optional>
 #include <string>
 #include <cstdint>
+#include <vector>
 
 namespace grotto {
+
+struct InlineImageThumbnail {
+    int width = 0;
+    int height = 0;
+    std::vector<uint8_t> rgba;
+};
 
 struct Message {
     std::string sender_id;
@@ -20,6 +27,7 @@ struct Message {
         bool        loaded = false;
     };
     std::optional<Preview> link_preview;
+    std::optional<InlineImageThumbnail> inline_image;
 };
 
 struct ChannelState {

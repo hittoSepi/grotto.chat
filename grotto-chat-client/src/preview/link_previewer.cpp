@@ -51,6 +51,31 @@ std::string intensity_to_symbol(float intensity, bool utf8_blocks) {
     return ramp[index];
 }
 
+InlineImageThumbnail resample_thumbnail(const stbi_uc* pixels,
+                                        int width,
+                                        int height,
+                                        int out_cols,
+                                        int out_rows) {
+    InlineImageThumbnail thumbnail;
+    thumbnail.width = out_cols;
+    thumbnail.height = out_rows;
+    thumbnail.rgba.resize(static_cast<size_t>(out_cols * out_rows * 4), 0);
+
+    for (int y = 0; y < out_rows; ++y) {
+        int src_y = std::min(height - 1, y * height / out_rows);
+        for (int x = 0; x < out_cols; ++x) {
+            int src_x = std::min(width - 1, x * width / out_cols);
+            size_t src_idx = static_cast<size_t>((src_y * width + src_x) * 4);
+            size_t dst_idx = static_cast<size_t>((y * out_cols + x) * 4);
+            for (size_t c = 0; c < 4; ++c) {
+                thumbnail.rgba[dst_idx + c] = pixels[src_idx + c];
+            }
+        }
+    }
+
+    return thumbnail;
+}
+
 } // namespace
 
 LinkPreviewer::LinkPreviewer(db::LocalStore& store, int fetch_timeout_s, int max_cache,
@@ -198,7 +223,8 @@ PreviewResult LinkPreviewer::fetch_sync(const std::string& url) {
         result.is_image = true;
         result.title = "[image] " + url;
         result.description = content_type.empty() ? "direct image link" : content_type;
-        result.image_preview = render_image_preview(url, body, content_type);
+        result.thumbnail = build_image_thumbnail(body);
+        result.image_preview = render_image_preview(url, result.thumbnail);
         if (result.image_preview.empty()) {
             result.description += (result.description.empty() ? "" : " ");
             result.description += "(inline thumbnail unavailable)";
@@ -261,15 +287,7 @@ bool LinkPreviewer::is_likely_image_url(const std::string& url) {
            normalized.ends_with(".webp") || normalized.ends_with(".bmp");
 }
 
-std::string LinkPreviewer::render_image_preview(const std::string& url,
-                                                const std::string& body,
-                                                const std::string& content_type) const {
-    (void)url;
-    (void)content_type;
-    if (!inline_images_ || body.empty()) {
-        return {};
-    }
-
+InlineImageThumbnail LinkPreviewer::build_image_thumbnail(const std::string& body) const {
     int width = 0;
     int height = 0;
     int channels = 0;
@@ -284,7 +302,6 @@ std::string LinkPreviewer::render_image_preview(const std::string& url,
         return {};
     }
 
-    const bool utf8_blocks = supports_utf8_blocks();
     const int out_cols = std::max(8, image_columns_);
     const int max_rows = std::max(4, image_rows_);
     const float aspect = static_cast<float>(height) / static_cast<float>(width);
@@ -292,26 +309,35 @@ std::string LinkPreviewer::render_image_preview(const std::string& url,
         static_cast<int>(std::round(aspect * static_cast<float>(out_cols) * 0.5f)),
         4, max_rows);
 
+    auto thumbnail = resample_thumbnail(pixels, width, height, out_cols, out_rows);
+    stbi_image_free(pixels);
+    return thumbnail;
+}
+
+std::string LinkPreviewer::render_image_preview(const std::string& url,
+                                                const InlineImageThumbnail& thumbnail) const {
+    (void)url;
+    if (!inline_images_ || thumbnail.rgba.empty() || thumbnail.width <= 0 || thumbnail.height <= 0) {
+        return {};
+    }
+
     std::string rendered;
-    for (int y = 0; y < out_rows; ++y) {
+    const bool utf8_blocks = supports_utf8_blocks();
+    for (int y = 0; y < thumbnail.height; ++y) {
         if (!rendered.empty()) {
             rendered += '\n';
         }
 
-        int src_y = std::min(height - 1, y * height / out_rows);
-        for (int x = 0; x < out_cols; ++x) {
-            int src_x = std::min(width - 1, x * width / out_cols);
-            size_t idx = static_cast<size_t>((src_y * width + src_x) * 4);
-            float alpha = static_cast<float>(pixels[idx + 3]) / 255.0f;
-            float r = static_cast<float>(pixels[idx + 0]) * alpha;
-            float g = static_cast<float>(pixels[idx + 1]) * alpha;
-            float b = static_cast<float>(pixels[idx + 2]) * alpha;
+        for (int x = 0; x < thumbnail.width; ++x) {
+            size_t idx = static_cast<size_t>((y * thumbnail.width + x) * 4);
+            float alpha = static_cast<float>(thumbnail.rgba[idx + 3]) / 255.0f;
+            float r = static_cast<float>(thumbnail.rgba[idx + 0]) * alpha;
+            float g = static_cast<float>(thumbnail.rgba[idx + 1]) * alpha;
+            float b = static_cast<float>(thumbnail.rgba[idx + 2]) * alpha;
             float luminance = (0.2126f * r + 0.7152f * g + 0.0722f * b) / 255.0f;
             rendered += intensity_to_symbol(luminance, utf8_blocks);
         }
     }
-
-    stbi_image_free(pixels);
     return rendered;
 }
 
