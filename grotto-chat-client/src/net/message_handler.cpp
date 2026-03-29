@@ -11,6 +11,18 @@
 
 namespace grotto::net {
 
+namespace {
+
+std::string recipient_from_not_found_error(const std::string& message) {
+    static constexpr std::string_view kPrefix = "User not found: ";
+    if (message.rfind(kPrefix.data(), 0) == 0) {
+        return message.substr(kPrefix.size());
+    }
+    return {};
+}
+
+}
+
 MessageHandler::MessageHandler(AppState& state,
                                 crypto::CryptoEngine& crypto,
                                 const ClientConfig& cfg)
@@ -438,6 +450,19 @@ void MessageHandler::handle_error(const Envelope& env) {
     Error err;
     if (!err.ParseFromString(env.payload())) return;
     spdlog::error("Server error {}: {}", err.code(), err.message());
+
+    if (err.code() == 4060) {
+        std::string recipient_id = recipient_from_not_found_error(err.message());
+        if (recipient_id.empty() && pending_sends_.size() == 1) {
+            recipient_id = pending_sends_.begin()->first;
+        }
+        if (!recipient_id.empty()) {
+            pending_sends_.erase(recipient_id);
+            push_system(i18n::tr(i18n::I18nKey::USER_NOT_FOUND, recipient_id));
+            return;
+        }
+    }
+
     push_system(i18n::tr(i18n::I18nKey::SERVER_ERROR, err.message()));
 }
 

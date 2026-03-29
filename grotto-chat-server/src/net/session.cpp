@@ -775,7 +775,7 @@ void Session::handle_key_request(const KeyRequest& kr) {
 
     auto target = us.find_by_id(kr.user_id());
     if (!target) {
-        send_error(4060, "User not found");
+        send_error(4060, "User not found: " + kr.user_id());
         return;
     }
 
