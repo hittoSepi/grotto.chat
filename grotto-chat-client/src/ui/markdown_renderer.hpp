@@ -10,5 +10,6 @@ namespace grotto::ui {
 // # headings, - bullet lists, > blockquotes
 ftxui::Element render_markdown(const std::string& text);
 std::vector<ftxui::Element> render_markdown_lines(const std::string& text, int width);
+std::vector<std::string> render_markdown_plain_lines(const std::string& text, int width);
 
 } // namespace grotto::ui

@@ -125,23 +125,22 @@ bool UIManager::handle_mouse_event(const Event& event) {
                 auto ch = state_.active_channel();
                 if (ch) {
                     auto ch_state = state_.channel_snapshot(*ch);
-                    int total = static_cast<int>(ch_state.messages.size());
-                    if (total > 0) {
-                        int visible_rows = mouse_tracker_.message_region().height;
-                        int bottom_idx = total - 1 - ch_state.scroll_offset;
-                        bottom_idx = std::clamp(bottom_idx, 0, total - 1);
-                        int top_idx = std::max(0, bottom_idx - visible_rows + 1);
-
-                        int sel_start = std::max(top_idx, top_idx + sel.y - mouse_tracker_.message_region().y);
-                        int sel_end = std::min(bottom_idx, sel_start + sel.height - 1);
-
+                    int visible_rows = mouse_tracker_.message_region().height;
+                    int message_width = mouse_tracker_.message_region().width;
+                    if (!user_list_config_.collapsed) {
+                        int panel_width = get_panel_width(user_list_config_, screen_.dimx());
+                        message_width = std::max(1, screen_.dimx() - panel_width - 1);
+                    }
+                    auto visible = collect_visible_message_lines(
+                        ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
+                    if (!visible.empty()) {
+                        int start_line = std::max(0, sel.y - mouse_tracker_.message_region().y);
+                        int end_line = std::min(static_cast<int>(visible.size()) - 1,
+                                                start_line + sel.height - 1);
                         std::string selected;
-                        for (int i = sel_start; i <= sel_end; ++i) {
-                            if (i < total) {
-                                if (!selected.empty()) selected += '\n';
-                                const auto& msg = ch_state.messages[i];
-                                selected += "<" + msg.sender_id + "> " + msg.content;
-                            }
+                        for (int i = start_line; i <= end_line; ++i) {
+                            if (!selected.empty()) selected += '\n';
+                            selected += visible[i].plain_text;
                         }
                         if (!selected.empty()) {
                             copy_to_clipboard(selected);
@@ -248,28 +247,21 @@ void UIManager::handle_double_click(int mouse_x, int mouse_y) {
     (void)mouse_x;
     // Double-click to select word (entire message in this implementation)
     if (mouse_tracker_.is_over_message_area()) {
-        // Calculate which line was clicked
         int line_y = mouse_y - mouse_tracker_.message_region().y;
         auto ch = state_.active_channel();
         if (!ch) return;
         
         auto ch_state = state_.channel_snapshot(*ch);
-        int total = static_cast<int>(ch_state.messages.size());
-        if (total == 0) return;
-        
         int visible_rows = mouse_tracker_.message_region().height;
-        int bottom_idx = total - 1 - ch_state.scroll_offset;
-        bottom_idx = std::clamp(bottom_idx, 0, total - 1);
-        int top_idx = std::max(0, bottom_idx - visible_rows + 1);
-        
-        int msg_idx = top_idx + line_y;
-        if (msg_idx >= 0 && msg_idx <= bottom_idx && msg_idx < total) {
-            // Select the entire message content
-            // Full word parsing would require more complex text layout tracking
-            const auto& msg = ch_state.messages[msg_idx];
-            std::string selected = msg.content;
-            // Copy to clipboard
-            copy_to_clipboard(selected);
+        int message_width = mouse_tracker_.message_region().width;
+        if (!user_list_config_.collapsed) {
+            int panel_width = get_panel_width(user_list_config_, screen_.dimx());
+            message_width = std::max(1, screen_.dimx() - panel_width - 1);
+        }
+        auto visible = collect_visible_message_lines(
+            ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
+        if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
+            copy_to_clipboard(visible[line_y].plain_text);
         }
     }
 }
@@ -283,21 +275,16 @@ void UIManager::handle_triple_click(int mouse_x, int mouse_y) {
         if (!ch) return;
         
         auto ch_state = state_.channel_snapshot(*ch);
-        int total = static_cast<int>(ch_state.messages.size());
-        if (total == 0) return;
-        
         int visible_rows = mouse_tracker_.message_region().height;
-        int bottom_idx = total - 1 - ch_state.scroll_offset;
-        bottom_idx = std::clamp(bottom_idx, 0, total - 1);
-        int top_idx = std::max(0, bottom_idx - visible_rows + 1);
-        
-        int msg_idx = top_idx + line_y;
-        if (msg_idx >= 0 && msg_idx <= bottom_idx && msg_idx < total) {
-            const auto& msg = ch_state.messages[msg_idx];
-            // Select the entire formatted message line
-            std::string selected = "<" + msg.sender_id + "> " + msg.content;
-            // Copy to clipboard
-            copy_to_clipboard(selected);
+        int message_width = mouse_tracker_.message_region().width;
+        if (!user_list_config_.collapsed) {
+            int panel_width = get_panel_width(user_list_config_, screen_.dimx());
+            message_width = std::max(1, screen_.dimx() - panel_width - 1);
+        }
+        auto visible = collect_visible_message_lines(
+            ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
+        if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
+            copy_to_clipboard(visible[line_y].plain_text);
         }
     }
 }
@@ -401,23 +388,37 @@ void UIManager::end_text_selection() {
     
     // Extract selected text from messages
     auto region = mouse_tracker_.selection_region();
-    if (region.height <= 1) {
-        // Single line selection
-        auto ch = state_.active_channel();
-        if (ch) {
-            auto ch_state = state_.channel_snapshot(*ch);
-            int visible_rows = mouse_tracker_.message_region().height;
-            int total = static_cast<int>(ch_state.messages.size());
-            int bottom_idx = total - 1 - ch_state.scroll_offset;
-            bottom_idx = std::clamp(bottom_idx, 0, total - 1);
-            int top_idx = std::max(0, bottom_idx - visible_rows + 1);
-            
-            int msg_idx = top_idx + (region.y - mouse_tracker_.message_region().y);
-            if (msg_idx >= 0 && msg_idx < total) {
-                const auto& msg = ch_state.messages[msg_idx];
-                copy_to_clipboard(msg.content);
-            }
+    if (region.height <= 0) {
+        return;
+    }
+    auto ch = state_.active_channel();
+    if (!ch) {
+        return;
+    }
+    auto ch_state = state_.channel_snapshot(*ch);
+    int visible_rows = mouse_tracker_.message_region().height;
+    int message_width = mouse_tracker_.message_region().width;
+    if (!user_list_config_.collapsed) {
+        int panel_width = get_panel_width(user_list_config_, screen_.dimx());
+        message_width = std::max(1, screen_.dimx() - panel_width - 1);
+    }
+    auto visible = collect_visible_message_lines(
+        ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
+    if (visible.empty()) {
+        return;
+    }
+    int start_line = std::max(0, region.y - mouse_tracker_.message_region().y);
+    int end_line = std::min(static_cast<int>(visible.size()) - 1,
+                            start_line + region.height - 1);
+    std::string selected;
+    for (int i = start_line; i <= end_line; ++i) {
+        if (!selected.empty()) {
+            selected += '\n';
         }
+        selected += visible[i].plain_text;
+    }
+    if (!selected.empty()) {
+        copy_to_clipboard(selected);
     }
 }
 

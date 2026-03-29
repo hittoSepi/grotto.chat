@@ -156,6 +156,14 @@ Element line_from_tokens(const std::vector<InlineToken>& tokens) {
     return hbox(std::move(parts));
 }
 
+std::string plain_line_from_tokens(const std::vector<InlineToken>& tokens) {
+    std::string out;
+    for (const auto& token : tokens) {
+        out += token.text;
+    }
+    return out;
+}
+
 std::vector<Element> wrap_tokens(const std::vector<InlineToken>& tokens, int width) {
     std::vector<Element> lines;
     std::vector<InlineToken> current;
@@ -164,6 +172,45 @@ std::vector<Element> wrap_tokens(const std::vector<InlineToken>& tokens, int wid
 
     auto flush_line = [&]() {
         lines.push_back(line_from_tokens(current));
+        current.clear();
+        current_width = 0;
+    };
+
+    for (const auto& token : tokens) {
+        const int token_width = visual_width(token.text);
+        const bool is_space = token.text == " ";
+
+        if (is_space && current.empty()) {
+            continue;
+        }
+
+        if (!current.empty() && current_width + token_width > width && !is_space) {
+            flush_line();
+        }
+
+        if (is_space && current.empty()) {
+            continue;
+        }
+
+        current.push_back(token);
+        current_width += token_width;
+    }
+
+    if (!current.empty() || lines.empty()) {
+        flush_line();
+    }
+
+    return lines;
+}
+
+std::vector<std::string> wrap_tokens_plain(const std::vector<InlineToken>& tokens, int width) {
+    std::vector<std::string> lines;
+    std::vector<InlineToken> current;
+    int current_width = 0;
+    width = std::max(1, width);
+
+    auto flush_line = [&]() {
+        lines.push_back(plain_line_from_tokens(current));
         current.clear();
         current_width = 0;
     };
@@ -221,6 +268,21 @@ std::vector<Element> wrap_prefixed_text(const std::string& text,
     const int content_width = std::max(1, width - visual_width(prefix));
     auto lines = wrap_tokens(parse_inline_tokens(text, content_style), content_width);
     return prefixed_lines(std::move(lines), prefix, prefix_style);
+}
+
+std::vector<std::string> wrap_prefixed_plain_text(const std::string& text,
+                                                  int width,
+                                                  const std::string& prefix,
+                                                  InlineStyle content_style) {
+    const int content_width = std::max(1, width - visual_width(prefix));
+    auto lines = wrap_tokens_plain(parse_inline_tokens(text, content_style), content_width);
+    for (auto& line : lines) {
+        line = prefix + line;
+    }
+    if (lines.empty()) {
+        lines.push_back(prefix);
+    }
+    return lines;
 }
 
 } // anonymous namespace
@@ -289,6 +351,64 @@ std::vector<Element> render_markdown_lines(const std::string& md, int width) {
 
     if (blocks.empty()) {
         blocks.push_back(text(""));
+    }
+    return blocks;
+}
+
+std::vector<std::string> render_markdown_plain_lines(const std::string& md, int width) {
+    std::istringstream stream(md);
+    std::string line;
+    std::vector<std::string> blocks;
+    bool in_code_block = false;
+
+    while (std::getline(stream, line)) {
+        if (line.size() >= 3 && line.substr(0, 3) == "```") {
+            in_code_block = !in_code_block;
+            continue;
+        }
+
+        if (in_code_block) {
+            auto code_lines = wrap_prefixed_plain_text(line, width, "", InlineStyle::Code);
+            blocks.insert(blocks.end(), code_lines.begin(), code_lines.end());
+            continue;
+        }
+
+        if (!line.empty() && line[0] == '#') {
+            size_t level = 0;
+            while (level < line.size() && line[level] == '#') ++level;
+            std::string heading = line.substr(level);
+            if (!heading.empty() && heading[0] == ' ') heading = heading.substr(1);
+            auto heading_lines = wrap_prefixed_plain_text(heading, width, "", InlineStyle::Heading);
+            blocks.insert(blocks.end(), heading_lines.begin(), heading_lines.end());
+            continue;
+        }
+
+        if (!line.empty() && line[0] == '>') {
+            std::string content = line.substr(1);
+            if (!content.empty() && content[0] == ' ') content = content.substr(1);
+            auto quote_lines = wrap_prefixed_plain_text(content, width, "│ ", InlineStyle::Quote);
+            blocks.insert(blocks.end(), quote_lines.begin(), quote_lines.end());
+            continue;
+        }
+
+        if (line.size() >= 2 &&
+            (line[0] == '-' || line[0] == '*') && line[1] == ' ') {
+            std::string content = line.substr(2);
+            auto bullet_lines = wrap_prefixed_plain_text(content, width, "  • ", InlineStyle::Normal);
+            blocks.insert(blocks.end(), bullet_lines.begin(), bullet_lines.end());
+            continue;
+        }
+
+        if (line.empty()) {
+            blocks.push_back("");
+        } else {
+            auto normal_lines = wrap_prefixed_plain_text(line, width, "", InlineStyle::Normal);
+            blocks.insert(blocks.end(), normal_lines.begin(), normal_lines.end());
+        }
+    }
+
+    if (blocks.empty()) {
+        blocks.push_back("");
     }
     return blocks;
 }
