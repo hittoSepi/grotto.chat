@@ -103,11 +103,13 @@ asio::awaitable<void> NetClient::connect_once() {
     auto executor = co_await asio::this_coro::executor;
 
     // DNS resolve
+    if (callbacks_.on_trace) callbacks_.on_trace("Resolving server address", false, true);
     asio::ip::tcp::resolver resolver(executor);
     auto endpoints = co_await resolver.async_resolve(
         cfg_.server.host,
         std::to_string(cfg_.server.port),
         use_awaitable);
+    if (callbacks_.on_trace) callbacks_.on_trace("Server address resolved", false, true);
 
     // Create TLS socket
     auto socket = std::make_shared<SslSocket>(executor, ssl_ctx_);
@@ -115,15 +117,16 @@ asio::awaitable<void> NetClient::connect_once() {
     SSL_set_tlsext_host_name(socket->native_handle(), cfg_.server.host.c_str());
     // Hostname verification is handled via TOFU cert pinning in verify_cert_pin()
     co_await asio::async_connect(socket->lowest_layer(), endpoints, use_awaitable);
-    if (callbacks_.on_trace) callbacks_.on_trace("TCP connected", false, false);
+    if (callbacks_.on_trace) callbacks_.on_trace("TCP connected", false, true);
     socket->lowest_layer().set_option(asio::ip::tcp::no_delay(true));
 
     co_await socket->async_handshake(asio::ssl::stream_base::client, use_awaitable);
-    if (callbacks_.on_trace) callbacks_.on_trace("TLS handshake done", false, false);
+    if (callbacks_.on_trace) callbacks_.on_trace("TLS handshake done", false, true);
 
     if (!verify_cert_pin(socket->native_handle())) {
         throw std::runtime_error("Certificate pinning check failed");
     }
+    if (callbacks_.on_trace) callbacks_.on_trace("Certificate verified", false, true);
 
     spdlog::info("Connected to {}:{}", cfg_.server.host, cfg_.server.port);
     connected_.store(true);

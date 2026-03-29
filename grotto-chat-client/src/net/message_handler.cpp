@@ -64,7 +64,7 @@ void MessageHandler::handle_auth_challenge(const Envelope& env) {
     std::vector<uint8_t> nonce(nonce_str.begin(), nonce_str.end());
 
     spdlog::debug("Received auth challenge, signing...");
-    if (trace_fn_) trace_fn_("AUTH_CHALLENGE received");
+    if (trace_fn_) trace_fn_("Auth challenge received");
 
     auto sig     = crypto_.sign_challenge(nonce, cfg_.identity.user_id);
     auto id_pub  = crypto_.identity_pub();
@@ -83,13 +83,13 @@ void MessageHandler::handle_auth_challenge(const Envelope& env) {
     }
 
     send_envelope(MT_AUTH_RESPONSE, resp);
-    if (trace_fn_) trace_fn_("AUTH_RESPONSE sent");
+    if (trace_fn_) trace_fn_("Auth response sent");
 }
 
 void MessageHandler::handle_auth_ok(const Envelope& env) {
     (void)env;
     authenticated_ = true;
-    if (trace_fn_) trace_fn_("AUTH_OK received");
+    if (trace_fn_) trace_fn_("Authenticated");
     spdlog::info("Authentication successful");
     push_system(i18n::tr(i18n::I18nKey::AUTHENTICATED_AS, cfg_.identity.user_id));
     state_.set_connected(true);

@@ -283,7 +283,7 @@ bool App::init(const std::filesystem::path& config_path,
         env.set_type(MT_HELLO);
         env.set_payload(hello.SerializeAsString());
         net_client_->send(env);
-        trace_connection_phase("HELLO sent", false, false);
+        trace_connection_phase("HELLO sent", false, true);
     };
     cb.on_disconnected = [this](const std::string& reason) {
         state_.set_connected(false);
@@ -300,7 +300,7 @@ bool App::init(const std::filesystem::path& config_path,
         persist_message(channel_id, msg);
     });
     msg_handler_->set_trace_callback([this](const std::string& text) {
-        trace_connection_phase(text, false, false);
+        trace_connection_phase(text, false, true);
     });
     msg_handler_->set_command_response_callback([this](const CommandResponse& response) {
         handle_command_response(response);
