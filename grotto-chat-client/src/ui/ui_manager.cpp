@@ -3,6 +3,7 @@
 #include "ui/tab_bar.hpp"
 #include "ui/status_bar.hpp"
 #include "ui/message_view.hpp"
+#include "ui/terminal_image.hpp"
 #include "ui/layout.hpp"
 
 #include <ftxui/component/component.hpp>
@@ -273,6 +274,9 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
                 state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
             if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
                 if (auto url = find_url_in_text(visible[line_y].plain_text)) {
+                    if (display_inline_image_from_url(screen_, *url)) {
+                        return;
+                    }
                     open_url(*url);
                     return;
                 }
@@ -284,6 +288,9 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
                     if (message_index >= 0 &&
                         message_index < static_cast<int>(ch_state.messages.size())) {
                         if (auto url = find_url_in_text(ch_state.messages[message_index].content)) {
+                            if (display_inline_image_from_url(screen_, *url)) {
+                                return;
+                            }
                             open_url(*url);
                             return;
                         }
