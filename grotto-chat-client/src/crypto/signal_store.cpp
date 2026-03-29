@@ -34,6 +34,14 @@ std::string private_fingerprint(const uint8_t* data, size_t len) {
     return short_hex(digest.data(), digest.size(), digest.size());
 }
 
+std::vector<uint8_t> normalize_identity_key_bytes(const uint8_t* data, size_t len) {
+    if (!data || len == 0) return {};
+    if (len == 33 && data[0] == 0x05) {
+        return std::vector<uint8_t>(data + 1, data + len);
+    }
+    return std::vector<uint8_t>(data, data + len);
+}
+
 } // namespace
 
 SignalStore::SignalStore(db::LocalStore& store, const std::string& local_user_id)
@@ -313,10 +321,10 @@ int SignalStore::id_save_identity(const signal_protocol_address* addr,
                                    uint8_t* key_data, size_t key_len, void* ud) {
     auto* self = static_cast<SignalStore*>(ud);
     std::string name(addr->name, addr->name_len);
-    // Signal Protocol provides X25519 keys, but we store Ed25519 format
-    // We store as-is for now; conversion happens in id_is_trusted
-    self->local_store_.save_peer_identity(name,
-        std::vector<uint8_t>(key_data, key_data + key_len));
+    auto normalized = normalize_identity_key_bytes(key_data, key_len);
+    spdlog::debug("Saving peer identity for '{}': incoming_len={} normalized_len={} fingerprint={}",
+                  name, key_len, normalized.size(), short_hex(normalized.data(), normalized.size()));
+    self->local_store_.save_peer_identity(name, normalized);
     return SG_SUCCESS;
 }
 
@@ -324,21 +332,27 @@ int SignalStore::id_is_trusted(const signal_protocol_address* addr,
                                 uint8_t* key_data, size_t key_len, void* ud) {
     auto* self = static_cast<SignalStore*>(ud);
     std::string name(addr->name, addr->name_len);
+    auto incoming = normalize_identity_key_bytes(key_data, key_len);
     auto stored = self->local_store_.load_peer_identity(name);
     if (!stored) {
         // First time seeing this identity: trust and save (TOFU)
-        self->local_store_.save_peer_identity(name,
-            std::vector<uint8_t>(key_data, key_data + key_len));
+        self->local_store_.save_peer_identity(name, incoming);
+        spdlog::debug("TOFU peer identity for '{}': incoming_len={} normalized_len={} fingerprint={}",
+                      name, key_len, incoming.size(), short_hex(incoming.data(), incoming.size()));
         return 1;
     }
-    // libsignal always passes X25519 (Curve25519) keys here; stored keys are
-    // also X25519 (saved as-is by id_save_identity and the TOFU path above).
-    // Direct byte comparison is correct — no conversion needed.
-    if (stored->size() != key_len) {
-        spdlog::warn("Identity key size mismatch for {}: stored={} incoming={}", name, stored->size(), key_len);
+    if (stored->size() != incoming.size()) {
+        spdlog::warn("Identity key size mismatch for {}: stored={} incoming={} raw_incoming={}",
+                     name, stored->size(), incoming.size(), key_len);
         return 0;
     }
-    return (std::memcmp(stored->data(), key_data, key_len) == 0) ? 1 : 0;
+    const bool trusted = std::memcmp(stored->data(), incoming.data(), incoming.size()) == 0;
+    spdlog::debug("Identity trust check for '{}': trusted={} stored={} incoming={}",
+                  name,
+                  trusted,
+                  short_hex(stored->data(), stored->size()),
+                  short_hex(incoming.data(), incoming.size()));
+    return trusted ? 1 : 0;
 }
 
 void SignalStore::id_destroy(void*) {}
