@@ -564,6 +564,19 @@ void Session::handle_auth_response(const AuthResponse& auth) {
                              remote_endpoint_, auth.user_id());
             }
         }
+
+        // Always refresh the signed pre-key on successful auth for existing
+        // users. Otherwise another client can request a bundle in the window
+        // before KEY_UPLOAD and receive a stale SPK/signature pair.
+        if (!auth.signed_prekey().empty() && !auth.spk_sig().empty()) {
+            us.upsert_signed_prekey(
+                auth.user_id(),
+                std::vector<uint8_t>(auth.signed_prekey().begin(), auth.signed_prekey().end()),
+                std::vector<uint8_t>(auth.spk_sig().begin(), auth.spk_sig().end()),
+                auth.spk_id());
+            spdlog::debug("[{}] Refreshed SPK during auth for user {} (spk_id={})",
+                          remote_endpoint_, auth.user_id(), auth.spk_id());
+        }
     }
 
     // --- Auth success ---
