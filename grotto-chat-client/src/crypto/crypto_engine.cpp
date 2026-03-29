@@ -143,28 +143,6 @@ std::vector<uint8_t> extract_private_key(ec_private_key* private_key) {
     return result;
 }
 
-struct KeyPairDiagnostics {
-    std::vector<uint8_t> public_key;
-    std::vector<uint8_t> derived_public;
-    bool pair_matches = false;
-};
-
-KeyPairDiagnostics inspect_key_pair(ec_key_pair* key_pair) {
-    KeyPairDiagnostics info;
-    if (!key_pair) return info;
-
-    info.public_key = extract_public_key_no_prefix(ec_key_pair_get_public(key_pair));
-    std::vector<uint8_t> private_key = extract_private_key(ec_key_pair_get_private(key_pair));
-    if (private_key.size() == crypto_scalarmult_SCALARBYTES) {
-        std::array<uint8_t, crypto_scalarmult_BYTES> derived{};
-        if (crypto_scalarmult_base(derived.data(), private_key.data()) == 0) {
-            info.derived_public.assign(derived.begin(), derived.end());
-            info.pair_matches = (info.public_key == info.derived_public);
-        }
-    }
-    return info;
-}
-
 std::optional<X25519KeyPair> generate_libsignal_x25519_key_pair(signal_context* signal_ctx) {
     if (!signal_ctx) return std::nullopt;
 
@@ -186,88 +164,6 @@ std::optional<X25519KeyPair> generate_libsignal_x25519_key_pair(signal_context* 
 
     SIGNAL_UNREF(key_pair);
     return result;
-}
-
-std::vector<uint8_t> load_local_signed_pre_key_public(db::LocalStore* local_store,
-                                                      signal_context* signal_ctx,
-                                                      uint32_t id) {
-    if (!local_store || !signal_ctx) return {};
-    auto data = local_store->load_signed_pre_key(id);
-    if (!data) return {};
-
-    session_signed_pre_key* record = nullptr;
-    if (session_signed_pre_key_deserialize(&record, data->data(), data->size(), signal_ctx) != 0 || !record) {
-        return {};
-    }
-
-    KeyPairDiagnostics info = inspect_key_pair(session_signed_pre_key_get_key_pair(record));
-    SIGNAL_UNREF(record);
-    return info.public_key;
-}
-
-std::vector<uint8_t> load_local_pre_key_public(db::LocalStore* local_store,
-                                               signal_context* signal_ctx,
-                                               uint32_t id) {
-    if (!local_store || !signal_ctx) return {};
-    auto data = local_store->load_pre_key(id);
-    if (!data) return {};
-
-    session_pre_key* record = nullptr;
-    if (session_pre_key_deserialize(&record, data->data(), data->size(), signal_ctx) != 0 || !record) {
-        return {};
-    }
-
-    KeyPairDiagnostics info = inspect_key_pair(session_pre_key_get_key_pair(record));
-    SIGNAL_UNREF(record);
-    return info.public_key;
-}
-
-KeyPairDiagnostics load_local_signed_pre_key_diagnostics(db::LocalStore* local_store,
-                                                         signal_context* signal_ctx,
-                                                         uint32_t id) {
-    if (!local_store || !signal_ctx) return {};
-    auto data = local_store->load_signed_pre_key(id);
-    if (!data) return {};
-
-    session_signed_pre_key* record = nullptr;
-    if (session_signed_pre_key_deserialize(&record, data->data(), data->size(), signal_ctx) != 0 || !record) {
-        return {};
-    }
-
-    KeyPairDiagnostics info = inspect_key_pair(session_signed_pre_key_get_key_pair(record));
-    SIGNAL_UNREF(record);
-    return info;
-}
-
-KeyPairDiagnostics load_local_pre_key_diagnostics(db::LocalStore* local_store,
-                                                  signal_context* signal_ctx,
-                                                  uint32_t id) {
-    if (!local_store || !signal_ctx) return {};
-    auto data = local_store->load_pre_key(id);
-    if (!data) return {};
-
-    session_pre_key* record = nullptr;
-    if (session_pre_key_deserialize(&record, data->data(), data->size(), signal_ctx) != 0 || !record) {
-        return {};
-    }
-
-    KeyPairDiagnostics info = inspect_key_pair(session_pre_key_get_key_pair(record));
-    SIGNAL_UNREF(record);
-    return info;
-}
-
-std::string short_hex(const std::vector<uint8_t>& data, size_t max_bytes = 8) {
-    if (data.empty()) return "(empty)";
-    static constexpr char kHex[] = "0123456789abcdef";
-    const size_t n = std::min(max_bytes, data.size());
-    std::string out;
-    out.reserve(n * 2);
-    for (size_t i = 0; i < n; ++i) {
-        uint8_t b = data[i];
-        out.push_back(kHex[b >> 4]);
-        out.push_back(kHex[b & 0x0f]);
-    }
-    return out;
 }
 
 } // namespace
@@ -786,45 +682,6 @@ ChatEnvelope CryptoEngine::encrypt(const std::string& sender_id,
     env.set_ciphertext(signal_buffer_data(buf), signal_buffer_len(buf));
     env.set_ciphertext_type(ciphertext_message_get_type(encrypted));
 
-    if (env.ciphertext_type() == 3) {
-        pre_key_signal_message* msg = nullptr;
-        int parse_rc = pre_key_signal_message_deserialize(
-            &msg,
-            reinterpret_cast<const uint8_t*>(env.ciphertext().data()),
-            env.ciphertext().size(),
-            signal_ctx_);
-        if (parse_rc == SG_SUCCESS) {
-            const bool has_pre_key_id = pre_key_signal_message_has_pre_key_id(msg) == 1;
-            signal_message* inner = pre_key_signal_message_get_signal_message(msg);
-            const auto base_key = extract_public_key_no_prefix(pre_key_signal_message_get_base_key(msg));
-            const auto identity_key = extract_public_key_no_prefix(pre_key_signal_message_get_identity_key(msg));
-            const auto ratchet_key = extract_public_key_no_prefix(
-                inner ? signal_message_get_sender_ratchet_key(inner) : nullptr);
-            signal_buffer* body = inner ? signal_message_get_body(inner) : nullptr;
-            spdlog::debug(
-                "Outgoing PRE_KEY message to '{}': version={} registration_id={} signed_pre_key_id={} has_pre_key_id={} pre_key_id={}",
-                recipient_id,
-                static_cast<unsigned>(pre_key_signal_message_get_message_version(msg)),
-                pre_key_signal_message_get_registration_id(msg),
-                pre_key_signal_message_get_signed_pre_key_id(msg),
-                has_pre_key_id,
-                has_pre_key_id ? pre_key_signal_message_get_pre_key_id(msg) : 0);
-            spdlog::debug(
-                "Outgoing PRE_KEY internals to '{}': base_key={} identity_key={} inner_version={} inner_counter={} inner_ratchet={} inner_body_len={} ciphertext_len={}",
-                recipient_id,
-                short_hex(base_key),
-                short_hex(identity_key),
-                inner ? static_cast<unsigned>(signal_message_get_message_version(inner)) : 0U,
-                inner ? signal_message_get_counter(inner) : 0U,
-                short_hex(ratchet_key),
-                body ? signal_buffer_len(body) : 0U,
-                env.ciphertext().size());
-            SIGNAL_UNREF(msg);
-        } else {
-            spdlog::warn("Failed to deserialize outgoing PRE_KEY message for {}: {}", recipient_id, parse_rc);
-        }
-    }
-
     SIGNAL_UNREF(encrypted);
 
     return env;
@@ -882,70 +739,11 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
     signal_buffer* plaintext_buf = nullptr;
 
     bool had_session_before_decrypt = signal_protocol_session_contains_session(store_ctx_, &addr) == 1;
-    spdlog::debug("Decrypting DM from '{}' type={} had_session={} current_spk_id={}",
-                  env.sender_id(), env.ciphertext_type(), had_session_before_decrypt, spk_.id);
 
     if (env.ciphertext_type() == 3) {  // PRE_KEY_SIGNAL_MESSAGE
         pre_key_signal_message* msg = nullptr;
         rc = pre_key_signal_message_deserialize(&msg, ct, ct_len, signal_ctx_);
         if (rc == SG_SUCCESS) {
-            const bool has_pre_key_id = pre_key_signal_message_has_pre_key_id(msg) == 1;
-            const uint32_t pre_key_id = has_pre_key_id ? pre_key_signal_message_get_pre_key_id(msg) : 0;
-            const uint32_t signed_pre_key_id = pre_key_signal_message_get_signed_pre_key_id(msg);
-            signal_message* inner = pre_key_signal_message_get_signal_message(msg);
-            const auto base_key = extract_public_key_no_prefix(pre_key_signal_message_get_base_key(msg));
-            const auto identity_key = extract_public_key_no_prefix(pre_key_signal_message_get_identity_key(msg));
-            const auto ratchet_key = extract_public_key_no_prefix(
-                inner ? signal_message_get_sender_ratchet_key(inner) : nullptr);
-            signal_buffer* body = inner ? signal_message_get_body(inner) : nullptr;
-            spdlog::debug("PRE_KEY message from '{}' local_spk_present={} local_prekey_counter_next={}",
-                          env.sender_id(),
-                          local_store_ && local_store_->contains_signed_pre_key(spk_.id),
-                          next_opk_id_);
-            spdlog::debug(
-                "PRE_KEY metadata from '{}': version={} registration_id={} signed_pre_key_id={} local_signed_pre_key_present={} has_pre_key_id={} pre_key_id={} local_pre_key_present={}",
-                env.sender_id(),
-                static_cast<unsigned>(pre_key_signal_message_get_message_version(msg)),
-                pre_key_signal_message_get_registration_id(msg),
-                signed_pre_key_id,
-                local_store_ && local_store_->contains_signed_pre_key(signed_pre_key_id),
-                has_pre_key_id,
-                pre_key_id,
-                has_pre_key_id && local_store_ && local_store_->contains_pre_key(pre_key_id));
-            spdlog::debug(
-                "PRE_KEY wire internals from '{}': base_key={} identity_key={} inner_version={} inner_counter={} inner_ratchet={} inner_body_len={} ciphertext_len={}",
-                env.sender_id(),
-                short_hex(base_key),
-                short_hex(identity_key),
-                inner ? static_cast<unsigned>(signal_message_get_message_version(inner)) : 0U,
-                inner ? signal_message_get_counter(inner) : 0U,
-                short_hex(ratchet_key),
-                body ? signal_buffer_len(body) : 0U,
-                ct_len);
-
-            auto local_spk = load_local_signed_pre_key_diagnostics(local_store_, signal_ctx_, signed_pre_key_id);
-            auto local_opk = has_pre_key_id ? load_local_pre_key_diagnostics(local_store_, signal_ctx_, pre_key_id)
-                                            : KeyPairDiagnostics{};
-            spdlog::debug(
-                "PRE_KEY local record state from '{}': signed_pre_key_matches_current={} local_spk_pub_size={} local_pre_key_loaded={} local_pre_key_pub_size={}",
-                env.sender_id(),
-                !local_spk.public_key.empty() && local_spk.public_key == std::vector<uint8_t>(spk_.key_pair.pub.begin(), spk_.key_pair.pub.end()),
-                local_spk.public_key.size(),
-                has_pre_key_id && !local_opk.public_key.empty(),
-                local_opk.public_key.size());
-            spdlog::debug(
-                "PRE_KEY local pub fingerprints from '{}': current_spk={} local_spk={} local_pre_key={}",
-                env.sender_id(),
-                short_hex(std::vector<uint8_t>(spk_.key_pair.pub.begin(), spk_.key_pair.pub.end())),
-                short_hex(local_spk.public_key),
-                short_hex(local_opk.public_key));
-            spdlog::debug(
-                "PRE_KEY local keypair consistency from '{}': local_spk_pair_matches={} local_spk_derived={} local_pre_key_pair_matches={} local_pre_key_derived={}",
-                env.sender_id(),
-                local_spk.pair_matches,
-                short_hex(local_spk.derived_public),
-                has_pre_key_id && local_opk.pair_matches,
-                short_hex(local_opk.derived_public));
             rc = session_cipher_decrypt_pre_key_signal_message(cipher, msg, nullptr, &plaintext_buf);
             SIGNAL_UNREF(msg);
         }
@@ -1055,11 +853,6 @@ bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
         bundle.spk_id(),
         !opk_str.empty(),
         bundle.opk_id());
-    spdlog::debug(
-        "KeyBundle pub fingerprints for '{}': signed_prekey={} one_time_prekey={}",
-        recipient_id,
-        short_hex(std::vector<uint8_t>(spk_str.begin(), spk_str.end())),
-        short_hex(std::vector<uint8_t>(opk_str.begin(), opk_str.end())));
 
     signal_buffer* serialized_signed_pre_key = nullptr;
     int verify_rc = ec_public_key_serialize(&serialized_signed_pre_key, signed_pre_key);
@@ -1070,11 +863,6 @@ bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
             signal_buffer_len(serialized_signed_pre_key),
             reinterpret_cast<const uint8_t*>(spk_sig.data()),
             spk_sig.size());
-        spdlog::debug(
-            "KeyBundle signature check for '{}': verify_rc={} serialized_spk_size={}",
-            recipient_id,
-            verify_rc,
-            signal_buffer_len(serialized_signed_pre_key));
     } else {
         spdlog::error("Failed to serialize signed pre-key from bundle for {}: {}", recipient_id, verify_rc);
     }
