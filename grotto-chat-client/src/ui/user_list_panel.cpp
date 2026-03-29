@@ -131,8 +131,9 @@ Element render_user_list_panel(
     const VoiceSection& voice_section,
     const UserListConfig& config,
     const std::string& local_user_id,
-    std::vector<std::pair<std::string, int>>& out_user_positions,
+    std::vector<UserHitRegion>& out_user_positions,
     int& out_panel_divider_x,
+    int base_x,
     int base_y) {
     
     out_user_positions.clear();
@@ -154,7 +155,7 @@ Element render_user_list_panel(
     
     // ── User list ──────────────────────────────────────────────────────────
     for (const auto& user : users) {
-        out_user_positions.push_back({user.user_id, current_y});
+        out_user_positions.push_back({user.user_id, base_x, current_y, config.width, 1});
         panel_content.push_back(render_user_entry(user, local_user_id));
         current_y++;
     }
@@ -173,6 +174,7 @@ Element render_user_list_panel(
         
         // Speaking users first (green)
         for (const auto& user_id : voice_section.talking_users) {
+            out_user_positions.push_back({user_id, base_x, current_y, config.width, 1});
             panel_content.push_back(render_voice_user(user_id, 
                 ChannelUserInfo::VoiceStatus::Talking, local_user_id));
             current_y++;
@@ -180,6 +182,7 @@ Element render_user_list_panel(
         
         // Connected but not speaking (white circle)
         for (const auto& user_id : voice_section.connected_users) {
+            out_user_positions.push_back({user_id, base_x, current_y, config.width, 1});
             panel_content.push_back(render_voice_user(user_id,
                 ChannelUserInfo::VoiceStatus::Off, local_user_id));
             current_y++;
@@ -187,6 +190,7 @@ Element render_user_list_panel(
         
         // Muted users (yellow)
         for (const auto& user_id : voice_section.muted_users) {
+            out_user_positions.push_back({user_id, base_x, current_y, config.width, 1});
             panel_content.push_back(render_voice_user(user_id,
                 ChannelUserInfo::VoiceStatus::Muted, local_user_id));
             current_y++;

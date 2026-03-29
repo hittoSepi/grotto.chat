@@ -7,6 +7,14 @@
 
 namespace grotto::ui {
 
+struct UserHitRegion {
+    std::string user_id;
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 1;
+};
+
 // Configuration for the user list panel (persisted)
 struct UserListConfig {
     int  width        = 20;      // Default width in columns
@@ -37,8 +45,9 @@ ftxui::Element render_user_list_panel(
     const VoiceSection& voice_section,
     const UserListConfig& config,
     const std::string& local_user_id,
-    std::vector<std::pair<std::string, int>>& out_user_positions,  // user_id -> y position
+    std::vector<UserHitRegion>& out_user_positions,
     int& out_panel_divider_x,  // x position of the panel divider (for resizing)
+    int base_x = 0,
     int base_y = 1);  // Starting y position (after tab bar)
 
 // Simple version without position tracking (backward compatible)
@@ -47,7 +56,7 @@ inline ftxui::Element render_user_list_panel(
     const VoiceSection& voice_section,
     const UserListConfig& config,
     const std::string& local_user_id) {
-    std::vector<std::pair<std::string, int>> dummy;
+    std::vector<UserHitRegion> dummy;
     int dummy_x;
     return render_user_list_panel(users, voice_section, config, local_user_id, dummy, dummy_x);
 }

@@ -47,6 +47,53 @@ bool is_shift_insert_paste(std::string_view input) {
     return input == "\x1b[2;2~" || input == "\x1b[2~";
 }
 
+int effective_message_width(const MouseTracker& mouse_tracker,
+                            const UserListConfig& user_list_config,
+                            int term_cols) {
+    if (user_list_config.collapsed) {
+        return mouse_tracker.message_region().width > 0 ? mouse_tracker.message_region().width
+                                                        : term_cols;
+    }
+
+    int panel_width = get_panel_width(user_list_config, term_cols);
+    return std::max(1, term_cols - panel_width - 1);
+}
+
+std::vector<VisibleMessageLine> current_visible_lines(AppState& state,
+                                                      const MouseTracker& mouse_tracker,
+                                                      const UserListConfig& user_list_config,
+                                                      const ClientConfig& cfg,
+                                                      int term_cols) {
+    auto ch = state.active_channel();
+    if (!ch) {
+        return {};
+    }
+
+    auto ch_state = state.channel_snapshot(*ch);
+    int visible_rows = mouse_tracker.message_region().height;
+    int message_width = effective_message_width(mouse_tracker, user_list_config, term_cols);
+    return collect_visible_message_lines(
+        ch_state, cfg.ui.timestamp_format, visible_rows, message_width);
+}
+
+std::optional<std::string> find_url_in_text(const std::string& text) {
+    static const std::regex url_re(R"(((?:https?://|www\.)\S+))");
+    std::smatch match;
+    if (!std::regex_search(text, match, url_re)) {
+        return std::nullopt;
+    }
+
+    std::string url = match[1].str();
+    if (url.starts_with("www.")) {
+        url = "https://" + url;
+    }
+    while (!url.empty() && (url.back() == ')' || url.back() == ']' || url.back() == '.' ||
+                            url.back() == ',' || url.back() == ';')) {
+        url.pop_back();
+    }
+    return url.empty() ? std::nullopt : std::optional<std::string>(url);
+}
+
 } // namespace
 
 UIManager::UIManager(AppState& state, ClientConfig& cfg)
@@ -147,11 +194,8 @@ bool UIManager::handle_mouse_event(const Event& event) {
                 if (ch) {
                     auto ch_state = state_.channel_snapshot(*ch);
                     int visible_rows = mouse_tracker_.message_region().height;
-                    int message_width = mouse_tracker_.message_region().width;
-                    if (!user_list_config_.collapsed) {
-                        int panel_width = get_panel_width(user_list_config_, screen_.dimx());
-                        message_width = std::max(1, screen_.dimx() - panel_width - 1);
-                    }
+                    int message_width = effective_message_width(
+                        mouse_tracker_, user_list_config_, screen_.dimx());
                     auto visible = collect_visible_message_lines(
                         ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
                     if (!visible.empty()) {
@@ -224,35 +268,24 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
     // Check message area clicks (start text selection / open URL)
     if (mouse_tracker_.is_over_message_area()) {
         if (is_right_click) {
-            // Right-click: open the most recently visible URL.
-            // We can't accurately map click Y to message index when messages wrap,
-            // so scan all visible messages from bottom up and open the first URL found.
-            auto ch = state_.active_channel();
-            if (ch) {
-                auto ch_state = state_.channel_snapshot(*ch);
-                int total = static_cast<int>(ch_state.messages.size());
-                if (total > 0) {
-                    int visible_rows = mouse_tracker_.message_region().height;
-                    int bottom_idx = total - 1 - ch_state.scroll_offset;
-                    bottom_idx = std::clamp(bottom_idx, 0, total - 1);
-                    int top_idx = std::max(0, bottom_idx - visible_rows + 1);
+            int line_y = mouse_y - mouse_tracker_.message_region().y;
+            auto visible = current_visible_lines(
+                state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
+            if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
+                if (auto url = find_url_in_text(visible[line_y].plain_text)) {
+                    open_url(*url);
+                    return;
+                }
 
-                    // Estimate clicked message — use Y position as a hint
-                    int line_y = mouse_y - mouse_tracker_.message_region().y;
-                    int hint_idx = std::clamp(top_idx + line_y, top_idx, bottom_idx);
-
-                    static const std::regex url_re(R"(https?://\S{3,})");
-                    // Search from hint outward across all visible messages
-                    for (int delta = 0; delta <= (bottom_idx - top_idx); ++delta) {
-                        for (int d : {delta, -delta}) {
-                            if (d != 0 && d == -delta) continue; // avoid duplicating delta=0
-                            int idx = hint_idx + d;
-                            if (idx < top_idx || idx > bottom_idx) continue;
-                            std::smatch m;
-                            if (std::regex_search(ch_state.messages[idx].content, m, url_re)) {
-                                open_url(m[0].str());
-                                return;
-                            }
+                auto ch = state_.active_channel();
+                if (ch) {
+                    auto ch_state = state_.channel_snapshot(*ch);
+                    int message_index = visible[line_y].message_index;
+                    if (message_index >= 0 &&
+                        message_index < static_cast<int>(ch_state.messages.size())) {
+                        if (auto url = find_url_in_text(ch_state.messages[message_index].content)) {
+                            open_url(*url);
+                            return;
                         }
                     }
                 }
@@ -273,14 +306,8 @@ void UIManager::handle_double_click(int mouse_x, int mouse_y) {
         if (!ch) return;
         
         auto ch_state = state_.channel_snapshot(*ch);
-        int visible_rows = mouse_tracker_.message_region().height;
-        int message_width = mouse_tracker_.message_region().width;
-        if (!user_list_config_.collapsed) {
-            int panel_width = get_panel_width(user_list_config_, screen_.dimx());
-            message_width = std::max(1, screen_.dimx() - panel_width - 1);
-        }
-        auto visible = collect_visible_message_lines(
-            ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
+        auto visible = current_visible_lines(
+            state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
         if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
             copy_to_clipboard(visible[line_y].plain_text);
         }
@@ -296,14 +323,8 @@ void UIManager::handle_triple_click(int mouse_x, int mouse_y) {
         if (!ch) return;
         
         auto ch_state = state_.channel_snapshot(*ch);
-        int visible_rows = mouse_tracker_.message_region().height;
-        int message_width = mouse_tracker_.message_region().width;
-        if (!user_list_config_.collapsed) {
-            int panel_width = get_panel_width(user_list_config_, screen_.dimx());
-            message_width = std::max(1, screen_.dimx() - panel_width - 1);
-        }
-        auto visible = collect_visible_message_lines(
-            ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
+        auto visible = current_visible_lines(
+            state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
         if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
             copy_to_clipboard(visible[line_y].plain_text);
         }
@@ -319,18 +340,8 @@ int UIManager::get_tab_index_at_position(int mouse_x, int mouse_y) const {
     int rel_x = mouse_x - mouse_tracker_.tab_bar_region().x;
     
     for (size_t i = 0; i < tab_positions_.size(); ++i) {
-        // Estimate tab width based on channel name length + padding + unread badge
-        auto channels = state_.channel_list();
-        if (i >= channels.size()) continue;
-        
-        int unread = state_.unread_count(channels[i]);
-        int tab_width = static_cast<int>(channels[i].length()) + 2;  // + padding
-        if (unread > 0) {
-            tab_width += 3 + static_cast<int>(std::to_string(unread).length());  // [n]
-        }
-        
-        const auto& [channel, x_pos] = tab_positions_[i];
-        if (rel_x >= x_pos && rel_x < x_pos + tab_width) {
+        const auto& tab = tab_positions_[i];
+        if (rel_x >= tab.x && rel_x < tab.x + tab.width) {
             return static_cast<int>(i);
         }
     }
@@ -342,13 +353,10 @@ std::optional<std::string> UIManager::get_user_at_position(int mouse_x, int mous
     (void)mouse_x;  // Not used currently, but may be needed for future hit testing
     
     // Check each user position
-    for (const auto& [user_id, y_pos] : user_positions_) {
-        if (mouse_y == y_pos) {
-            return user_id;
-        }
-        // Allow some tolerance
-        if (std::abs(mouse_y - y_pos) <= 1) {
-            return user_id;
+    for (const auto& user : user_positions_) {
+        if (mouse_x >= user.x && mouse_x < user.x + user.width &&
+            mouse_y >= user.y && mouse_y < user.y + user.height) {
+            return user.user_id;
         }
     }
     return std::nullopt;
@@ -418,11 +426,8 @@ void UIManager::end_text_selection() {
     }
     auto ch_state = state_.channel_snapshot(*ch);
     int visible_rows = mouse_tracker_.message_region().height;
-    int message_width = mouse_tracker_.message_region().width;
-    if (!user_list_config_.collapsed) {
-        int panel_width = get_panel_width(user_list_config_, screen_.dimx());
-        message_width = std::max(1, screen_.dimx() - panel_width - 1);
-    }
+    int message_width = effective_message_width(
+        mouse_tracker_, user_list_config_, screen_.dimx());
     auto visible = collect_visible_message_lines(
         ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
     if (visible.empty()) {
@@ -496,6 +501,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
         panel_width = get_panel_width(user_list_config_, term_cols);
         msg_width = std::max(1, term_cols - panel_width - 1);  // -1 for separator
     }
+    mouse_tracker_.set_message_region({mouse_tracker_.message_region().y, 0, msg_rows, msg_width});
     
     // Message area
     Element msg_el;
@@ -538,7 +544,8 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     // Render user list panel with position tracking
     auto user_list_el = render_user_list_panel(users, voice_sec, user_list_config_, 
                                                   state_.local_user_id(), user_positions_, 
-                                                  panel_divider_x_, mouse_tracker_.message_region().y);
+                                                  panel_divider_x_, user_list_x,
+                                                  mouse_tracker_.message_region().y);
     
     // Combine message view and user list panel horizontally.
     // HEIGHT LESS_THAN keeps a long user list from overflowing the content area.

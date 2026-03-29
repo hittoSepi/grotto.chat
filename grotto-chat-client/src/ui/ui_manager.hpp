@@ -2,6 +2,7 @@
 
 #include "state/app_state.hpp"
 #include "ui/input_line.hpp"
+#include "ui/tab_bar.hpp"
 #include "ui/user_list_panel.hpp"
 #include "ui/mouse_support.hpp"
 #include "input/tab_complete.hpp"
@@ -108,8 +109,8 @@ private:
     MouseTracker mouse_tracker_;
     
     // Layout info for hit testing (updated during render)
-    mutable std::vector<std::pair<std::string, int>> tab_positions_;  // channel -> x position
-    mutable std::vector<std::pair<std::string, int>> user_positions_; // user_id -> y position
+    mutable std::vector<TabHitRegion> tab_positions_;
+    mutable std::vector<UserHitRegion> user_positions_;
     mutable int panel_divider_x_ = -1;
     mutable int user_list_y_start_ = 1;  // After header
     
