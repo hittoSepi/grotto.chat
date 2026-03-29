@@ -31,6 +31,7 @@ public:
     void save_session(const std::string& name, int device_id,
                       const std::vector<uint8_t>& session_data);
     void delete_session(const std::string& name, int device_id);
+    void delete_all_sessions();
     std::vector<int> get_sub_device_sessions(const std::string& name);
     bool contains_session(const std::string& name, int device_id);
 

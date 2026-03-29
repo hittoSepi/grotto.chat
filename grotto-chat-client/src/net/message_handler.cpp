@@ -90,6 +90,12 @@ void MessageHandler::on_auth_ok() {
     spdlog::debug("Uploaded {} one-time pre-keys", ku.opk_ids_size());
 }
 
+void MessageHandler::on_transport_disconnected() {
+    authenticated_ = false;
+    pending_sends_.clear();
+    crypto_.reset_all_dm_sessions();
+}
+
 void MessageHandler::handle_auth_fail(const Envelope& env) {
     authenticated_ = false;
     if (trace_fn_) trace_fn_("AUTH_FAIL received");

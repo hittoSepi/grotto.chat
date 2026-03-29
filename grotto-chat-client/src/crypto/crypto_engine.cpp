@@ -448,6 +448,20 @@ CryptoEngine::SpkInfo CryptoEngine::current_spk() const {
     };
 }
 
+void CryptoEngine::reset_dm_session(const std::string& peer_id) {
+    if (peer_id.empty() || !local_store_) return;
+    local_store_->delete_session(peer_id, 1);
+    pending_plaintexts_.erase(peer_id);
+    spdlog::info("Reset DM session with '{}'", peer_id);
+}
+
+void CryptoEngine::reset_all_dm_sessions() {
+    if (!local_store_) return;
+    local_store_->delete_all_sessions();
+    pending_plaintexts_.clear();
+    spdlog::info("Reset all DM sessions");
+}
+
 // ── Encrypt ───────────────────────────────────────────────────────────────────
 
 ChatEnvelope CryptoEngine::encrypt(const std::string& sender_id,
@@ -527,6 +541,7 @@ ChatEnvelope CryptoEngine::encrypt(const std::string& sender_id,
 
     if (rc != SG_SUCCESS) {
         spdlog::error("session_cipher_encrypt failed: {}", rc);
+        reset_dm_session(recipient_id);
         return {};
     }
 
@@ -633,6 +648,7 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
         spdlog::warn("Decryption failed for message from {}: rc={} type={} had_session_before={} has_session_after={} local_spk_id={}",
                      env.sender_id(), rc, env.ciphertext_type(),
                      had_session_before_decrypt, has_session_after_decrypt, spk_.id);
+        reset_dm_session(env.sender_id());
         return result;
     }
 

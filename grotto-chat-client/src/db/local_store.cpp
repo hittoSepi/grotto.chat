@@ -91,6 +91,11 @@ void LocalStore::delete_session(const std::string& name, int device_id) {
     q.exec();
 }
 
+void LocalStore::delete_all_sessions() {
+    std::lock_guard lk(mu_);
+    db_.exec("DELETE FROM signal_sessions");
+}
+
 std::vector<int> LocalStore::get_sub_device_sessions(const std::string& name) {
     std::lock_guard lk(mu_);
     SQLite::Statement q(db_,

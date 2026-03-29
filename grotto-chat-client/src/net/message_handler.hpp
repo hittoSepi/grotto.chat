@@ -57,7 +57,7 @@ public:
 
     // Track auth state for UI feedback
     bool is_authenticated() const { return authenticated_; }
-    void on_transport_disconnected() { authenticated_ = false; }
+    void on_transport_disconnected();
 
     // Send KEY_REQUEST for a DM recipient and track the pending plaintext
     // so it can be sent once the KEY_BUNDLE arrives.
