@@ -63,6 +63,55 @@ bool store_spk_record(signal_context* signal_ctx,
     return ok;
 }
 
+bool verify_spk_signature(signal_context* signal_ctx,
+                          const std::array<uint8_t, 32>& identity_ed25519_pub,
+                          const Identity::SignedPreKey& spk) {
+    if (!signal_ctx || spk.signature.empty()) return false;
+
+    std::array<uint8_t, 32> x25519_identity_pub{};
+    if (crypto_sign_ed25519_pk_to_curve25519(x25519_identity_pub.data(),
+                                             identity_ed25519_pub.data()) != 0) {
+        return false;
+    }
+
+    std::array<uint8_t, 33> identity_prefixed{};
+    identity_prefixed[0] = 0x05;
+    std::memcpy(identity_prefixed.data() + 1, x25519_identity_pub.data(), 32);
+
+    std::array<uint8_t, 33> spk_prefixed{};
+    spk_prefixed[0] = 0x05;
+    std::memcpy(spk_prefixed.data() + 1, spk.key_pair.pub.data(), 32);
+
+    ec_public_key* identity_key = nullptr;
+    ec_public_key* spk_key = nullptr;
+    signal_buffer* serialized_spk = nullptr;
+
+    int rc = curve_decode_point(&identity_key, identity_prefixed.data(), identity_prefixed.size(), signal_ctx);
+    if (rc == 0) {
+        rc = curve_decode_point(&spk_key, spk_prefixed.data(), spk_prefixed.size(), signal_ctx);
+    }
+    if (rc == 0) {
+        rc = ec_public_key_serialize(&serialized_spk, spk_key);
+    }
+    if (rc != 0) {
+        if (serialized_spk) signal_buffer_free(serialized_spk);
+        if (spk_key) SIGNAL_UNREF(spk_key);
+        if (identity_key) SIGNAL_UNREF(identity_key);
+        return false;
+    }
+
+    rc = curve_verify_signature(identity_key,
+        signal_buffer_data(serialized_spk),
+        signal_buffer_len(serialized_spk),
+        spk.signature.data(),
+        spk.signature.size());
+
+    signal_buffer_free(serialized_spk);
+    SIGNAL_UNREF(spk_key);
+    SIGNAL_UNREF(identity_key);
+    return rc == 1;
+}
+
 } // namespace
 
 // ── libsignal-protocol-c crypto provider (OpenSSL-backed) ────────────────────
@@ -292,13 +341,22 @@ bool CryptoEngine::init(db::LocalStore& store, const ClientConfig& cfg,
         std::copy(persisted_spk->priv.begin(), persisted_spk->priv.end(), spk_.key_pair.priv.begin());
         spk_.signature = persisted_spk->signature;
 
-        if (!store_spk_record(signal_ctx_, local_store_, spk_)) {
-            spdlog::error("Failed to restore persisted signed pre-key id={}", spk_.id);
-            return false;
-        }
+        if (verify_spk_signature(signal_ctx_, ed_keys.pub, spk_)) {
+            if (!store_spk_record(signal_ctx_, local_store_, spk_)) {
+                spdlog::error("Failed to restore persisted signed pre-key id={}", spk_.id);
+                return false;
+            }
 
-        spdlog::info("Loaded persisted signed pre-key id={}", spk_.id);
-    } else {
+            spdlog::info("Loaded persisted signed pre-key id={}", spk_.id);
+        } else {
+            spdlog::warn("Persisted signed pre-key id={} has invalid signature; regenerating", spk_.id);
+            local_store_->remove_signed_pre_key(spk_.id);
+            local_store_->clear_local_signed_pre_key_state();
+            spk_ = {};
+        }
+    }
+
+    if (spk_.signature.empty()) {
         // Generate SPK using libsignal-compatible XEdDSA signing
         spk_.id = 1;
         if (crypto_box_keypair(spk_.key_pair.pub.data(), spk_.key_pair.priv.data()) != 0) {
@@ -372,6 +430,8 @@ bool CryptoEngine::init(db::LocalStore& store, const ClientConfig& cfg,
         state.signature = spk_.signature;
         local_store_->store_local_signed_pre_key_state(state);
         spdlog::info("Generated and persisted signed pre-key id={}", spk_.id);
+    } else {
+        spdlog::info("Using validated persisted signed pre-key id={}", spk_.id);
     }
     // Load persisted counter to avoid reusing pre-key IDs after restart
     next_opk_id_ = local_store_->load_pre_key_counter();
