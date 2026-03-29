@@ -2,11 +2,39 @@
 #include <spdlog/spdlog.h>
 #include <cstring>
 #include <sodium.h>
+#include <algorithm>
+#include <string>
+#include <vector>
 
 // libsignal-protocol-c helpers
 #include <signal_protocol_types.h>
 
 namespace grotto::crypto {
+
+namespace {
+
+std::string short_hex(const uint8_t* data, size_t len, size_t max_bytes = 8) {
+    if (!data || len == 0) return "(empty)";
+    static constexpr char kHex[] = "0123456789abcdef";
+    const size_t n = std::min(max_bytes, len);
+    std::string out;
+    out.reserve(n * 2);
+    for (size_t i = 0; i < n; ++i) {
+        const uint8_t b = data[i];
+        out.push_back(kHex[b >> 4]);
+        out.push_back(kHex[b & 0x0f]);
+    }
+    return out;
+}
+
+std::string private_fingerprint(const uint8_t* data, size_t len) {
+    if (!data || len == 0) return "(empty)";
+    std::array<uint8_t, 8> digest{};
+    crypto_generichash(digest.data(), digest.size(), data, len, nullptr, 0);
+    return short_hex(digest.data(), digest.size(), digest.size());
+}
+
+} // namespace
 
 SignalStore::SignalStore(db::LocalStore& store, const std::string& local_user_id)
     : local_store_(store), local_user_id_(local_user_id) {}
@@ -211,6 +239,13 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
         std::array<uint8_t, 33> pub_with_prefix{};
         pub_with_prefix[0] = 0x05;
         std::memcpy(pub_with_prefix.data() + 1, x25519_pub.data(), 32);
+
+        spdlog::debug(
+            "Identity keypair for libsignal (cached) user='{}': x25519_pub={} x25519_priv_fp={} ed25519_pub={}",
+            self->local_user_id_,
+            short_hex(x25519_pub.data(), x25519_pub.size()),
+            private_fingerprint(x25519_priv.data(), x25519_priv.size()),
+            short_hex(self->identity_pub_.data(), self->identity_pub_.size()));
         
         *public_data  = signal_buffer_create(pub_with_prefix.data(), pub_with_prefix.size());
         *private_data = signal_buffer_create(x25519_priv.data(), x25519_priv.size());
@@ -218,6 +253,9 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
     }
     
     // Fallback: load from store (private key won't be available)
+    spdlog::warn(
+        "Identity keypair fallback hit for user='{}'; cached private key missing, returning public key only",
+        self->local_user_id_);
     auto row = self->local_store_.load_identity(self->local_user_id_);
     if (!row) return SG_ERR_UNKNOWN;
 
@@ -228,6 +266,11 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
         crypto_sign_ed25519_pk_to_curve25519(pub_with_prefix.data() + 1,
                                               row->identity_pub.data()) == 0) {
         *public_data = signal_buffer_create(pub_with_prefix.data(), pub_with_prefix.size());
+        spdlog::debug(
+            "Identity keypair fallback public user='{}': x25519_pub={} ed25519_pub={}",
+            self->local_user_id_,
+            short_hex(pub_with_prefix.data() + 1, 32),
+            short_hex(row->identity_pub.data(), row->identity_pub.size()));
     } else {
         // Fallback: use as-is with prefix (may not work properly)
         std::vector<uint8_t> raw_with_prefix;
@@ -235,6 +278,10 @@ int SignalStore::id_get_key_pair(signal_buffer** public_data,
         raw_with_prefix.push_back(0x05);
         raw_with_prefix.insert(raw_with_prefix.end(), row->identity_pub.begin(), row->identity_pub.end());
         *public_data = signal_buffer_create(raw_with_prefix.data(), raw_with_prefix.size());
+        spdlog::warn(
+            "Identity keypair fallback public user='{}' used raw key bytes len={}",
+            self->local_user_id_,
+            row->identity_pub.size());
     }
     
     // Private key not available - group sessions will fail
