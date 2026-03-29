@@ -61,11 +61,19 @@ static void print_help(const char* argv0) {
 
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
-    // Prevent Windows Console from killing the process on Ctrl+C.
-    // FTXUI will receive it as \x03 and we handle it in CatchEvent.
+    // Prevent Windows Console from killing the process on Ctrl+C and make
+    // Ctrl+C arrive as a normal key event instead of a processed console
+    // signal. This is needed because different terminals/SSH hops may still
+    // short-circuit the older handler-only approach.
     SetConsoleCtrlHandler([](DWORD ctrl_type) -> BOOL {
-        return (ctrl_type == CTRL_C_EVENT) ? TRUE : FALSE;
+        return (ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_BREAK_EVENT) ? TRUE : FALSE;
     }, TRUE);
+
+    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD mode = 0;
+    if (hin != INVALID_HANDLE_VALUE && GetConsoleMode(hin, &mode)) {
+        SetConsoleMode(hin, mode & ~ENABLE_PROCESSED_INPUT);
+    }
 #else
     // Ignore SIGINT globally so Ctrl+C reaches FTXUI as \x03 instead of
     // terminating the process. This applies to login screen, settings, and

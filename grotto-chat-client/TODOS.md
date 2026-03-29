@@ -7,6 +7,7 @@
     - [x] jos kirjoitat /help se ei mahdu koko ruutuun mutta rullausalue ei muutu
     - [x] ei koko ruudun levyistä underscorea, vain tekstin kohdalle. näyttää nyt vähä hölmöltä
     - [ ] paste ei toimi ainakaan powershellillä ssh läpi clientille
+    - [x] tekstin valinta chat-ruutuun
     - [ ] hiiren click koordinaatit saattavat olla väärin
     - [ ] right click linkin avaus toimii aika randomisti, clientillä toimii ku right klikkaa vasempaan yläkulmaan ja ps ssh client ei ollenkaan.
     - [x] priva viestin vastaanottajalla aukeaa tabi omalla nimellä, eikä sen kuka lähettänyty
