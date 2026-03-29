@@ -112,6 +112,76 @@ bool verify_spk_signature(signal_context* signal_ctx,
     return rc == 1;
 }
 
+std::vector<uint8_t> extract_public_key_no_prefix(ec_public_key* public_key) {
+    signal_buffer* serialized = nullptr;
+    if (!public_key || ec_public_key_serialize(&serialized, public_key) != 0 || !serialized) {
+        return {};
+    }
+
+    const uint8_t* data = signal_buffer_data(serialized);
+    const size_t len = signal_buffer_len(serialized);
+    std::vector<uint8_t> result;
+    if (len > 1 && data[0] == 0x05) {
+        result.assign(data + 1, data + len);
+    } else {
+        result.assign(data, data + len);
+    }
+    signal_buffer_free(serialized);
+    return result;
+}
+
+std::vector<uint8_t> load_local_signed_pre_key_public(db::LocalStore* local_store,
+                                                      signal_context* signal_ctx,
+                                                      uint32_t id) {
+    if (!local_store || !signal_ctx) return {};
+    auto data = local_store->load_signed_pre_key(id);
+    if (!data) return {};
+
+    session_signed_pre_key* record = nullptr;
+    if (session_signed_pre_key_deserialize(&record, data->data(), data->size(), signal_ctx) != 0 || !record) {
+        return {};
+    }
+
+    ec_key_pair* key_pair = session_signed_pre_key_get_key_pair(record);
+    std::vector<uint8_t> result = extract_public_key_no_prefix(
+        key_pair ? ec_key_pair_get_public(key_pair) : nullptr);
+    SIGNAL_UNREF(record);
+    return result;
+}
+
+std::vector<uint8_t> load_local_pre_key_public(db::LocalStore* local_store,
+                                               signal_context* signal_ctx,
+                                               uint32_t id) {
+    if (!local_store || !signal_ctx) return {};
+    auto data = local_store->load_pre_key(id);
+    if (!data) return {};
+
+    session_pre_key* record = nullptr;
+    if (session_pre_key_deserialize(&record, data->data(), data->size(), signal_ctx) != 0 || !record) {
+        return {};
+    }
+
+    ec_key_pair* key_pair = session_pre_key_get_key_pair(record);
+    std::vector<uint8_t> result = extract_public_key_no_prefix(
+        key_pair ? ec_key_pair_get_public(key_pair) : nullptr);
+    SIGNAL_UNREF(record);
+    return result;
+}
+
+std::string short_hex(const std::vector<uint8_t>& data, size_t max_bytes = 8) {
+    if (data.empty()) return "(empty)";
+    static constexpr char kHex[] = "0123456789abcdef";
+    const size_t n = std::min(max_bytes, data.size());
+    std::string out;
+    out.reserve(n * 2);
+    for (size_t i = 0; i < n; ++i) {
+        uint8_t b = data[i];
+        out.push_back(kHex[b >> 4]);
+        out.push_back(kHex[b & 0x0f]);
+    }
+    return out;
+}
+
 } // namespace
 
 // ── libsignal-protocol-c crypto provider (OpenSSL-backed) ────────────────────
@@ -713,6 +783,23 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
                 has_pre_key_id,
                 pre_key_id,
                 has_pre_key_id && local_store_ && local_store_->contains_pre_key(pre_key_id));
+
+            auto local_spk_pub = load_local_signed_pre_key_public(local_store_, signal_ctx_, signed_pre_key_id);
+            auto local_opk_pub = has_pre_key_id ? load_local_pre_key_public(local_store_, signal_ctx_, pre_key_id)
+                                                : std::vector<uint8_t>{};
+            spdlog::debug(
+                "PRE_KEY local record state from '{}': signed_pre_key_matches_current={} local_spk_pub_size={} local_pre_key_loaded={} local_pre_key_pub_size={}",
+                env.sender_id(),
+                !local_spk_pub.empty() && local_spk_pub == std::vector<uint8_t>(spk_.key_pair.pub.begin(), spk_.key_pair.pub.end()),
+                local_spk_pub.size(),
+                has_pre_key_id && !local_opk_pub.empty(),
+                local_opk_pub.size());
+            spdlog::debug(
+                "PRE_KEY local pub fingerprints from '{}': current_spk={} local_spk={} local_pre_key={}",
+                env.sender_id(),
+                short_hex(std::vector<uint8_t>(spk_.key_pair.pub.begin(), spk_.key_pair.pub.end())),
+                short_hex(local_spk_pub),
+                short_hex(local_opk_pub));
             rc = session_cipher_decrypt_pre_key_signal_message(cipher, msg, nullptr, &plaintext_buf);
             SIGNAL_UNREF(msg);
         }
@@ -822,6 +909,11 @@ bool CryptoEngine::on_key_bundle(const KeyBundle& bundle, const std::string& rec
         bundle.spk_id(),
         !opk_str.empty(),
         bundle.opk_id());
+    spdlog::debug(
+        "KeyBundle pub fingerprints for '{}': signed_prekey={} one_time_prekey={}",
+        recipient_id,
+        short_hex(std::vector<uint8_t>(spk_str.begin(), spk_str.end())),
+        short_hex(std::vector<uint8_t>(opk_str.begin(), opk_str.end())));
 
     signal_buffer* serialized_signed_pre_key = nullptr;
     int verify_rc = ec_public_key_serialize(&serialized_signed_pre_key, signed_pre_key);
