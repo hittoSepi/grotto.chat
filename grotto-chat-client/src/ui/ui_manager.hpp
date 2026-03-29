@@ -5,6 +5,8 @@
 #include "ui/tab_bar.hpp"
 #include "ui/user_list_panel.hpp"
 #include "ui/mouse_support.hpp"
+#include "ui/graphics_compositor.hpp"
+#include "ui/graphics_layout.hpp"
 #include "input/tab_complete.hpp"
 #include "input/command_parser.hpp"
 #include "config.hpp"
@@ -18,6 +20,7 @@
 #include <string>
 #include <optional>
 #include <chrono>
+#include <unordered_map>
 
 namespace grotto::ui {
 
@@ -91,6 +94,9 @@ private:
     
     // Build the main content area (messages + user list panel)
     ftxui::Element build_main_content(const std::string& active_ch, int msg_rows, int term_cols);
+    void remember_selected_image(const std::string& channel_id, int message_index);
+    std::optional<int> selected_image_index(const std::string& channel_id,
+                                            const ChannelState& state) const;
 
     AppState&           state_;
     ClientConfig&       cfg_;
@@ -118,6 +124,10 @@ private:
     bool is_resizing_panel_ = false;
     int resize_start_x_ = 0;
     int resize_start_width_ = 0;
+
+    std::unordered_map<std::string, int> selected_image_indices_;
+    GraphicsCompositor graphics_compositor_;
+    GraphicsFrame pending_graphics_frame_;
 };
 
 } // namespace grotto::ui

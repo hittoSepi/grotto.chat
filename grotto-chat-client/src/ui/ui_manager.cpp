@@ -23,6 +23,9 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#ifdef RGB
+#undef RGB
+#endif
 #endif
 
 using namespace ftxui;
@@ -51,20 +54,23 @@ bool is_shift_insert_paste(std::string_view input) {
 int effective_message_width(const MouseTracker& mouse_tracker,
                             const UserListConfig& user_list_config,
                             int term_cols) {
+    if (mouse_tracker.message_region().width > 0) {
+        return mouse_tracker.message_region().width;
+    }
+
     if (user_list_config.collapsed) {
-        return mouse_tracker.message_region().width > 0 ? mouse_tracker.message_region().width
-                                                        : term_cols;
+        return term_cols;
     }
 
     int panel_width = get_panel_width(user_list_config, term_cols);
     return std::max(1, term_cols - panel_width - 1);
 }
 
-std::vector<VisibleMessageLine> current_visible_lines(AppState& state,
-                                                      const MouseTracker& mouse_tracker,
-                                                      const UserListConfig& user_list_config,
-                                                      const ClientConfig& cfg,
-                                                      int term_cols) {
+std::vector<VisibleLayoutHit> current_visible_hits(AppState& state,
+                                                   const MouseTracker& mouse_tracker,
+                                                   const UserListConfig& user_list_config,
+                                                   const ClientConfig& cfg,
+                                                   int term_cols) {
     auto ch = state.active_channel();
     if (!ch) {
         return {};
@@ -73,7 +79,7 @@ std::vector<VisibleMessageLine> current_visible_lines(AppState& state,
     auto ch_state = state.channel_snapshot(*ch);
     int visible_rows = mouse_tracker.message_region().height;
     int message_width = effective_message_width(mouse_tracker, user_list_config, term_cols);
-    return collect_visible_message_lines(
+    return collect_visible_layout_hits(
         ch_state, cfg.ui.timestamp_format, visible_rows, message_width);
 }
 
@@ -93,6 +99,94 @@ std::optional<std::string> find_url_in_text(const std::string& text) {
         url.pop_back();
     }
     return url.empty() ? std::nullopt : std::optional<std::string>(url);
+}
+
+int visible_width(std::string_view text) {
+    int width = 0;
+    for (size_t i = 0; i < text.size();) {
+        unsigned char c = static_cast<unsigned char>(text[i]);
+        if ((c & 0x80) == 0) i += 1;
+        else if ((c & 0xE0) == 0xC0) i += 2;
+        else if ((c & 0xF0) == 0xE0) i += 3;
+        else if ((c & 0xF8) == 0xF0) i += 4;
+        else i += 1;
+        ++width;
+    }
+    return width;
+}
+
+std::vector<std::string> split_nonempty_lines(const std::string& text, size_t max_lines) {
+    std::vector<std::string> lines;
+    size_t start = 0;
+    while (start <= text.size() && lines.size() < max_lines) {
+        size_t end = text.find('\n', start);
+        std::string line = (end == std::string::npos)
+            ? text.substr(start)
+            : text.substr(start, end - start);
+        if (!line.empty()) {
+            lines.push_back(line);
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+    return lines;
+}
+
+Element render_image_preview_pane(const Message& msg, int pane_width, int pane_height) {
+    if (!msg.inline_image || pane_width <= 8 || pane_height <= 6) {
+        return text("") | flex;
+    }
+
+    const auto& thumbnail = *msg.inline_image;
+    const int inner_width = std::max(8, pane_width - 4);
+    const int header_rows = 3;
+    const int image_text_rows = std::max(4, pane_height - header_rows - 2);
+    const int target_pixel_height = std::max(4, image_text_rows * 2);
+
+    const float scale_x = static_cast<float>(inner_width) / static_cast<float>(thumbnail.width);
+    const float scale_y = static_cast<float>(target_pixel_height) / static_cast<float>(thumbnail.height);
+    const float scale = std::max(1.0f, std::min(scale_x, scale_y));
+
+    const int scaled_width = std::max(1, static_cast<int>(thumbnail.width * scale));
+    const int scaled_height = std::max(1, static_cast<int>(thumbnail.height * scale));
+
+    Elements rows;
+    auto header_lines = split_nonempty_lines(msg.content, 2);
+    if (header_lines.empty()) {
+        header_lines.push_back("[image]");
+    }
+
+    for (size_t i = 0; i < header_lines.size(); ++i) {
+        std::string line = header_lines[i];
+        if (visible_width(line) > inner_width) {
+            line.resize(static_cast<size_t>(inner_width));
+        }
+        rows.push_back(text(line) | color(i == 0 ? palette::blue1() : palette::comment()));
+    }
+    rows.push_back(separator());
+
+    const int rendered_line_limit = std::max(1, image_text_rows);
+    for (int y = 0; y < scaled_height && static_cast<int>(rows.size()) < static_cast<int>(header_lines.size()) + 1 + rendered_line_limit; y += 2) {
+        Elements cells;
+        for (int x = 0; x < scaled_width; ++x) {
+            const int src_x = std::min(thumbnail.width - 1, x * thumbnail.width / scaled_width);
+            const int src_y_top = std::min(thumbnail.height - 1, y * thumbnail.height / scaled_height);
+            const int src_y_bottom = std::min(thumbnail.height - 1, (y + 1) * thumbnail.height / scaled_height);
+            const size_t top = static_cast<size_t>((src_y_top * thumbnail.width + src_x) * 4);
+            const size_t bottom = static_cast<size_t>((src_y_bottom * thumbnail.width + src_x) * 4);
+            ftxui::Color fg = Color::RGB(thumbnail.rgba[top + 0], thumbnail.rgba[top + 1], thumbnail.rgba[top + 2]);
+            ftxui::Color bg = Color::RGB(thumbnail.rgba[bottom + 0], thumbnail.rgba[bottom + 1], thumbnail.rgba[bottom + 2]);
+            cells.push_back(text("▀") | color(fg) | bgcolor(bg));
+        }
+        rows.push_back(hbox(std::move(cells)));
+    }
+
+    return window(
+        text(" image "),
+        vbox(std::move(rows)) | xflex | yflex
+    ) | size(WIDTH, EQUAL, pane_width) | size(HEIGHT, EQUAL, pane_height);
 }
 
 } // namespace
@@ -198,7 +292,7 @@ bool UIManager::handle_mouse_event(const Event& event) {
                     int visible_rows = mouse_tracker_.message_region().height;
                     int message_width = effective_message_width(
                         mouse_tracker_, user_list_config_, screen_.dimx());
-                    auto visible = collect_visible_message_lines(
+                    auto visible = collect_visible_layout_hits(
                         ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
                     if (!visible.empty()) {
                         int start_line = std::max(0, sel.y - mouse_tracker_.message_region().y);
@@ -271,14 +365,14 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
     if (mouse_tracker_.is_over_message_area()) {
         if (is_right_click) {
             int line_y = mouse_y - mouse_tracker_.message_region().y;
-            auto visible = current_visible_lines(
+            auto visible = current_visible_hits(
                 state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
             if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
-                if (auto url = find_url_in_text(visible[line_y].plain_text)) {
-                    if (display_inline_image_from_url(screen_, *url)) {
+                if (visible[line_y].url) {
+                    if (display_inline_image_from_url(screen_, *visible[line_y].url)) {
                         return;
                     }
-                    open_url(*url);
+                    open_url(*visible[line_y].url);
                     return;
                 }
 
@@ -289,7 +383,8 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
                     if (message_index >= 0 &&
                         message_index < static_cast<int>(ch_state.messages.size())) {
                         const auto& msg = ch_state.messages[message_index];
-                        if (msg.inline_image &&
+                        if (visible[line_y].has_inline_image &&
+                            msg.inline_image &&
                             display_inline_image(screen_, *msg.inline_image, msg.content)) {
                             return;
                         }
@@ -304,6 +399,20 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
                 }
             }
         } else {
+            int line_y = mouse_y - mouse_tracker_.message_region().y;
+            auto visible = current_visible_hits(
+                state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
+            auto ch = state_.active_channel();
+            if (ch && line_y >= 0 && line_y < static_cast<int>(visible.size())) {
+                auto ch_state = state_.channel_snapshot(*ch);
+                const int message_index = visible[line_y].message_index;
+                if (message_index >= 0 &&
+                    message_index < static_cast<int>(ch_state.messages.size()) &&
+                    visible[line_y].has_inline_image &&
+                    ch_state.messages[message_index].inline_image) {
+                    remember_selected_image(*ch, message_index);
+                }
+            }
             mouse_tracker_.start_selection(mouse_x, mouse_y);
         }
         return;
@@ -319,7 +428,7 @@ void UIManager::handle_double_click(int mouse_x, int mouse_y) {
         if (!ch) return;
         
         auto ch_state = state_.channel_snapshot(*ch);
-        auto visible = current_visible_lines(
+        auto visible = current_visible_hits(
             state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
         if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
             copy_to_clipboard(visible[line_y].plain_text);
@@ -336,7 +445,7 @@ void UIManager::handle_triple_click(int mouse_x, int mouse_y) {
         if (!ch) return;
         
         auto ch_state = state_.channel_snapshot(*ch);
-        auto visible = current_visible_lines(
+        auto visible = current_visible_hits(
             state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
         if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
             copy_to_clipboard(visible[line_y].plain_text);
@@ -441,7 +550,7 @@ void UIManager::end_text_selection() {
     int visible_rows = mouse_tracker_.message_region().height;
     int message_width = effective_message_width(
         mouse_tracker_, user_list_config_, screen_.dimx());
-    auto visible = collect_visible_message_lines(
+    auto visible = collect_visible_layout_hits(
         ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
     if (visible.empty()) {
         return;
@@ -502,28 +611,66 @@ void UIManager::push_system_msg_to_channel(const std::string& channel_id,
     notify();
 }
 
+void UIManager::remember_selected_image(const std::string& channel_id, int message_index) {
+    selected_image_indices_[channel_id] = message_index;
+}
+
+std::optional<int> UIManager::selected_image_index(const std::string& channel_id,
+                                                   const ChannelState& state) const {
+    auto it = selected_image_indices_.find(channel_id);
+    if (it != selected_image_indices_.end()) {
+        int index = it->second;
+        if (index >= 0 &&
+            index < static_cast<int>(state.messages.size()) &&
+            state.messages[static_cast<size_t>(index)].inline_image) {
+            return index;
+        }
+    }
+
+    for (int i = static_cast<int>(state.messages.size()) - 1; i >= 0; --i) {
+        if (state.messages[static_cast<size_t>(i)].inline_image) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
 Element UIManager::build_main_content(const std::string& active_ch, int msg_rows, int term_cols) {
     // Ensure channel users are populated (from online users if not already set)
     if (!active_ch.empty()) {
         state_.ensure_channel_users_from_online(active_ch);
     }
 
-    int panel_width = 0;
+    int user_panel_width = 0;
     int msg_width = term_cols;
     if (!user_list_config_.collapsed) {
-        panel_width = get_panel_width(user_list_config_, term_cols);
-        msg_width = std::max(1, term_cols - panel_width - 1);  // -1 for separator
+        user_panel_width = get_panel_width(user_list_config_, term_cols);
+        msg_width = std::max(1, term_cols - user_panel_width - 1);
     }
-    mouse_tracker_.set_message_region({mouse_tracker_.message_region().y, 0, msg_rows, msg_width});
-    
-    // Message area
-    Element msg_el;
+
+    ChannelState ch_state;
     if (!active_ch.empty()) {
-        auto ch_state = state_.channel_snapshot(active_ch);
-        msg_el = render_messages(ch_state, cfg_.ui.timestamp_format, msg_rows, msg_width);
-    } else {
-        msg_el = text("") | flex;
+        ch_state = state_.channel_snapshot(active_ch);
     }
+
+    mouse_tracker_.set_message_region({0, mouse_tracker_.message_region().y, msg_width, msg_rows});
+
+    Element msg_el = active_ch.empty()
+        ? text("") | flex
+        : render_messages(ch_state, cfg_.ui.timestamp_format, msg_rows, msg_width);
+
+    pending_graphics_frame_.viewport_x = mouse_tracker_.message_region().x;
+    pending_graphics_frame_.viewport_y = mouse_tracker_.message_region().y;
+    pending_graphics_frame_.viewport_width = msg_width;
+    pending_graphics_frame_.viewport_height = msg_rows;
+    pending_graphics_frame_.commands = active_ch.empty()
+        ? std::vector<GraphicsDrawCommand>{}
+        : collect_visible_draw_commands(ch_state,
+                                        cfg_.ui.timestamp_format,
+                                        msg_rows,
+                                        msg_width,
+                                        mouse_tracker_.message_region().x,
+                                        mouse_tracker_.message_region().y);
     
     // If user list is collapsed, just return the message view
     if (user_list_config_.collapsed) {
@@ -549,9 +696,9 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     
     // Update user list region for mouse hit testing
     user_positions_.clear();
-    int user_list_x = msg_width + 1;  // After message area and separator
-    mouse_tracker_.set_user_list_region({mouse_tracker_.message_region().y, user_list_x, msg_rows, panel_width});
-    mouse_tracker_.set_panel_divider_region({mouse_tracker_.message_region().y, user_list_x - 1, msg_rows, 1});
+    int user_list_x = msg_width + 1;
+    mouse_tracker_.set_user_list_region({user_list_x, mouse_tracker_.message_region().y, user_panel_width, msg_rows});
+    mouse_tracker_.set_panel_divider_region({user_list_x - 1, mouse_tracker_.message_region().y, 1, msg_rows});
     panel_divider_x_ = user_list_x - 1;
     
     // Render user list panel with position tracking
@@ -565,7 +712,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     return hbox({
         msg_el | flex,
         separator(),
-        user_list_el | size(WIDTH, EQUAL, panel_width)
+        user_list_el | size(WIDTH, EQUAL, user_panel_width)
                      | size(HEIGHT, LESS_THAN, msg_rows + 1),
     });
 }
@@ -574,7 +721,7 @@ Element UIManager::build_document(int term_rows) {
     int term_cols = screen_.dimx() > 0 ? screen_.dimx() : 80;
     
     // Update region tracking for mouse hit testing
-    mouse_tracker_.set_tab_bar_region({0, 0, kTabBarHeight, term_cols});
+    mouse_tracker_.set_tab_bar_region({0, 0, term_cols, kTabBarHeight});
     
     // Compute visual input line count (handles wrapping + explicit newlines)
     auto count_visual_lines = [](const std::string& txt, int cols) -> int {
@@ -600,9 +747,9 @@ Element UIManager::build_document(int term_rows) {
     int status_y = msg_y + msg_rows + 1;
     int input_y = status_y + kStatusBarHeight + 1;
     
-    mouse_tracker_.set_message_region({msg_y, 0, msg_rows, term_cols});
-    mouse_tracker_.set_status_bar_region({status_y, 0, kStatusBarHeight, term_cols});
-    mouse_tracker_.set_input_region({input_y, 0, input_lines, term_cols});
+    mouse_tracker_.set_message_region({0, msg_y, term_cols, msg_rows});
+    mouse_tracker_.set_status_bar_region({0, status_y, term_cols, kStatusBarHeight});
+    mouse_tracker_.set_input_region({0, input_y, term_cols, input_lines});
     
     // Panels
     auto channels  = state_.channel_list();
@@ -754,7 +901,9 @@ void UIManager::run(SubmitFn on_submit,
         state_.drain_ui_queue();
 
         int rows = screen_.dimx() > 0 ? screen_.dimy() : 24;
-        return build_document(rows);
+        auto document = build_document(rows);
+        graphics_compositor_.commit(pending_graphics_frame_);
+        return document;
     });
 
     auto event_handler = CatchEvent(renderer, [&](Event event) -> bool {

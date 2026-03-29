@@ -1,13 +1,16 @@
 #include "ui/message_view.hpp"
-#include "ui/color_scheme.hpp"
-#include "ui/markdown_renderer.hpp"
-#include "ui/terminal_image.hpp"
+
 #include "i18n/strings.hpp"
-#include <ftxui/dom/elements.hpp>
+#include "ui/color_scheme.hpp"
+#include "ui/graphics_layout.hpp"
+#include "ui/markdown_renderer.hpp"
+
 #include <algorithm>
-#include <cstdlib>
 #include <ctime>
+#include <optional>
+#include <regex>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace ftxui;
@@ -15,12 +18,6 @@ using namespace ftxui;
 namespace grotto::ui {
 
 namespace {
-
-struct RenderedLine {
-    int message_index = -1;
-    std::string plain_text;
-    Element element;
-};
 
 static std::string format_ts(int64_t ms, const std::string& fmt) {
     if (ms == 0) return "[--:--]";
@@ -36,7 +33,7 @@ static std::string format_ts(int64_t ms, const std::string& fmt) {
     return std::string("[") + buf + "]";
 }
 
-int visible_width(const std::string& text) {
+int visible_width(std::string_view text) {
     int width = 0;
     for (size_t i = 0; i < text.size();) {
         unsigned char c = static_cast<unsigned char>(text[i]);
@@ -50,211 +47,76 @@ int visible_width(const std::string& text) {
     return width;
 }
 
-bool supports_truecolor_preview() {
-#ifdef _WIN32
-    return true;
-#else
-    const char* color_term = std::getenv("COLORTERM");
-    if (color_term) {
-        std::string value = color_term;
-        if (value.find("truecolor") != std::string::npos ||
-            value.find("24bit") != std::string::npos) {
-            return true;
-        }
+std::optional<std::string> find_url_in_text(const std::string& text) {
+    static const std::regex url_re(R"(((?:https?://|www\.)\S+))");
+    std::smatch match;
+    if (!std::regex_search(text, match, url_re)) {
+        return std::nullopt;
     }
 
-    const char* term_program = std::getenv("TERM_PROGRAM");
-    if (term_program) {
-        std::string value = term_program;
-        if (value == "iTerm.app" || value == "WezTerm" || value == "vscode") {
-            return true;
-        }
+    std::string url = match[1].str();
+    if (url.starts_with("www.")) {
+        url = "https://" + url;
     }
-
-    const char* term = std::getenv("TERM");
-    if (term) {
-        std::string value = term;
-        if (value.find("direct") != std::string::npos || value.find("kitty") != std::string::npos) {
-            return true;
-        }
+    while (!url.empty() && (url.back() == ')' || url.back() == ']' || url.back() == '.' ||
+                            url.back() == ',' || url.back() == ';')) {
+        url.pop_back();
     }
-    return false;
-#endif
+    return url.empty() ? std::nullopt : std::optional<std::string>(url);
 }
 
-std::vector<RenderedLine> render_color_preview(const Message& msg,
-                                               int message_index,
-                                               const std::string& ts,
-                                               int width) {
-    std::vector<RenderedLine> rows;
-
-    std::vector<std::string> header_lines;
-    size_t start = 0;
-    while (start <= msg.content.size()) {
-        size_t end = msg.content.find('\n', start);
-        std::string line = (end == std::string::npos)
-            ? msg.content.substr(start)
-            : msg.content.substr(start, end - start);
-        if (line.empty()) {
-            break;
-        }
-        header_lines.push_back(line);
-        if (end == std::string::npos) {
-            break;
-        }
-        start = end + 1;
+std::vector<MessageRenderPart> fallback_render_parts(const Message& msg) {
+    if (!msg.render_parts.empty()) {
+        return msg.render_parts;
     }
 
-    const int content_width = std::max(1, width - visible_width(ts));
-    for (size_t i = 0; i < header_lines.size(); ++i) {
-        std::string line = header_lines[i];
-        if (visible_width(line) > content_width) {
-            line.resize(static_cast<size_t>(content_width));
-        }
-        const std::string ts_prefix = (i == 0 ? ts : std::string(ts.size(), ' '));
-        rows.push_back({
-            message_index,
-            ts_prefix + line,
-            hbox({
-                text(ts_prefix) | color(palette::comment()),
-                text(line) | color(palette::blue1()) | flex,
-            })
-        });
+    std::vector<MessageRenderPart> parts;
+    if (!msg.content.empty()) {
+        parts.push_back({MessageRenderPart::Kind::Text, msg.content, std::nullopt});
     }
-
-    const auto& thumbnail = *msg.inline_image;
-    for (int y = 0; y < thumbnail.height; y += 2) {
-        Elements cells;
-        const std::string ts_prefix = rows.empty() && y == 0 ? ts : std::string(ts.size(), ' ');
-        cells.push_back(text(ts_prefix) | color(palette::comment()));
-
-        for (int x = 0; x < thumbnail.width; ++x) {
-            size_t top = static_cast<size_t>((y * thumbnail.width + x) * 4);
-            size_t bottom = static_cast<size_t>(((std::min(y + 1, thumbnail.height - 1)) * thumbnail.width + x) * 4);
-            ftxui::Color fg = Color::RGB(thumbnail.rgba[top + 0], thumbnail.rgba[top + 1], thumbnail.rgba[top + 2]);
-            ftxui::Color bg = Color::RGB(thumbnail.rgba[bottom + 0], thumbnail.rgba[bottom + 1], thumbnail.rgba[bottom + 2]);
-            cells.push_back(text("▀") | color(fg) | bgcolor(bg));
-        }
-
-        rows.push_back({
-            message_index,
-            ts_prefix + std::string(static_cast<size_t>(thumbnail.width), '#'),
-            hbox(std::move(cells))
-        });
+    if (msg.inline_image) {
+        parts.push_back({MessageRenderPart::Kind::Image, {}, msg.inline_image});
     }
-
-    return rows;
+    return parts;
 }
 
-std::vector<RenderedLine> render_one_lines(const Message& msg,
-                                           int message_index,
-                                           const std::string& ts_fmt,
-                                           int width) {
-    const std::string ts = format_ts(msg.timestamp_ms, ts_fmt) + " ";
-    width = std::max(1, width);
+std::vector<LayoutRow> render_text_block(const Message& msg,
+                                         int message_index,
+                                         int block_index,
+                                         const std::string& ts_prefix,
+                                         int width,
+                                         const std::string& text_content) {
+    std::vector<LayoutRow> rows;
 
-    if (msg.type == Message::Type::Preview) {
-        if (msg.inline_image && terminal_uses_compact_image_preview()) {
-            std::vector<RenderedLine> rows;
-            std::vector<std::string> header_lines;
-            size_t start = 0;
-            while (start <= msg.content.size() && header_lines.size() < 2) {
-                size_t end = msg.content.find('\n', start);
-                std::string line = (end == std::string::npos)
-                    ? msg.content.substr(start)
-                    : msg.content.substr(start, end - start);
-                if (!line.empty()) {
-                    header_lines.push_back(line);
-                }
-                if (end == std::string::npos) {
-                    break;
-                }
-                start = end + 1;
-            }
-            if (header_lines.empty()) {
-                header_lines.push_back("[image]");
-            }
-            header_lines.push_back("[terminal graphics preview available, right-click to open]");
-
-            const int content_width = std::max(1, width - visible_width(ts));
-            for (size_t i = 0; i < header_lines.size(); ++i) {
-                std::string line = header_lines[i];
-                if (visible_width(line) > content_width) {
-                    line.resize(static_cast<size_t>(content_width));
-                }
-                const std::string ts_prefix = (i == 0 ? ts : std::string(ts.size(), ' '));
-                rows.push_back({
-                    message_index,
-                    ts_prefix + line,
-                    hbox({
-                        text(ts_prefix) | color(palette::comment()),
-                        text(line) | color(i + 1 == header_lines.size()
-                            ? palette::yellow()
-                            : palette::blue1()) | flex,
-                    })
-                });
-            }
-            return rows;
-        }
-
-        if (msg.inline_image && supports_truecolor_preview()) {
-            return render_color_preview(msg, message_index, ts, width);
-        }
-
-        std::vector<RenderedLine> rows;
-        std::vector<std::string> preview_lines;
-        size_t start = 0;
-        while (start <= msg.content.size()) {
-            size_t end = msg.content.find('\n', start);
-            if (end == std::string::npos) {
-                preview_lines.push_back(msg.content.substr(start));
-                break;
-            }
-            preview_lines.push_back(msg.content.substr(start, end - start));
-            start = end + 1;
-        }
-        if (preview_lines.empty()) {
-            preview_lines.push_back("");
-        }
-
-        const int content_width = std::max(1, width - visible_width(ts));
-        for (size_t i = 0; i < preview_lines.size(); ++i) {
-            std::string line = preview_lines[i];
-            if (visible_width(line) > content_width) {
-                line.resize(static_cast<size_t>(content_width));
-            }
-            const std::string ts_prefix = (i == 0 ? ts : std::string(ts.size(), ' '));
-            rows.push_back({
-                message_index,
-                ts_prefix + line,
-                hbox({
-                    text(ts_prefix) | color(palette::comment()),
-                    text(line) | color(palette::blue1()) | flex,
-                })
-            });
-        }
-        return rows;
-    }
-
-    if (msg.type == Message::Type::System || msg.type == Message::Type::VoiceEvent) {
-        const std::string first_prefix = "• ";
+    if (msg.type == Message::Type::System || msg.type == Message::Type::VoiceEvent ||
+        msg.type == Message::Type::Preview) {
+        const std::string first_prefix = (msg.type == Message::Type::Preview) ? "" : "• ";
         const std::string continuation_prefix(visible_width(first_prefix), ' ');
-        const int content_width = std::max(1, width - visible_width(ts) - visible_width(first_prefix));
-        auto content_lines = render_markdown_lines(msg.content, content_width);
-        auto plain_lines = render_markdown_plain_lines(msg.content, content_width);
+        const int content_width = std::max(1, width - visible_width(ts_prefix) - visible_width(first_prefix));
+        auto content_lines = render_markdown_lines(text_content, content_width);
+        auto plain_lines = render_markdown_plain_lines(text_content, content_width);
 
-        std::vector<RenderedLine> rows;
+        if (content_lines.empty()) {
+            content_lines.push_back(text(""));
+            plain_lines.push_back("");
+        }
+
         for (size_t i = 0; i < content_lines.size(); ++i) {
-            const std::string ts_prefix = (i == 0 ? ts : std::string(ts.size(), ' '));
+            const std::string current_ts = (i == 0 ? ts_prefix : std::string(ts_prefix.size(), ' '));
             const std::string bullet_prefix = (i == 0 ? first_prefix : continuation_prefix);
             rows.push_back({
                 message_index,
-                ts_prefix + bullet_prefix + plain_lines[i],
+                block_index,
+                LayoutBlockKind::Text,
+                current_ts + bullet_prefix + plain_lines[i],
+                find_url_in_text(plain_lines[i]),
+                false,
                 hbox({
-                    text(ts_prefix) | color(palette::comment()),
-                    text(bullet_prefix) | color(palette::yellow()),
-                    std::move(content_lines[i]) | color(palette::yellow()) | flex,
-                })
+                    text(current_ts) | color(palette::comment()),
+                    text(bullet_prefix) | color(msg.type == Message::Type::Preview ? palette::blue1() : palette::yellow()),
+                    std::move(content_lines[i]) |
+                        color(msg.type == Message::Type::Preview ? palette::blue1() : palette::yellow()) | flex,
+                }),
             });
         }
         return rows;
@@ -262,39 +124,106 @@ std::vector<RenderedLine> render_one_lines(const Message& msg,
 
     const std::string nick = "<" + msg.sender_id + "> ";
     const std::string continuation_prefix(visible_width(nick), ' ');
-    const int content_width = std::max(1, width - visible_width(ts) - visible_width(nick));
-    auto content_lines = render_markdown_lines(msg.content, content_width);
-    auto plain_lines = render_markdown_plain_lines(msg.content, content_width);
+    const int content_width = std::max(1, width - visible_width(ts_prefix) - visible_width(nick));
+    auto content_lines = render_markdown_lines(text_content, content_width);
+    auto plain_lines = render_markdown_plain_lines(text_content, content_width);
 
-    std::vector<RenderedLine> rows;
+    if (content_lines.empty()) {
+        content_lines.push_back(text(""));
+        plain_lines.push_back("");
+    }
+
     for (size_t i = 0; i < content_lines.size(); ++i) {
-        const std::string ts_prefix = (i == 0 ? ts : std::string(ts.size(), ' '));
+        const std::string current_ts = (i == 0 ? ts_prefix : std::string(ts_prefix.size(), ' '));
         const std::string nick_prefix = (i == 0 ? nick : continuation_prefix);
         rows.push_back({
             message_index,
-            ts_prefix + nick_prefix + plain_lines[i],
+            block_index,
+            LayoutBlockKind::Text,
+            current_ts + nick_prefix + plain_lines[i],
+            find_url_in_text(plain_lines[i]),
+            false,
             hbox({
-                text(ts_prefix) | color(palette::comment()),
+                text(current_ts) | color(palette::comment()),
                 text(nick_prefix) |
                     (i == 0 ? ftxui::color(nick_color(msg.sender_id)) : color(palette::fg())),
                 std::move(content_lines[i]) | flex,
-            })
+            }),
         });
     }
     return rows;
 }
 
-std::vector<RenderedLine> flatten_message_lines(const ChannelState& state,
-                                                const std::string& timestamp_format,
-                                                int width) {
-    std::vector<RenderedLine> all_lines;
-    for (size_t i = 0; i < state.messages.size(); ++i) {
-        auto rows = render_one_lines(state.messages[i], static_cast<int>(i), timestamp_format, width);
-        all_lines.insert(all_lines.end(),
-                         std::make_move_iterator(rows.begin()),
-                         std::make_move_iterator(rows.end()));
+std::vector<LayoutRow> render_one_message(const Message& msg,
+                                          int message_index,
+                                          const std::string& ts_fmt,
+                                          int width) {
+    std::vector<LayoutRow> rows;
+    const std::string ts = format_ts(msg.timestamp_ms, ts_fmt) + " ";
+    const auto parts = fallback_render_parts(msg);
+
+    bool first_block = true;
+    int block_index = 0;
+    for (const auto& part : parts) {
+        const std::string ts_prefix = first_block ? ts : std::string(ts.size(), ' ');
+        first_block = false;
+
+        if (part.kind == MessageRenderPart::Kind::Image && part.image) {
+            auto image_rows = render_graphics_rows(
+                *part.image,
+                message_index,
+                block_index,
+                ts_prefix,
+                std::max(1, width),
+                {std::max(8, width - visible_width(ts_prefix)), 20});
+            rows.insert(rows.end(),
+                        std::make_move_iterator(image_rows.begin()),
+                        std::make_move_iterator(image_rows.end()));
+            ++block_index;
+            continue;
+        }
+
+        if (part.kind == MessageRenderPart::Kind::Spacer) {
+            rows.push_back({
+                message_index,
+                block_index++,
+                LayoutBlockKind::Spacer,
+                "",
+                std::nullopt,
+                false,
+                text(""),
+            });
+            continue;
+        }
+
+        auto text_rows = render_text_block(
+            msg, message_index, block_index, ts_prefix, std::max(1, width), part.text);
+        rows.insert(rows.end(),
+                    std::make_move_iterator(text_rows.begin()),
+                    std::make_move_iterator(text_rows.end()));
+        ++block_index;
     }
-    return all_lines;
+
+    return rows;
+}
+
+std::vector<LayoutRow> flatten_message_rows(const ChannelState& state,
+                                            const std::string& timestamp_format,
+                                            int width) {
+    std::vector<LayoutRow> all_rows;
+    for (size_t i = 0; i < state.messages.size(); ++i) {
+        auto rows = render_one_message(state.messages[i], static_cast<int>(i), timestamp_format, width);
+        all_rows.insert(all_rows.end(),
+                        std::make_move_iterator(rows.begin()),
+                        std::make_move_iterator(rows.end()));
+    }
+    return all_rows;
+}
+
+std::pair<int, int> visible_row_window(int total, int visible_rows, int scroll_offset) {
+    const int bottom_idx = std::clamp(total - 1 - scroll_offset, 0, std::max(0, total - 1));
+    const int top_idx = std::max(0, bottom_idx - visible_rows + 1);
+    return {top_idx, bottom_idx};
 }
 
 } // anonymous namespace
@@ -307,52 +236,96 @@ Element render_messages(const ChannelState& state,
         return text(i18n::tr(i18n::I18nKey::NO_MESSAGES)) | color(palette::comment()) | center;
     }
 
-    auto all_lines = flatten_message_lines(state, timestamp_format, width);
-
-    if (all_lines.empty()) {
+    auto all_rows = flatten_message_rows(state, timestamp_format, width);
+    if (all_rows.empty()) {
         return text(i18n::tr(i18n::I18nKey::NO_MESSAGES)) | color(palette::comment()) | center;
     }
 
-    const int total = static_cast<int>(all_lines.size());
-    int bottom_idx = total - 1 - state.scroll_offset;
-    bottom_idx = std::clamp(bottom_idx, 0, total - 1);
-    int top_idx = std::max(0, bottom_idx - visible_rows + 1);
+    const auto [top_idx, bottom_idx] = visible_row_window(
+        static_cast<int>(all_rows.size()), visible_rows, state.scroll_offset);
 
     Elements visible;
     visible.reserve(bottom_idx - top_idx + 1);
     for (int i = top_idx; i <= bottom_idx; ++i) {
-        visible.push_back(std::move(all_lines[i].element));
+        visible.push_back(std::move(all_rows[i].element));
     }
-
     return vbox(std::move(visible));
 }
 
-std::vector<VisibleMessageLine> collect_visible_message_lines(
+std::vector<VisibleLayoutHit> collect_visible_layout_hits(
     const ChannelState& state,
     const std::string& timestamp_format,
     int visible_rows,
     int width) {
-    std::vector<VisibleMessageLine> visible_lines;
+    std::vector<VisibleLayoutHit> hits;
     if (state.messages.empty()) {
-        return visible_lines;
+        return hits;
     }
 
-    auto all_lines = flatten_message_lines(state, timestamp_format, width);
-    if (all_lines.empty()) {
-        return visible_lines;
+    auto all_rows = flatten_message_rows(state, timestamp_format, width);
+    if (all_rows.empty()) {
+        return hits;
     }
 
-    const int total = static_cast<int>(all_lines.size());
-    int bottom_idx = total - 1 - state.scroll_offset;
-    bottom_idx = std::clamp(bottom_idx, 0, total - 1);
-    int top_idx = std::max(0, bottom_idx - visible_rows + 1);
-
-    visible_lines.reserve(bottom_idx - top_idx + 1);
+    const auto [top_idx, bottom_idx] = visible_row_window(
+        static_cast<int>(all_rows.size()), visible_rows, state.scroll_offset);
+    hits.reserve(bottom_idx - top_idx + 1);
     for (int i = top_idx; i <= bottom_idx; ++i) {
-        visible_lines.push_back({all_lines[i].message_index, all_lines[i].plain_text});
+        hits.push_back({
+            all_rows[i].message_index,
+            all_rows[i].block_index,
+            all_rows[i].block_kind,
+            all_rows[i].plain_text,
+            all_rows[i].url,
+            all_rows[i].has_inline_image,
+        });
+    }
+    return hits;
+}
+
+std::vector<GraphicsDrawCommand> collect_visible_draw_commands(
+    const ChannelState& state,
+    const std::string& timestamp_format,
+    int visible_rows,
+    int width,
+    int viewport_x,
+    int viewport_y) {
+    std::vector<GraphicsDrawCommand> commands;
+    if (state.messages.empty()) {
+        return commands;
     }
 
-    return visible_lines;
+    auto all_rows = flatten_message_rows(state, timestamp_format, width);
+    if (all_rows.empty()) {
+        return commands;
+    }
+
+    const auto [top_idx, bottom_idx] = visible_row_window(
+        static_cast<int>(all_rows.size()), visible_rows, state.scroll_offset);
+
+    for (int i = top_idx; i <= bottom_idx; ++i) {
+        const auto& row = all_rows[i];
+        if (!row.starts_graphics_block ||
+            row.graphics_backend == GraphicsBackendKind::ColorBlocks ||
+            !row.graphics_image ||
+            row.graphics_columns <= 0 ||
+            row.graphics_rows <= 0) {
+            continue;
+        }
+
+        commands.push_back({
+            row.graphics_backend,
+            row.message_index,
+            row.block_index,
+            viewport_x + row.graphics_offset_x,
+            viewport_y + (i - top_idx),
+            row.graphics_columns,
+            row.graphics_rows,
+            row.graphics_image,
+        });
+    }
+
+    return commands;
 }
 
 } // namespace grotto::ui

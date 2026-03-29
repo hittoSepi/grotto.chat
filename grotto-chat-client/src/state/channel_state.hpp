@@ -13,6 +13,18 @@ struct InlineImageThumbnail {
     std::vector<uint8_t> rgba;
 };
 
+struct MessageRenderPart {
+    enum class Kind {
+        Text,
+        Image,
+        Spacer,
+    };
+
+    Kind kind = Kind::Text;
+    std::string text;
+    std::optional<InlineImageThumbnail> image;
+};
+
 struct Message {
     std::string sender_id;
     std::string content;
@@ -28,6 +40,7 @@ struct Message {
     };
     std::optional<Preview> link_preview;
     std::optional<InlineImageThumbnail> inline_image;
+    std::vector<MessageRenderPart> render_parts;
 };
 
 struct ChannelState {

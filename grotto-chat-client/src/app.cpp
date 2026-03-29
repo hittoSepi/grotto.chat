@@ -758,14 +758,14 @@ void App::trigger_previews(const std::string& channel_id, const std::string& tex
                 pm.sender_id = "preview";
                 if (r.is_image) {
                     pm.content = r.title;
+                    pm.render_parts.push_back({MessageRenderPart::Kind::Text, r.title, std::nullopt});
                     if (!r.description.empty()) {
                         pm.content += "\n" + r.description;
-                    }
-                    if (!r.image_preview.empty()) {
-                        pm.content += "\n" + r.image_preview;
+                        pm.render_parts.push_back({MessageRenderPart::Kind::Text, r.description, std::nullopt});
                     }
                     if (!r.thumbnail.rgba.empty()) {
-                        pm.inline_image = std::move(r.thumbnail);
+                        pm.inline_image = r.thumbnail;
+                        pm.render_parts.push_back({MessageRenderPart::Kind::Image, {}, r.thumbnail});
                     }
                 } else {
                     pm.content = "\u250C " + r.title +

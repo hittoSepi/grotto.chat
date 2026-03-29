@@ -1,22 +1,28 @@
 #pragma once
+
 #include "state/channel_state.hpp"
+#include "ui/graphics_layout.hpp"
+
 #include <ftxui/dom/elements.hpp>
 #include <string>
+#include <vector>
 
 namespace grotto::ui {
 
-struct VisibleMessageLine {
-    int message_index = -1;
-    std::string plain_text;
-};
-
-// Renders the message history as an FTXUI Element.
 ftxui::Element render_messages(const ChannelState& state,
-                                const std::string& timestamp_format,
-                                int visible_rows,
-                                int width);
+                               const std::string& timestamp_format,
+                               int visible_rows,
+                               int width);
 
-std::vector<VisibleMessageLine> collect_visible_message_lines(
+std::vector<GraphicsDrawCommand> collect_visible_draw_commands(
+    const ChannelState& state,
+    const std::string& timestamp_format,
+    int visible_rows,
+    int width,
+    int viewport_x,
+    int viewport_y);
+
+std::vector<VisibleLayoutHit> collect_visible_layout_hits(
     const ChannelState& state,
     const std::string& timestamp_format,
     int visible_rows,

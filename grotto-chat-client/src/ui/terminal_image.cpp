@@ -5,12 +5,17 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+#include <conio.h>
+#endif
 
 namespace grotto::ui {
 
@@ -197,6 +202,50 @@ bool show_kitty_rgba(const unsigned char* rgba, int width, int height) {
         std::cout << ";" << chunk << "\033\\";
     }
     std::cout << "\n";
+    return true;
+}
+
+void move_cursor_to_cell(int x, int y) {
+    const int col = std::max(1, x + 1);
+    const int row = std::max(1, y + 1);
+    std::cout << "\033[" << row << ";" << col << "H";
+}
+
+void clear_kitty_inline_images() {
+    std::cout << "\033_Ga=d,d=A\033\\";
+}
+
+bool draw_kitty_rgba_at(const unsigned char* rgba,
+                        int width,
+                        int height,
+                        int x,
+                        int y,
+                        int columns,
+                        int rows) {
+    if (!rgba || width <= 0 || height <= 0 || columns <= 0 || rows <= 0) {
+        return false;
+    }
+
+    const size_t raw_size = static_cast<size_t>(width * height * 4);
+    std::string encoded = base64_encode(rgba, raw_size);
+
+    constexpr size_t kChunkSize = 4096;
+    move_cursor_to_cell(x, y);
+    for (size_t offset = 0; offset < encoded.size(); offset += kChunkSize) {
+        const bool first = offset == 0;
+        const bool more = offset + kChunkSize < encoded.size();
+        std::string chunk = encoded.substr(offset, kChunkSize);
+
+        std::cout << "\033_G";
+        if (first) {
+            std::cout << "a=T,f=32,s=" << width << ",v=" << height
+                      << ",c=" << columns << ",r=" << rows
+                      << ",m=" << (more ? 1 : 0);
+        } else {
+            std::cout << "m=" << (more ? 1 : 0);
+        }
+        std::cout << ";" << chunk << "\033\\";
+    }
     return true;
 }
 
@@ -418,6 +467,48 @@ bool show_sixel_image(const unsigned char* rgba, int width, int height) {
     return true;
 }
 
+bool draw_sixel_image_at(const unsigned char* rgba,
+                         int width,
+                         int height,
+                         int x,
+                         int y,
+                         int columns,
+                         int rows) {
+    if (!rgba || width <= 0 || height <= 0 || columns <= 0 || rows <= 0) {
+        return false;
+    }
+
+    constexpr int kApproxCellWidthPx = 8;
+    constexpr int kApproxCellHeightPx = 16;
+    const int target_width = std::max(1, columns * kApproxCellWidthPx);
+    const int target_height = std::max(2, rows * kApproxCellHeightPx);
+
+    int scaled_width = 0;
+    int scaled_height = 0;
+    const auto scaled = resample_rgba(
+        rgba, width, height, target_width, target_height, &scaled_width, &scaled_height);
+    if (scaled.empty()) {
+        return false;
+    }
+
+    std::string encoded;
+    if (!encode_sixel_image(scaled.data(), scaled_width, scaled_height, &encoded)) {
+        return false;
+    }
+
+    move_cursor_to_cell(x, y);
+    std::cout << encoded << "\033\\";
+    return true;
+}
+
+void wait_for_viewer_close() {
+#ifdef _WIN32
+    (void)_getch();
+#else
+    (void)std::getchar();
+#endif
+}
+
 bool show_sixel_image(const FetchedImage& image) {
     int width = 0;
     int height = 0;
@@ -467,6 +558,15 @@ bool terminal_uses_compact_image_preview() {
     return detect_protocol() == TerminalImageProtocol::Sixel;
 }
 
+bool terminal_inline_native_graphics_enabled() {
+    const char* value = std::getenv("GROTTO_EXPERIMENTAL_INLINE_NATIVE_IMAGES");
+    if (!value) {
+        return false;
+    }
+    std::string normalized = to_lower_ascii(value);
+    return normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on";
+}
+
 bool display_inline_image_from_url(ftxui::ScreenInteractive& screen,
                                    const std::string& url) {
     const TerminalImageProtocol protocol = detect_protocol();
@@ -491,9 +591,8 @@ bool display_inline_image_from_url(ftxui::ScreenInteractive& screen,
         if (!shown) {
             return;
         }
-        std::cout << "Press Enter to return..." << std::flush;
-        std::string line;
-        std::getline(std::cin, line);
+        std::cout << "Press any key to return..." << std::flush;
+        wait_for_viewer_close();
     });
     show();
     return shown;
@@ -527,12 +626,68 @@ bool display_inline_image(ftxui::ScreenInteractive& screen,
         if (!shown) {
             return;
         }
-        std::cout << "Press Enter to return..." << std::flush;
-        std::string line;
-        std::getline(std::cin, line);
+        std::cout << "Press any key to return..." << std::flush;
+        wait_for_viewer_close();
     });
     show();
     return shown;
+}
+
+void clear_inline_graphics_layer() {
+    if (detect_protocol() == TerminalImageProtocol::Kitty) {
+        clear_kitty_inline_images();
+        std::cout.flush();
+    }
+}
+
+void draw_inline_graphics_commands(const std::vector<GraphicsDrawCommand>& commands) {
+    if (commands.empty()) {
+        return;
+    }
+
+    bool has_kitty = false;
+    for (const auto& cmd : commands) {
+        if (cmd.backend == GraphicsBackendKind::Kitty) {
+            has_kitty = true;
+            break;
+        }
+    }
+    if (has_kitty) {
+        clear_kitty_inline_images();
+    }
+
+    for (const auto& cmd : commands) {
+        if (!cmd.image ||
+            cmd.image->rgba.empty() ||
+            cmd.image->width <= 0 ||
+            cmd.image->height <= 0 ||
+            cmd.width <= 0 ||
+            cmd.height <= 0) {
+            continue;
+        }
+
+        if (cmd.backend == GraphicsBackendKind::Sixel) {
+            draw_sixel_image_at(cmd.image->rgba.data(),
+                                cmd.image->width,
+                                cmd.image->height,
+                                cmd.viewport_x,
+                                cmd.viewport_y,
+                                cmd.width,
+                                cmd.height);
+            continue;
+        }
+
+        if (cmd.backend == GraphicsBackendKind::Kitty) {
+            draw_kitty_rgba_at(cmd.image->rgba.data(),
+                               cmd.image->width,
+                               cmd.image->height,
+                               cmd.viewport_x,
+                               cmd.viewport_y,
+                               cmd.width,
+                               cmd.height);
+        }
+    }
+    std::cout.flush();
 }
 
 } // namespace grotto::ui

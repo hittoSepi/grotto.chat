@@ -194,9 +194,11 @@ set(CLIENT_SOURCES
     src/ui/login_screen.cpp
     src/ui/settings_screen.cpp
     src/ui/message_view.cpp
+    src/ui/graphics_compositor.cpp
     src/ui/input_line.cpp
     src/ui/tab_bar.cpp
     src/ui/status_bar.cpp
+    src/ui/graphics_layout.cpp
     src/ui/link_preview.cpp
     src/ui/terminal_image.cpp
     src/ui/user_list_panel.cpp
