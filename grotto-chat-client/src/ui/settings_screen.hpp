@@ -76,6 +76,7 @@ private:
     bool show_user_colors_;
     std::string timestamp_format_;
     std::string max_messages_;
+    std::string language_;
 
     // === Connection Settings ===
     bool auto_reconnect_;
@@ -116,6 +117,7 @@ private:
     ftxui::Component cert_pin_input_;
     ftxui::Component keywords_input_;
     ftxui::Component nickname_input_;
+    ftxui::Component language_input_;
 
     // Checkbox components (must persist across renders)
     ftxui::Component show_timestamps_cb_;

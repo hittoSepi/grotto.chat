@@ -1,4 +1,5 @@
 #include "voice/voice_engine.hpp"
+#include "i18n/strings.hpp"
 #include <spdlog/spdlog.h>
 #include <chrono>
 #include <variant>
@@ -59,7 +60,7 @@ void VoiceEngine::on_room_joined(const std::string& channel_id,
             Message msg;
             msg.type = Message::Type::System;
             msg.sender_id = "voice";
-            msg.content = "Failed to open audio device. Check your audio settings.";
+            msg.content = i18n::tr(i18n::I18nKey::FAILED_OPEN_AUDIO_DEVICE);
             msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
             auto ch = state_.active_channel().value_or("server");
@@ -142,7 +143,7 @@ void VoiceEngine::call(const std::string& peer_id) {
             Message msg;
             msg.type = Message::Type::System;
             msg.sender_id = "voice";
-            msg.content = "Failed to open audio device. Check your audio settings.";
+            msg.content = i18n::tr(i18n::I18nKey::FAILED_OPEN_AUDIO_DEVICE);
             msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
             auto ch = state_.active_channel().value_or("server");
@@ -357,7 +358,7 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
                 Message msg;
                 msg.type = Message::Type::System;
                 msg.sender_id = "voice";
-                msg.content = "Voice connection to " + peer_id + " failed. Check your network/firewall.";
+                msg.content = i18n::tr(i18n::I18nKey::VOICE_CONNECTION_FAILED, peer_id);
                 msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count();
                 auto ch = state_.active_channel().value_or("server");

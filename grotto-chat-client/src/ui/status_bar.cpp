@@ -1,5 +1,6 @@
 #include "ui/status_bar.hpp"
 #include "ui/color_scheme.hpp"
+#include "i18n/strings.hpp"
 #include <ftxui/dom/elements.hpp>
 
 using namespace ftxui;
@@ -23,10 +24,10 @@ Element render_status_bar(const StatusInfo& info) {
     }
     if (info.in_voice) {
         std::string voice_text = "\U0001F3A4 " + info.voice_channel +
-            " " + std::to_string(info.voice_participants.size()) + " users";
-        if (info.muted) voice_text += " [MUTED]";
-        if (info.deafened) voice_text += " [DEAF]";
-        voice_text += " [" + std::string(info.voice_mode == "ptt" ? "PTT: F1" : "VOX") + "]";
+            " " + i18n::tr(i18n::I18nKey::USERS_COUNT, std::to_string(info.voice_participants.size()));
+        if (info.muted) voice_text += " " + i18n::tr(i18n::I18nKey::MUTED_INDICATOR);
+        if (info.deafened) voice_text += " " + i18n::tr(i18n::I18nKey::DEAFENED_INDICATOR);
+        voice_text += " [" + std::string(info.voice_mode == "ptt" ? i18n::tr(i18n::I18nKey::PTT_F1) : i18n::tr(i18n::I18nKey::VOX)) + "]";
 
         left.push_back(text(" | ") | color(palette::fg_dark()));
         left.push_back(text(voice_text) | color(Color::Green));

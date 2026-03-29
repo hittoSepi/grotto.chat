@@ -4,6 +4,7 @@
 #include "crypto/crypto_engine.hpp"
 #include "voice/voice_engine.hpp"
 #include "version.hpp"
+#include "i18n/strings.hpp"
 #include <spdlog/spdlog.h>
 #include <chrono>
 #include <algorithm>
@@ -78,7 +79,7 @@ void MessageHandler::handle_auth_ok(const Envelope& env) {
     authenticated_ = true;
     if (trace_fn_) trace_fn_("AUTH_OK received");
     spdlog::info("Authentication successful");
-    push_system("Authenticated as " + cfg_.identity.user_id);
+    push_system(i18n::tr(i18n::I18nKey::AUTHENTICATED_AS, cfg_.identity.user_id));
     state_.set_connected(true);
     on_auth_ok();
 }
@@ -110,9 +111,9 @@ void MessageHandler::handle_auth_fail(const Envelope& env) {
     }
 
     if (!detail.empty()) {
-        push_system("Authentication failed: " + detail);
+        push_system(i18n::tr(i18n::I18nKey::AUTH_FAILED, detail));
     } else {
-        push_system("Authentication failed! Check your identity key.");
+        push_system(i18n::tr(i18n::I18nKey::AUTH_FAILED_CHECK_KEY));
     }
     state_.set_connected(false);
 }
@@ -254,7 +255,7 @@ void MessageHandler::handle_key_bundle(const Envelope& env) {
 
     // Establish X3DH session with the recipient
     if (!crypto_.on_key_bundle(bundle, recipient_id)) {
-        push_system("Failed to establish session with " + recipient_id + " (key mismatch?)");
+        push_system(i18n::tr(i18n::I18nKey::FAILED_ESTABLISH_SESSION, recipient_id));
         return;
     }
 
@@ -281,7 +282,7 @@ void MessageHandler::handle_key_bundle(const Envelope& env) {
     }
     spdlog::debug("Flushed {} pending DM(s) to '{}' ({} failed)", sent, recipient_id, failed);
     if (failed > 0) {
-        push_system("Failed to send " + std::to_string(failed) + " message(s) to " + recipient_id);
+        push_system(i18n::tr(i18n::I18nKey::FAILED_SEND_MESSAGES, std::to_string(failed), recipient_id));
     }
 }
 
@@ -304,7 +305,7 @@ void MessageHandler::request_key(const std::string& recipient_id,
             if (it != pending_sends_.end()) {
                 int count = static_cast<int>(it->second.size());
                 pending_sends_.erase(it);
-                push_system("Could not establish session with " + rid +
+                push_system(i18n::tr(i18n::I18nKey::COULD_NOT_ESTABLISH_SESSION, rid) +
                             " (timeout) — " + std::to_string(count) + " message(s) dropped");
                 spdlog::warn("KEY_BUNDLE timeout for '{}', {} messages dropped", rid, count);
             }
@@ -437,7 +438,7 @@ void MessageHandler::handle_error(const Envelope& env) {
     Error err;
     if (!err.ParseFromString(env.payload())) return;
     spdlog::error("Server error {}: {}", err.code(), err.message());
-    push_system("Server error: " + err.message());
+    push_system(i18n::tr(i18n::I18nKey::SERVER_ERROR, err.message()));
 }
 
 void MessageHandler::handle_command_response(const Envelope& env) {
@@ -452,7 +453,7 @@ void MessageHandler::handle_command_response(const Envelope& env) {
         return;
     }
 
-    push_system("Command " + response.command() + ": " + response.message());
+    push_system(i18n::tr(i18n::I18nKey::COMMAND_RESPONSE, response.command(), response.message()));
 }
 
 void MessageHandler::send_envelope(MessageType type, const google::protobuf::Message& msg) {
@@ -526,7 +527,7 @@ void MessageHandler::handle_file_complete(const Envelope& env) {
     if (!complete.ParseFromString(env.payload())) return;
     if (file_mgr_) {
         file_mgr_->on_file_complete(complete);
-        push_system("File transfer completed: " + complete.file_id());
+        push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_COMPLETED, complete.file_id()));
     }
 }
 
@@ -535,7 +536,7 @@ void MessageHandler::handle_file_error(const Envelope& env) {
     if (!error.ParseFromString(env.payload())) return;
     if (file_mgr_) {
         file_mgr_->on_file_error(error);
-        push_system("File transfer error: " + error.error_message());
+        push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_ERROR, error.error_message()));
     }
 }
 

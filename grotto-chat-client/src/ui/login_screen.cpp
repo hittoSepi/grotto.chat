@@ -1,6 +1,7 @@
 #include "ui/login_screen.hpp"
 #include "ui/color_scheme.hpp"
 #include "version.hpp"
+#include "i18n/strings.hpp"
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
@@ -141,20 +142,20 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
     port_input_ = Input(&port_str_, "6697");
     username_input_ = Input(&username_, "username");
     passkey_input_ = Input(&passkey_, "passkey");
-    remember_checkbox_ = Checkbox(" Remember credentials", &remember_);
+    remember_checkbox_ = Checkbox(i18n::tr(i18n::I18nKey::REMEMBER_CREDENTIALS), &remember_);
 
     // Connect button callback - exits the loop on valid submit
-    connect_button_ = Button("[ CONNECT ]", [this, exit_closure] {
+    connect_button_ = Button(i18n::tr(i18n::I18nKey::BUTTON_CONNECT), [this, exit_closure] {
         if (validate_inputs()) {
             submitted_ = true;
             exit_closure();
         }
     });
-    clear_button_ = Button("[ CLEAR CREDS ]", [this, exit_closure] {
+    clear_button_ = Button(i18n::tr(i18n::I18nKey::BUTTON_CLEAR_CREDS), [this, exit_closure] {
         clear_local_data_ = true;
         exit_closure();
     });
-    quit_button_ = Button("[ QUIT ]", [this, exit_closure] {
+    quit_button_ = Button(i18n::tr(i18n::I18nKey::BUTTON_QUIT), [this, exit_closure] {
         cancelled_ = true;
         exit_closure();
     });
@@ -183,22 +184,22 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
         // Build the form
         auto form = vbox({
             hbox({
-                text("HOST:     ") | color(palette::comment()),
+                text(i18n::tr(i18n::I18nKey::HOST_LABEL)) | color(palette::comment()),
                 host_input_->Render() | size(WIDTH, EQUAL, kInputWidth) | border,
             }),
             text(""),
             hbox({
-                text("PORT:     ") | color(palette::comment()),
+                text(i18n::tr(i18n::I18nKey::PORT_LABEL)) | color(palette::comment()),
                 port_input_->Render() | size(WIDTH, EQUAL, kInputWidth) | border,
             }),
             separator(),
             hbox({
-                text("USERNAME: ") | color(palette::comment()),
+                text(i18n::tr(i18n::I18nKey::USERNAME_LABEL)) | color(palette::comment()),
                 username_input_->Render() | size(WIDTH, EQUAL, kInputWidth) | border,
             }),
             text(""),
             hbox({
-                text("PASSKEY:  ") | color(palette::comment()),
+                text(i18n::tr(i18n::I18nKey::PASSKEY_LABEL)) | color(palette::comment()),
                 passkey_input_->Render() | size(WIDTH, EQUAL, kInputWidth) | border,
             }),
             text(""),
@@ -225,7 +226,7 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
         // Loading indicator
         Element loading_el;
         if (is_loading_) {
-            loading_el = text("Connecting...") | color(palette::cyan()) | blink | center;
+            loading_el = text(i18n::tr(i18n::I18nKey::CONNECTING)) | color(palette::cyan()) | blink | center;
         } else {
             loading_el = text("") | center;
         }
@@ -333,12 +334,12 @@ bool LoginScreen::validate_inputs() {
     status_is_error_ = true;
 
     if (host_.empty()) {
-        status_message_ = "Host is required";
+        status_message_ = i18n::tr(i18n::I18nKey::HOST_REQUIRED);
         return false;
     }
 
     if (port_str_.empty()) {
-        status_message_ = "Port is required";
+        status_message_ = i18n::tr(i18n::I18nKey::PORT_REQUIRED);
         return false;
     }
 
@@ -346,21 +347,21 @@ bool LoginScreen::validate_inputs() {
     try {
         int port = std::atoi(port_str_.c_str());
         if (port <= 0 || port > 65535) {
-            status_message_ = "Port must be between 1 and 65535";
+            status_message_ = i18n::tr(i18n::I18nKey::PORT_RANGE_ERROR);
             return false;
         }
     } catch (...) {
-        status_message_ = "Port must be a valid number";
+        status_message_ = i18n::tr(i18n::I18nKey::PORT_NUMBER_ERROR);
         return false;
     }
 
     if (username_.empty()) {
-        status_message_ = "Username is required";
+        status_message_ = i18n::tr(i18n::I18nKey::USERNAME_REQUIRED);
         return false;
     }
 
     if (passkey_.empty()) {
-        status_message_ = "Passkey is required";
+        status_message_ = i18n::tr(i18n::I18nKey::PASSKEY_REQUIRED);
         return false;
     }
 

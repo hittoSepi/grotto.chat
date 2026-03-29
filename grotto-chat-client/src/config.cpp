@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "i18n/strings.hpp"
 #include <toml.hpp>
 #include <spdlog/spdlog.h>
 #include <cstdlib>
@@ -78,6 +79,7 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (ui.contains("user_list_collapsed")) {
                 cfg.ui.user_list_collapsed = toml::find<bool>(ui, "user_list_collapsed");
             }
+            if (ui.contains("language")) cfg.ui.language = toml::find<std::string>(ui, "language");
         }
 
         if (data.contains("voice")) {
@@ -173,7 +175,7 @@ bool clear_local_client_state(ClientConfig& cfg,
 
     if (!failed_reason.empty()) {
         if (status_message) {
-            *status_message = "Failed to clear local data at " + failed_path + ": " + failed_reason;
+            *status_message = i18n::tr(i18n::I18nKey::FAILED_CLEAR_LOCAL_DATA, failed_path, failed_reason);
         }
         spdlog::error("Failed to clear local client state at '{}': {}", failed_path, failed_reason);
         return false;
@@ -186,9 +188,9 @@ bool clear_local_client_state(ClientConfig& cfg,
 
     if (status_message) {
         if (removed_count > 0) {
-            *status_message = "Local credentials and identity data cleared. Enter the same username and passkey to re-sync keys.";
+            *status_message = i18n::tr(i18n::I18nKey::CLEAR_LOCAL_DATA_SUCCESS);
         } else {
-            *status_message = "No local credential files were found. Enter the same username and passkey to re-sync keys.";
+            *status_message = i18n::tr(i18n::I18nKey::CLEAR_LOCAL_DATA_NOT_FOUND);
         }
     }
 
@@ -229,6 +231,7 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["ui"]["show_user_colors"] = cfg.ui.show_user_colors;
     data["ui"]["user_list_width"] = cfg.ui.user_list_width;
     data["ui"]["user_list_collapsed"] = cfg.ui.user_list_collapsed;
+    data["ui"]["language"] = cfg.ui.language;
 
     // Patch voice section
     data["voice"]["input_device"] = cfg.voice.input_device;
@@ -292,6 +295,7 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["ui"]["show_user_colors"] = cfg.ui.show_user_colors;
         data["ui"]["user_list_width"] = cfg.ui.user_list_width;
         data["ui"]["user_list_collapsed"] = cfg.ui.user_list_collapsed;
+        data["ui"]["language"] = cfg.ui.language;
         
         data["voice"]["input_device"] = cfg.voice.input_device;
         data["voice"]["output_device"] = cfg.voice.output_device;
@@ -356,6 +360,7 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             if (ui.contains("user_list_collapsed")) {
                 cfg.ui.user_list_collapsed = toml::find<bool>(ui, "user_list_collapsed");
             }
+            if (ui.contains("language")) cfg.ui.language = toml::find<std::string>(ui, "language");
         }
         
         // Import voice settings

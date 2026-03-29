@@ -3,6 +3,7 @@
 #include "ui/login_screen.hpp"
 #include "ui/settings_screen.hpp"
 #include "version.hpp"
+#include "i18n/strings.hpp"
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -133,6 +134,7 @@ bool App::init(const std::filesystem::path& config_path,
     cfg_ = load_config(config_path);
     if (!user_id_override.empty()) cfg_.identity.user_id = user_id_override;
     std::filesystem::create_directories(cfg_.config_dir);
+    i18n::set_language(cfg_.ui.language);
 
     // ── Login Screen (FTXUI) ──────────────────────────────────────────────
     // Show the graphical login screen to get credentials
@@ -181,7 +183,7 @@ bool App::init(const std::filesystem::path& config_path,
         try {
             store_ = std::make_unique<db::LocalStore>(cfg_.db_path);
         } catch (const std::exception& e) {
-            login_status = "Failed to open local data store: " + std::string(e.what());
+            login_status = i18n::tr(i18n::I18nKey::FAILED_OPEN_DATA_STORE, std::string(e.what()));
             login_status_is_error = true;
             store_.reset();
             continue;
@@ -193,8 +195,7 @@ bool App::init(const std::filesystem::path& config_path,
         if (!crypto_->init(*store_, cfg_, passphrase)) {
             crypto_.reset();
             store_.reset();
-            login_status =
-                "Failed to unlock local identity. Use the original passkey or press CLEAR CREDS.";
+            login_status = i18n::tr(i18n::I18nKey::FAILED_UNLOCK_IDENTITY);
             login_status_is_error = true;
             continue;
         }
@@ -240,7 +241,7 @@ bool App::init(const std::filesystem::path& config_path,
         auto bin_dir = std::filesystem::canonical(
             std::filesystem::path(config_path_).parent_path(), ec);
         if (!ec) {
-            help_ = std::make_unique<HelpManager>(bin_dir);
+            help_ = std::make_unique<HelpManager>(bin_dir, cfg_.ui.language);
             help_->load();
         } else {
             spdlog::warn("Could not resolve binary directory for help system: {}", ec.message());
@@ -354,8 +355,10 @@ int App::run() {
     speaking_timer->expires_after(std::chrono::milliseconds(100));
     speaking_timer->async_wait([&refresh_speaking](auto) { refresh_speaking(); });
 
-    ui_->push_system_msg("Grotto v" + std::string(grotto::VERSION) + " — connecting to " +
-                          cfg_.server.host + ":" + std::to_string(cfg_.server.port));
+    ui_->push_system_msg(i18n::tr(i18n::I18nKey::GROTTO_CONNECTING,
+                                   std::string(grotto::VERSION),
+                                   cfg_.server.host,
+                                   std::to_string(cfg_.server.port)));
 
     // ── FTXUI event loop (blocks main thread) ─────────────────────────────
     ui_->run(
@@ -382,7 +385,7 @@ void App::on_submit(const std::string& line) {
     if (line[0] == '/') {
         auto cmd = parse_command(line);
         if (cmd) handle_command(*cmd);
-        else     ui_->push_system_msg("Unknown command: " + line);
+        else     ui_->push_system_msg(i18n::tr(i18n::I18nKey::UNKNOWN_COMMAND, line));
     } else {
         send_chat(line);
     }
@@ -401,24 +404,27 @@ void App::handle_command(const ParsedCommand& cmd) {
             ioc_.stop();
             msg_handler_->on_transport_disconnected();
             state_.set_connected(false);
-            ui_->push_system_msg("Disconnected from server.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::DISCONNECTED_FROM_SERVER));
         } else {
-            ui_->push_system_msg("Not connected.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::NOT_CONNECTED));
         }
         return;
     }
     if (cmd.name == "/version") {
-        ui_->push_system_msg("Client version: " + std::string(grotto::VERSION));
-        ui_->push_system_msg("Server version: " + server_version_);
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::CLIENT_VERSION, std::string(grotto::VERSION)));
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::SERVER_VERSION, server_version_));
         return;
     }
     if (cmd.name == "/status") {
         bool connected = net_client_ && net_client_->is_connected();
         bool authed = msg_handler_ && msg_handler_->is_authenticated();
-        ui_->push_system_msg("Connection: " + std::string(connected ? "connected" : "disconnected"));
-        ui_->push_system_msg("Auth: " + std::string(authed ? "authenticated" : "not authenticated"));
-        ui_->push_system_msg("User: " + cfg_.identity.user_id);
-        ui_->push_system_msg("Active channel: " + state_.active_channel().value_or("(none)"));
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::CONNECTION_STATUS,
+                                       i18n::tr(connected ? i18n::I18nKey::CONNECTED : i18n::I18nKey::DISCONNECTED)));
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::AUTH_STATUS,
+                                       i18n::tr(authed ? i18n::I18nKey::AUTHENTICATED : i18n::I18nKey::NOT_AUTHENTICATED)));
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::USER_LABEL, cfg_.identity.user_id));
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::ACTIVE_CHANNEL,
+                                       state_.active_channel().value_or(i18n::tr(i18n::I18nKey::NONE))));
         return;
     }
     if (cmd.name == "/settings") {
@@ -435,9 +441,9 @@ void App::handle_command(const ParsedCommand& cmd) {
                 auto topics = help_ ? help_->topics() : std::vector<std::string>{};
                 std::string list;
                 for (auto& t : topics) { list += t + " "; }
-                ui_->push_system_msg("Usage: /help <topic>");
+                ui_->push_system_msg(i18n::tr(i18n::I18nKey::HELP_USAGE));
                 if (!list.empty())
-                    ui_->push_system_msg("Available topics: " + list);
+                    ui_->push_system_msg(i18n::tr(i18n::I18nKey::AVAILABLE_TOPICS, list));
             }
         } else {
             std::string topic = cmd.args[0];
@@ -445,12 +451,12 @@ void App::handle_command(const ParsedCommand& cmd) {
             if (content) {
                 ui_->push_system_msg(*content);
             } else {
-                ui_->push_system_msg("Topic '" + topic + "' not found.");
+                ui_->push_system_msg(i18n::tr(i18n::I18nKey::TOPIC_NOT_FOUND, topic));
                 auto topics = help_ ? help_->topics() : std::vector<std::string>{};
                 std::string list;
                 for (auto& t : topics) { list += t + " "; }
                 if (!list.empty())
-                    ui_->push_system_msg("Available topics: " + list);
+                    ui_->push_system_msg(i18n::tr(i18n::I18nKey::AVAILABLE_TOPICS, list));
             }
         }
         ui_->notify();
@@ -459,15 +465,15 @@ void App::handle_command(const ParsedCommand& cmd) {
     if (cmd.name == "/reload_help") {
         if (help_) {
             help_->reload();
-            ui_->push_system_msg("Help files reloaded.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::HELP_RELOADED));
         } else {
-            ui_->push_system_msg("Help system not initialized.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::HELP_NOT_INITIALIZED));
         }
         ui_->notify();
         return;
     }
     if (cmd.name == "/clear") {
-        ui_->push_system_msg("(cleared)");
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::CLEARED));
         ui_->notify();
         return;
     }
@@ -475,7 +481,8 @@ void App::handle_command(const ParsedCommand& cmd) {
         auto users = state_.online_users();
         std::string list;
         for (auto& u : users) list += u + " ";
-        ui_->push_system_msg("Online: " + (list.empty() ? "(none)" : list));
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::ONLINE_USERS,
+                                       list.empty() ? i18n::tr(i18n::I18nKey::NONE) : list));
         ui_->notify();
         return;
     }
@@ -489,9 +496,9 @@ void App::handle_command(const ParsedCommand& cmd) {
             db::LocalStore::SearchFilters filters;
             filters.limit = 20;
             auto results = store_->search_messages(query, filters);
-            ui_->push_system_msg("Search results for '" + query + "':");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::SEARCH_RESULTS, query));
             if (results.empty()) {
-                ui_->push_system_msg("  (no results)");
+                ui_->push_system_msg(i18n::tr(i18n::I18nKey::NO_RESULTS));
             } else {
                 for (const auto& r : results) {
                     std::string preview = r.content;
@@ -500,7 +507,7 @@ void App::handle_command(const ParsedCommand& cmd) {
                 }
             }
         } else {
-            ui_->push_system_msg("Search not available (no database).");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::SEARCH_NOT_AVAILABLE));
         }
         ui_->notify();
         return;
@@ -508,7 +515,7 @@ void App::handle_command(const ParsedCommand& cmd) {
 
     // All remaining commands require server connection + authentication
     if (!msg_handler_ || !msg_handler_->is_authenticated()) {
-        ui_->push_system_msg("Not connected. Use /status to check connection state.");
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::NOT_CONNECTED_CHECK_STATUS));
         ui_->notify();
         return;
     }
@@ -516,7 +523,7 @@ void App::handle_command(const ParsedCommand& cmd) {
     if (cmd.name == "/part") {
         auto ch = state_.active_channel().value_or("");
         if (ch.empty() || is_server_channel(ch)) {
-            ui_->push_system_msg("Cannot leave the server channel.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::CANNOT_LEAVE_SERVER_CHANNEL));
         } else {
             {
                 std::lock_guard lk(pending_command_mu_);
@@ -533,11 +540,11 @@ void App::handle_command(const ParsedCommand& cmd) {
     } else if (cmd.name == "/join" && !cmd.args.empty()) {
         auto target = sanitize_channel_name(cmd.args[0]);
         if (!target) {
-            ui_->push_system_msg("Invalid channel name. Use letters, numbers, ., - or _.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::INVALID_CHANNEL_NAME));
             return;
         }
         if (is_server_channel(*target)) {
-            ui_->push_system_msg("`server` is a reserved internal tab.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::SERVER_RESERVED_TAB));
             return;
         }
         {
@@ -563,51 +570,53 @@ void App::handle_command(const ParsedCommand& cmd) {
         send_chat(text);
     } else if (cmd.name == "/call" && !cmd.args.empty()) {
         voice_->call(cmd.args[0]);
-        ui_->push_system_msg("Calling " + cmd.args[0] + "...");
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::CALLING, cmd.args[0]));
     } else if (cmd.name == "/accept" && !cmd.args.empty()) {
         voice_->accept_call(cmd.args[0]);
-        ui_->push_system_msg("Accepted call from " + cmd.args[0]);
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::ACCEPTED_CALL, cmd.args[0]));
     } else if (cmd.name == "/hangup") {
         voice_->hangup();
-        ui_->push_system_msg("Call ended.");
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::CALL_ENDED));
     } else if (cmd.name == "/voice") {
         if (!cmd.args.empty() && cmd.args[0] == "leave") {
             voice_->leave_room();
-            ui_->push_system_msg("Left voice room.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::LEFT_VOICE_ROOM));
         } else if (voice_->in_voice()) {
             voice_->leave_room();
-            ui_->push_system_msg("Left voice room.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::LEFT_VOICE_ROOM));
         } else {
             std::string ch = cmd.args.empty()
                 ? state_.active_channel().value_or("#general")
                 : cmd.args[0];
             voice_->join_room(ch);
-            ui_->push_system_msg("Joining voice room: " + ch + "...");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::JOINING_VOICE_ROOM, ch));
         }
     } else if (cmd.name == "/mute") {
         bool m = !state_.voice_snapshot().muted;
         voice_->set_muted(m);
-        ui_->push_system_msg(m ? "Muted." : "Unmuted.");
+        ui_->push_system_msg(i18n::tr(m ? i18n::I18nKey::MUTED : i18n::I18nKey::UNMUTED));
     } else if (cmd.name == "/deafen") {
         bool d = !state_.voice_snapshot().deafened;
         voice_->set_deafened(d);
-        ui_->push_system_msg(d ? "Deafened." : "Undeafened.");
+        ui_->push_system_msg(i18n::tr(d ? i18n::I18nKey::DEAFENED : i18n::I18nKey::UNDEAFENED));
     } else if (cmd.name == "/ptt") {
         voice_->toggle_voice_mode();
-        ui_->push_system_msg("Voice mode: " + voice_->voice_mode());
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::VOICE_MODE, voice_->voice_mode()));
     } else if (cmd.name == "/upload" && !cmd.args.empty()) {
         std::filesystem::path file_path = cmd.args[0];
         if (!std::filesystem::exists(file_path)) {
-            ui_->push_system_msg("File not found: " + file_path.string());
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_NOT_FOUND, file_path.string()));
         } else if (!file_mgr_) {
-            ui_->push_system_msg("File transfer not available.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_TRANSFER_NOT_AVAILABLE));
         } else {
             auto channel = state_.active_channel().value_or("");
             auto tid = file_mgr_->upload(file_path, "", channel);
             if (tid.empty()) {
-                ui_->push_system_msg("Upload failed to start.");
+                ui_->push_system_msg(i18n::tr(i18n::I18nKey::UPLOAD_FAILED));
             } else {
-                ui_->push_system_msg("Uploading " + file_path.filename().string() + " (" + std::to_string(std::filesystem::file_size(file_path)) + " bytes)...");
+                ui_->push_system_msg(i18n::tr(i18n::I18nKey::UPLOADING,
+                                               file_path.filename().string(),
+                                               std::to_string(std::filesystem::file_size(file_path))));
             }
         }
     } else if (cmd.name == "/download" && !cmd.args.empty()) {
@@ -616,20 +625,20 @@ void App::handle_command(const ParsedCommand& cmd) {
             ? std::filesystem::path(cmd.args[1])
             : std::filesystem::path("downloads") / file_id;
         if (!file_mgr_) {
-            ui_->push_system_msg("File transfer not available.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_TRANSFER_NOT_AVAILABLE));
         } else {
             std::filesystem::create_directories(save_path.parent_path());
             auto tid = file_mgr_->download(file_id, save_path);
             if (tid.empty()) {
-                ui_->push_system_msg("Download failed to start.");
+                ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOAD_FAILED));
             } else {
-                ui_->push_system_msg("Downloading " + file_id + " to " + save_path.string() + "...");
+                ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOADING, file_id, save_path.string()));
             }
         }
     } else if (cmd.name == "/trust" && !cmd.args.empty()) {
         std::string peer = cmd.args[0];
         std::string sn   = crypto_->safety_number(peer, *store_);
-        ui_->push_system_msg("Safety number with " + peer + ":");
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::SAFETY_NUMBER_WITH, peer));
         ui_->push_system_msg("  " + sn);
         auto existing = store_->load_peer_identity(peer);
         if (existing) store_->save_peer_identity(peer, *existing, "verified");
@@ -658,7 +667,7 @@ void App::handle_command(const ParsedCommand& cmd) {
         state_.push_message(ch, std::move(action_msg));
         ui_->notify();
     } else {
-        ui_->push_system_msg("Unknown command: " + cmd.name);
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::UNKNOWN_COMMAND, cmd.name));
     }
     ui_->notify();
 }
@@ -674,11 +683,11 @@ void App::send_chat(const std::string& text) {
     }
     auto active = canonical_channel_id(state_.active_channel().value_or(""));
     if (active.empty()) {
-        ui_->push_system_msg("No active channel.");
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::NO_ACTIVE_CHANNEL));
         return;
     }
     if (is_server_channel(active)) {
-        ui_->push_system_msg("Cannot send messages here. Use /join #channel or /msg <user>.");
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::CANNOT_SEND_MESSAGES_HERE));
         return;
     }
 
@@ -911,7 +920,7 @@ void App::switch_to_channel(const std::string& channel_id) {
     auto canonical_id = canonical_channel_id(channel_id);
     state_.ensure_channel(canonical_id);
     state_.set_active_channel(canonical_id);
-    ui_->push_system_msg("Switched to " + canonical_id);
+    ui_->push_system_msg(i18n::tr(i18n::I18nKey::SWITCHED_TO, canonical_id));
 }
 
 void App::open_settings() {
@@ -928,13 +937,13 @@ void App::open_settings() {
     switch (result) {
         case ui::SettingsResult::Saved:
             save_current_config();
-            ui_->push_system_msg("Settings saved.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::SETTINGS_SAVED));
             break;
         case ui::SettingsResult::Cancelled:
-            ui_->push_system_msg("Settings cancelled.");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::SETTINGS_CANCELLED));
             break;
         case ui::SettingsResult::Logout:
-            ui_->push_system_msg("Logging out...");
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::LOGGING_OUT));
             should_exit_ = true;
             // Trigger exit
             ioc_.stop();

@@ -1,6 +1,7 @@
 #include "ui/message_view.hpp"
 #include "ui/color_scheme.hpp"
 #include "ui/markdown_renderer.hpp"
+#include "i18n/strings.hpp"
 #include <ftxui/dom/elements.hpp>
 #include <algorithm>
 #include <chrono>
@@ -48,7 +49,7 @@ Element render_messages(const ChannelState& state,
                          const std::string& timestamp_format,
                          int visible_rows) {
     if (state.messages.empty()) {
-        return text("(no messages)") | color(palette::comment()) | center;
+        return text(i18n::tr(i18n::I18nKey::NO_MESSAGES)) | color(palette::comment()) | center;
     }
 
     int total      = static_cast<int>(state.messages.size());

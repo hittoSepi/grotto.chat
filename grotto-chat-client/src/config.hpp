@@ -28,6 +28,7 @@ struct UiConfig {
     // User list panel settings (persisted)
     int         user_list_width   = 20;      // Width in columns
     bool        user_list_collapsed = false; // Start collapsed?
+    std::string language          = "fi";    // "en" or "fi"
 };
 
 struct VoiceConfig {

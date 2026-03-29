@@ -1,5 +1,6 @@
 #include "ui/settings_screen.hpp"
 #include "ui/color_scheme.hpp"
+#include "i18n/strings.hpp"
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
@@ -47,10 +48,10 @@ constexpr int kDefaultMaxMessages = 1000;
 // Category labels
 std::string category_label(SettingsCategory cat) {
     switch (cat) {
-        case SettingsCategory::Appearance: return "Appearance";
-        case SettingsCategory::Connection: return "Connection";
-        case SettingsCategory::Notifications: return "Notifications";
-        case SettingsCategory::Account: return "Account";
+        case SettingsCategory::Appearance: return i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE);
+        case SettingsCategory::Connection: return i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION);
+        case SettingsCategory::Notifications: return i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS);
+        case SettingsCategory::Account: return i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT);
     }
     return "Unknown";
 }
@@ -88,7 +89,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     auto renderer = Renderer(container_, [this] {
         // Sidebar
         auto sidebar = vbox({
-            text(" Settings ") | bold | color(palette::blue()),
+            text(" " + i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE) + " ") | bold | color(palette::blue()),
             separator(),
             sidebar_container_->Render(),
         }) | border | size(WIDTH, LESS_THAN, 20);
@@ -187,10 +188,10 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
 void SettingsScreen::build_ui() {
     // Sidebar category buttons
     sidebar_container_ = Container::Vertical({
-        Button(" Appearance ", [this] { active_category_ = SettingsCategory::Appearance; }),
-        Button(" Connection ", [this] { active_category_ = SettingsCategory::Connection; }),
-        Button(" Notifications ", [this] { active_category_ = SettingsCategory::Notifications; }),
-        Button(" Account ", [this] { active_category_ = SettingsCategory::Account; }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE) + " ", [this] { active_category_ = SettingsCategory::Appearance; }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION) + " ", [this] { active_category_ = SettingsCategory::Connection; }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS) + " ", [this] { active_category_ = SettingsCategory::Notifications; }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT) + " ", [this] { active_category_ = SettingsCategory::Account; }),
     });
     
     // Input components
@@ -202,30 +203,31 @@ void SettingsScreen::build_ui() {
     cert_pin_input_ = Input(&tls_cert_pin_, "");
     keywords_input_ = Input(&mention_keywords_, "");
     nickname_input_ = Input(&nickname_, "");
+    language_input_ = Input(&language_, "fi");
 
     // Checkbox components (created once, not per-render)
-    show_timestamps_cb_ = Checkbox("Show timestamps", &show_timestamps_);
-    show_user_colors_cb_ = Checkbox("Colorize usernames", &show_user_colors_);
-    auto_reconnect_cb_ = Checkbox("Auto-reconnect on disconnect", &auto_reconnect_);
-    tls_verify_cb_ = Checkbox("Verify TLS certificates", &tls_verify_peer_);
-    desktop_notif_cb_ = Checkbox("Enable desktop notifications", &desktop_notifications_);
-    sound_alerts_cb_ = Checkbox("Enable sound alerts", &sound_alerts_);
-    mention_cb_ = Checkbox("Notify on mentions", &notify_on_mention_);
-    dm_cb_ = Checkbox("Notify on direct messages", &notify_on_dm_);
+    show_timestamps_cb_ = Checkbox(i18n::tr(i18n::I18nKey::SHOW_TIMESTAMPS), &show_timestamps_);
+    show_user_colors_cb_ = Checkbox(i18n::tr(i18n::I18nKey::COLORIZE_USERNAMES), &show_user_colors_);
+    auto_reconnect_cb_ = Checkbox(i18n::tr(i18n::I18nKey::AUTO_RECONNECT), &auto_reconnect_);
+    tls_verify_cb_ = Checkbox(i18n::tr(i18n::I18nKey::VERIFY_TLS), &tls_verify_peer_);
+    desktop_notif_cb_ = Checkbox(i18n::tr(i18n::I18nKey::DESKTOP_NOTIFICATIONS), &desktop_notifications_);
+    sound_alerts_cb_ = Checkbox(i18n::tr(i18n::I18nKey::SOUND_ALERTS), &sound_alerts_);
+    mention_cb_ = Checkbox(i18n::tr(i18n::I18nKey::NOTIFY_ON_MENTION), &notify_on_mention_);
+    dm_cb_ = Checkbox(i18n::tr(i18n::I18nKey::NOTIFY_ON_DM), &notify_on_dm_);
 
     // Account action buttons (created once, not per-render)
-    export_button_persistent_ = Button("[ Export Settings ]", [this] { export_settings(); });
-    import_button_persistent_ = Button("[ Import Settings ]", [this] { import_settings(); });
-    logout_button_persistent_ = Button("[ LOGOUT ]", [this] { logout_ = true; });
+    export_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_EXPORT_SETTINGS), [this] { export_settings(); });
+    import_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_IMPORT_SETTINGS), [this] { import_settings(); });
+    logout_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_LOGOUT), [this] { logout_ = true; });
 
     // Action buttons
-    save_button_ = Button("[ SAVE ]", [this] {
+    save_button_ = Button(i18n::tr(i18n::I18nKey::BUTTON_SAVE), [this] {
         saved_ = true;
     });
-    cancel_button_ = Button("[ CANCEL ]", [this] {
+    cancel_button_ = Button(i18n::tr(i18n::I18nKey::BUTTON_CANCEL), [this] {
         cancelled_ = true;
     });
-    reset_button_ = Button("[ Reset to Defaults ]", [this] {
+    reset_button_ = Button(i18n::tr(i18n::I18nKey::BUTTON_RESET_DEFAULTS), [this] {
         reset_to_defaults();
     });
 
@@ -248,6 +250,7 @@ void SettingsScreen::build_ui() {
         dm_cb_,
         keywords_input_,
         nickname_input_,
+        language_input_,
         export_button_persistent_,
         import_button_persistent_,
         logout_button_persistent_,
@@ -260,14 +263,14 @@ void SettingsScreen::build_ui() {
 Element SettingsScreen::render_appearance() {
     // Theme selection dropdown (using input for now)
     auto theme_row = hbox({
-        text("Theme: ") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::THEME_LABEL)) | color(palette::fg_dark()),
         theme_input_->Render() | size(WIDTH, GREATER_THAN, 20) | border,
-        text(" (" + std::to_string(kThemes.size()) + " available)" ) | color(palette::comment()),
+        text(" (" + std::to_string(kThemes.size()) + i18n::tr(i18n::I18nKey::THEME_AVAILABLE) + ")" ) | color(palette::comment()),
     });
     
     // Font scale slider representation
     auto font_row = hbox({
-        text("Font Scale: ") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::FONT_SCALE_LABEL)) | color(palette::fg_dark()),
         text(std::to_string(font_scale_) + "%") | color(palette::cyan()),
     });
     
@@ -275,106 +278,111 @@ Element SettingsScreen::render_appearance() {
     
     // Timestamp format
     auto format_row = hbox({
-        text("Timestamp Format: ") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::TIMESTAMP_FORMAT_LABEL)) | color(palette::fg_dark()),
         timestamp_format_input_->Render() | size(WIDTH, GREATER_THAN, 15) | border,
     });
     
     // Max messages
     auto max_msg_row = hbox({
-        text("Max Messages: ") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::MAX_MESSAGES_LABEL)) | color(palette::fg_dark()),
         max_messages_input_->Render() | size(WIDTH, GREATER_THAN, 10) | border,
     });
     
     return vbox({
-        text("Theme Settings") | bold | color(palette::blue()),
+        text(i18n::tr(i18n::I18nKey::THEME_SETTINGS)) | bold | color(palette::blue()),
         separator(),
         theme_row,
         text(""),
-        text("Display Options") | bold | color(palette::blue()),
+        text(i18n::tr(i18n::I18nKey::DISPLAY_OPTIONS)) | bold | color(palette::blue()),
         separator(),
         show_timestamps_cb_->Render(),
         show_user_colors_cb_->Render(),
         format_row,
         max_msg_row,
         text(""),
-        text("Note: Theme changes apply immediately. Other changes apply on save.") 
+        hbox({
+            text(i18n::tr(i18n::I18nKey::LANGUAGE_LABEL)) | color(palette::fg_dark()),
+            language_input_->Render() | size(WIDTH, GREATER_THAN, 10) | border,
+        }),
+        text(""),
+        text(i18n::tr(i18n::I18nKey::THEME_NOTE))
             | color(palette::comment()) | dim,
     });
 }
 
 Element SettingsScreen::render_connection() {
     auto delay_row = hbox({
-        text("Reconnect Delay: ") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::RECONNECT_DELAY_LABEL)) | color(palette::fg_dark()),
         reconnect_delay_input_->Render() | size(WIDTH, GREATER_THAN, 5) | border,
-        text(" seconds") | color(palette::comment()),
+        text(i18n::tr(i18n::I18nKey::SECONDS)) | color(palette::comment()),
     });
     
     auto timeout_row = hbox({
-        text("Connection Timeout: ") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::CONNECTION_TIMEOUT_LABEL)) | color(palette::fg_dark()),
         timeout_input_->Render() | size(WIDTH, GREATER_THAN, 5) | border,
-        text(" seconds") | color(palette::comment()),
+        text(i18n::tr(i18n::I18nKey::SECONDS)) | color(palette::comment()),
     });
     
     auto cert_pin_row = hbox({
-        text("Certificate PIN: ") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::CERT_PIN_LABEL)) | color(palette::fg_dark()),
         cert_pin_input_->Render() | size(WIDTH, GREATER_THAN, 40) | border,
     });
     
     return vbox({
-        text("Reconnect Behavior") | bold | color(palette::blue()),
+        text(i18n::tr(i18n::I18nKey::RECONNECT_BEHAVIOR)) | bold | color(palette::blue()),
         separator(),
         auto_reconnect_cb_->Render(),
         delay_row,
         text(""),
-        text("Timeout Settings") | bold | color(palette::blue()),
+        text(i18n::tr(i18n::I18nKey::TIMEOUT_SETTINGS)) | bold | color(palette::blue()),
         separator(),
         timeout_row,
         text(""),
-        text("TLS/SSL Options") | bold | color(palette::blue()),
+        text(i18n::tr(i18n::I18nKey::TLS_OPTIONS)) | bold | color(palette::blue()),
         separator(),
         tls_verify_cb_->Render(),
         cert_pin_row,
         text(""),
-        text("Note: Connection settings take effect on next connection.") 
+        text(i18n::tr(i18n::I18nKey::CONNECTION_NOTE))
             | color(palette::comment()) | dim,
     });
 }
 
 Element SettingsScreen::render_notifications() {
     auto keywords_row = hbox({
-        text("Mention Keywords: ") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::MENTION_KEYWORDS_LABEL)) | color(palette::fg_dark()),
         keywords_input_->Render() | size(WIDTH, GREATER_THAN, 30) | border,
     });
     
     return vbox({
-        text("Notification Settings") | bold | color(palette::blue()),
+        text(i18n::tr(i18n::I18nKey::NOTIFICATION_SETTINGS)) | bold | color(palette::blue()),
         separator(),
         desktop_notif_cb_->Render(),
         sound_alerts_cb_->Render(),
         text(""),
-        text("Mention Settings") | bold | color(palette::blue()),
+        text(i18n::tr(i18n::I18nKey::MENTION_SETTINGS)) | bold | color(palette::blue()),
         separator(),
         mention_cb_->Render(),
         dm_cb_->Render(),
         keywords_row,
-        text("  Comma-separated keywords (e.g.: nick1, nick2, word1)") | color(palette::comment()) | dim,
+        text(i18n::tr(i18n::I18nKey::MENTION_KEYWORDS_HINT)) | color(palette::comment()) | dim,
     });
 }
 
 Element SettingsScreen::render_account() {
     auto nickname_row = hbox({
-        text("Nickname: ") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::NICKNAME_LABEL)) | color(palette::fg_dark()),
         nickname_input_->Render() | size(WIDTH, GREATER_THAN, 25) | border,
     });
     
     // Public key display (read-only)
-    std::string pk_display = public_key_hex_.empty() ? "(not available)" : public_key_hex_;
+    std::string pk_display = public_key_hex_.empty() ? i18n::tr(i18n::I18nKey::PUBLIC_KEY_NOT_AVAILABLE) : public_key_hex_;
     if (pk_display.size() > 50) {
         pk_display = pk_display.substr(0, 47) + "...";
     }
     
     auto pubkey_row = vbox({
-        text("Public Key (Ed25519):") | color(palette::fg_dark()),
+        text(i18n::tr(i18n::I18nKey::PUBLIC_KEY_LABEL)) | color(palette::fg_dark()),
         text(pk_display) | color(palette::cyan()),
     });
     
@@ -385,20 +393,20 @@ Element SettingsScreen::render_account() {
     });
 
     auto danger_zone = vbox({
-        text("Danger Zone") | bold | color(palette::red()),
+        text(i18n::tr(i18n::I18nKey::DANGER_ZONE)) | bold | color(palette::red()),
         separator(),
         logout_button_persistent_->Render() | color(palette::red()),
     });
     
     return vbox({
-        text("Account Settings") | bold | color(palette::blue()),
+        text(i18n::tr(i18n::I18nKey::ACCOUNT_SETTINGS)) | bold | color(palette::blue()),
         separator(),
         nickname_row,
-        text("  This nickname will be used for new connections.") | color(palette::comment()) | dim,
+        text(i18n::tr(i18n::I18nKey::NICKNAME_HINT)) | color(palette::comment()) | dim,
         text(""),
         pubkey_row,
         text(""),
-        text("Import/Export") | bold | color(palette::blue()),
+        text(i18n::tr(i18n::I18nKey::IMPORT_EXPORT)) | bold | color(palette::blue()),
         separator(),
         import_export,
         text(""),
@@ -414,6 +422,7 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     font_scale_ = kDefaultFontScale;
     show_timestamps_ = kDefaultShowTimestamps;
     show_user_colors_ = kDefaultShowUserColors;
+    language_ = cfg.ui.language;
     
     // Connection (from existing config or defaults)
     auto_reconnect_ = kDefaultAutoReconnect;
@@ -443,6 +452,7 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
     } catch (...) {
         cfg.ui.max_messages = kDefaultMaxMessages;
     }
+    cfg.ui.language = language_;
     
     // Connection
     cfg.tls.verify_peer = tls_verify_peer_;

@@ -1,0 +1,186 @@
+#pragma once
+#include <string>
+#include <vector>
+
+namespace grotto::i18n {
+
+enum class I18nKey {
+    // Login screen / init
+    FAILED_OPEN_DATA_STORE,
+    FAILED_UNLOCK_IDENTITY,
+    CLEAR_LOCAL_DATA_SUCCESS,
+    CLEAR_LOCAL_DATA_NOT_FOUND,
+    FAILED_CLEAR_LOCAL_DATA,
+    HOST_LABEL,
+    PORT_LABEL,
+    USERNAME_LABEL,
+    PASSKEY_LABEL,
+    REMEMBER_CREDENTIALS,
+    BUTTON_CONNECT,
+    BUTTON_CLEAR_CREDS,
+    BUTTON_QUIT,
+    HOST_REQUIRED,
+    PORT_REQUIRED,
+    PORT_RANGE_ERROR,
+    PORT_NUMBER_ERROR,
+    USERNAME_REQUIRED,
+    PASSKEY_REQUIRED,
+    CONNECTING,
+
+    // Settings screen categories
+    CATEGORY_APPEARANCE,
+    CATEGORY_CONNECTION,
+    CATEGORY_NOTIFICATIONS,
+    CATEGORY_ACCOUNT,
+
+    // Settings labels
+    THEME_LABEL,
+    THEME_AVAILABLE,
+    FONT_SCALE_LABEL,
+    TIMESTAMP_FORMAT_LABEL,
+    MAX_MESSAGES_LABEL,
+    THEME_SETTINGS,
+    DISPLAY_OPTIONS,
+    THEME_NOTE,
+    RECONNECT_DELAY_LABEL,
+    CONNECTION_TIMEOUT_LABEL,
+    CERT_PIN_LABEL,
+    RECONNECT_BEHAVIOR,
+    TIMEOUT_SETTINGS,
+    TLS_OPTIONS,
+    CONNECTION_NOTE,
+    MENTION_KEYWORDS_LABEL,
+    NOTIFICATION_SETTINGS,
+    MENTION_SETTINGS,
+    MENTION_KEYWORDS_HINT,
+    NICKNAME_LABEL,
+    NICKNAME_HINT,
+    PUBLIC_KEY_LABEL,
+    PUBLIC_KEY_NOT_AVAILABLE,
+    DANGER_ZONE,
+    ACCOUNT_SETTINGS,
+    IMPORT_EXPORT,
+    LANGUAGE_LABEL,
+
+    // Settings checkboxes
+    SHOW_TIMESTAMPS,
+    COLORIZE_USERNAMES,
+    AUTO_RECONNECT,
+    VERIFY_TLS,
+    DESKTOP_NOTIFICATIONS,
+    SOUND_ALERTS,
+    NOTIFY_ON_MENTION,
+    NOTIFY_ON_DM,
+
+    // Settings buttons
+    BUTTON_SAVE,
+    BUTTON_CANCEL,
+    BUTTON_RESET_DEFAULTS,
+    BUTTON_EXPORT_SETTINGS,
+    BUTTON_IMPORT_SETTINGS,
+
+    // App / system messages
+    GROTTO_CONNECTING,
+    UNKNOWN_COMMAND,
+    DISCONNECTED_FROM_SERVER,
+    NOT_CONNECTED,
+    CLIENT_VERSION,
+    SERVER_VERSION,
+    CONNECTION_STATUS,
+    AUTH_STATUS,
+    USER_LABEL,
+    ACTIVE_CHANNEL,
+    NONE,
+    HELP_USAGE,
+    AVAILABLE_TOPICS,
+    TOPIC_NOT_FOUND,
+    HELP_RELOADED,
+    HELP_NOT_INITIALIZED,
+    CLEARED,
+    ONLINE_USERS,
+    SEARCH_RESULTS,
+    NO_RESULTS,
+    SEARCH_NOT_AVAILABLE,
+    NOT_CONNECTED_CHECK_STATUS,
+    CANNOT_LEAVE_SERVER_CHANNEL,
+    INVALID_CHANNEL_NAME,
+    SERVER_RESERVED_TAB,
+    CALLING,
+    ACCEPTED_CALL,
+    CALL_ENDED,
+    LEFT_VOICE_ROOM,
+    JOINING_VOICE_ROOM,
+    MUTED,
+    UNMUTED,
+    DEAFENED,
+    UNDEAFENED,
+    VOICE_MODE,
+    FILE_NOT_FOUND,
+    FILE_TRANSFER_NOT_AVAILABLE,
+    UPLOAD_FAILED,
+    UPLOADING,
+    DOWNLOAD_FAILED,
+    DOWNLOADING,
+    SAFETY_NUMBER_WITH,
+    NO_ACTIVE_CHANNEL,
+    CANNOT_SEND_MESSAGES_HERE,
+    SWITCHED_TO,
+    SETTINGS_SAVED,
+    SETTINGS_CANCELLED,
+    LOGGING_OUT,
+
+    // Message handler
+    AUTHENTICATED_AS,
+    AUTH_FAILED,
+    AUTH_FAILED_CHECK_KEY,
+    FAILED_ESTABLISH_SESSION,
+    FAILED_SEND_MESSAGES,
+    COULD_NOT_ESTABLISH_SESSION,
+    SERVER_ERROR,
+    COMMAND_RESPONSE,
+    FILE_TRANSFER_COMPLETED,
+    FILE_TRANSFER_ERROR,
+
+    // Status bar
+    USERS_COUNT,
+    MUTED_INDICATOR,
+    DEAFENED_INDICATOR,
+    PTT_F1,
+    VOX,
+
+    // Message view
+    NO_MESSAGES,
+
+    // User list panel
+    USERS_HEADER,
+    VOICE_HEADER,
+
+    // Voice engine
+    FAILED_OPEN_AUDIO_DEVICE,
+    VOICE_CONNECTION_FAILED,
+
+    // Status values
+    CONNECTED,
+    DISCONNECTED,
+    AUTHENTICATED,
+    NOT_AUTHENTICATED,
+
+    // Misc
+    BUTTON_LOGOUT,
+    SECONDS,
+};
+
+// Set active language ("en" or "fi"). Default is "en".
+void set_language(const std::string& lang);
+
+// Get current language.
+std::string current_language();
+
+// Translate a key. Supports {0}, {1}, ... placeholders via args.
+std::string tr(I18nKey key);
+std::string tr(I18nKey key, const std::string& arg0);
+std::string tr(I18nKey key, const std::string& arg0, const std::string& arg1);
+std::string tr(I18nKey key, const std::string& arg0, const std::string& arg1, const std::string& arg2);
+std::string tr(I18nKey key, const std::vector<std::string>& args);
+
+} // namespace grotto::i18n

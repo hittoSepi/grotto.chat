@@ -10,7 +10,8 @@ namespace grotto {
 class HelpManager {
 public:
     // Construct with path to the directory containing the binary.
-    explicit HelpManager(const std::filesystem::path& binary_dir);
+    explicit HelpManager(const std::filesystem::path& binary_dir,
+                         const std::string& language = "en");
 
     // Scan help/ directory and cache all .md files.
     void load();
@@ -26,6 +27,7 @@ public:
 
 private:
     std::filesystem::path help_dir_;
+    std::string language_;
     std::map<std::string, std::string> cache_;
 };
 

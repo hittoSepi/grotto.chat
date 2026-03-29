@@ -210,6 +210,7 @@ set(CLIENT_SOURCES
     src/input/command_parser.cpp
     src/input/tab_complete.cpp
     src/help/help_manager.cpp
+    src/i18n/strings.cpp
     src/file/file_transfer.cpp
     ${PROTO_SRCS}
 )
@@ -267,9 +268,15 @@ add_custom_command(TARGET grotto-client POST_BUILD
 # Copy help files to build output directory
 add_custom_command(TARGET grotto-client POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/help"
-        "$<TARGET_FILE_DIR:grotto-client>/help"
-    COMMENT "Copying help/ to output directory"
+        "${CMAKE_CURRENT_SOURCE_DIR}/help/en"
+        "$<TARGET_FILE_DIR:grotto-client>/help/en"
+    COMMENT "Copying help/en/ to output directory"
+)
+add_custom_command(TARGET grotto-client POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/help/fi"
+        "$<TARGET_FILE_DIR:grotto-client>/help/fi"
+    COMMENT "Copying help/fi/ to output directory"
 )
 
 
@@ -288,6 +295,7 @@ add_test(NAME input-line-tests COMMAND test-input-line)
 add_executable(test-config
     tests/test_config.cpp
     src/config.cpp
+    src/i18n/strings.cpp
 )
 target_include_directories(test-config PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src

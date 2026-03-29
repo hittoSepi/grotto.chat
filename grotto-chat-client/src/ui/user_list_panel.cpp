@@ -1,5 +1,6 @@
 #include "ui/user_list_panel.hpp"
 #include "ui/color_scheme.hpp"
+#include "i18n/strings.hpp"
 #include <ftxui/dom/elements.hpp>
 #include <algorithm>
 
@@ -146,7 +147,7 @@ Element render_user_list_panel(
     Elements panel_content;
     
     // ── USERS: header ──────────────────────────────────────────────────────
-    std::string users_header = " USERS: " + std::to_string(users.size());
+    std::string users_header = i18n::tr(i18n::I18nKey::USERS_HEADER) + std::to_string(users.size());
     panel_content.push_back(text(users_header) | bold | color(palette::fg_dark()));
     panel_content.push_back(separator() | color(palette::bg_highlight()));
     current_y += 2;  // Header + separator
@@ -165,7 +166,7 @@ Element render_user_list_panel(
     if (voice_count > 0) {
         panel_content.push_back(text(""));  // Spacer
         current_y++;
-        std::string voice_header = " VOICE: " + std::to_string(voice_count);
+        std::string voice_header = i18n::tr(i18n::I18nKey::VOICE_HEADER) + std::to_string(voice_count);
         panel_content.push_back(text(voice_header) | bold | color(palette::fg_dark()));
         panel_content.push_back(separator() | color(palette::bg_highlight()));
         current_y += 2;

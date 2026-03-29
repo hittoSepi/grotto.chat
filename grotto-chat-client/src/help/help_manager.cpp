@@ -5,12 +5,21 @@
 
 namespace grotto {
 
-HelpManager::HelpManager(const std::filesystem::path& binary_dir)
-    : help_dir_(binary_dir / "help") {}
+HelpManager::HelpManager(const std::filesystem::path& binary_dir,
+                         const std::string& language)
+    : help_dir_(binary_dir / "help" / language), language_(language) {}
 
 void HelpManager::load() {
     cache_.clear();
-    if (!std::filesystem::is_directory(help_dir_)) return;
+    if (!std::filesystem::is_directory(help_dir_)) {
+        // Fallback to 'en' if language directory missing
+        auto fallback = help_dir_.parent_path() / "en";
+        if (std::filesystem::is_directory(fallback)) {
+            help_dir_ = fallback;
+        } else {
+            return;
+        }
+    }
 
     for (auto& entry : std::filesystem::directory_iterator(help_dir_)) {
         if (!entry.is_regular_file()) continue;
