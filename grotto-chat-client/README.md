@@ -96,6 +96,7 @@ max_cache     = 200            # Number of previews to cache
 inline_images = true           # Try inline text thumbnails for direct image links
 image_columns = 40             # Width for generated image thumbnails
 image_rows    = 16             # Height for generated image thumbnails
+terminal_graphics = "auto"     # "auto", "off", or "viewer-only" for kitty/iTerm2/sixel terminals
 
 [tls]
 verify_peer = true             # Verify server TLS certificate (keep true in production)

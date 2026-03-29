@@ -4,6 +4,7 @@
 #include <stb_image.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -19,11 +20,21 @@ enum class TerminalImageProtocol {
     None,
     Kitty,
     ITerm2,
+    Sixel,
 };
 
 struct FetchedImage {
     std::string content_type;
     std::vector<unsigned char> bytes;
+};
+
+TerminalGraphicsMode g_terminal_graphics_mode = TerminalGraphicsMode::Auto;
+
+struct QuantizedImage {
+    int width = 0;
+    int height = 0;
+    std::vector<uint8_t> palette_rgb;
+    std::vector<uint8_t> indices;
 };
 
 std::string base64_encode(const unsigned char* data, size_t len) {
@@ -58,7 +69,36 @@ size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdata) {
     return bytes;
 }
 
+std::string to_lower_ascii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+}
+
+bool sixel_supported_environment() {
+    if (std::getenv("WT_SESSION")) {
+        return true;
+    }
+    if (const char* term = std::getenv("TERM")) {
+        const std::string value = to_lower_ascii(term);
+        if (value.find("sixel") != std::string::npos) {
+            return true;
+        }
+    }
+    if (const char* colorterm = std::getenv("COLORTERM")) {
+        const std::string value = to_lower_ascii(colorterm);
+        if (value.find("sixel") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TerminalImageProtocol detect_protocol() {
+    if (g_terminal_graphics_mode == TerminalGraphicsMode::Off) {
+        return TerminalImageProtocol::None;
+    }
+
     if (const char* term_program = std::getenv("TERM_PROGRAM")) {
         std::string value = term_program;
         if (value == "iTerm.app") {
@@ -78,6 +118,10 @@ TerminalImageProtocol detect_protocol() {
         if (value.find("kitty") != std::string::npos) {
             return TerminalImageProtocol::Kitty;
         }
+    }
+
+    if (sixel_supported_environment()) {
+        return TerminalImageProtocol::Sixel;
     }
 
     return TerminalImageProtocol::None;
@@ -129,23 +173,13 @@ bool show_iterm2_image(const FetchedImage& image) {
     return true;
 }
 
-bool show_kitty_image(const FetchedImage& image) {
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    stbi_uc* rgba = stbi_load_from_memory(image.bytes.data(),
-                                          static_cast<int>(image.bytes.size()),
-                                          &width, &height, &channels, 4);
+bool show_kitty_rgba(const unsigned char* rgba, int width, int height) {
     if (!rgba || width <= 0 || height <= 0) {
-        if (rgba) {
-            stbi_image_free(rgba);
-        }
         return false;
     }
 
     const size_t raw_size = static_cast<size_t>(width * height * 4);
     std::string encoded = base64_encode(rgba, raw_size);
-    stbi_image_free(rgba);
 
     constexpr size_t kChunkSize = 4096;
     std::cout << "\n";
@@ -166,10 +200,271 @@ bool show_kitty_image(const FetchedImage& image) {
     return true;
 }
 
+bool show_kitty_image(const FetchedImage& image) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc* rgba = stbi_load_from_memory(image.bytes.data(),
+                                          static_cast<int>(image.bytes.size()),
+                                          &width, &height, &channels, 4);
+    if (!rgba || width <= 0 || height <= 0) {
+        if (rgba) {
+            stbi_image_free(rgba);
+        }
+        return false;
+    }
+
+    const bool ok = show_kitty_rgba(rgba, width, height);
+    stbi_image_free(rgba);
+    return ok;
+}
+
+std::vector<unsigned char> resample_rgba(const unsigned char* rgba,
+                                         int width,
+                                         int height,
+                                         int max_width,
+                                         int max_height,
+                                         int* out_width,
+                                         int* out_height) {
+    if (!rgba || width <= 0 || height <= 0) {
+        return {};
+    }
+
+    const float scale_x = static_cast<float>(max_width) / static_cast<float>(width);
+    const float scale_y = static_cast<float>(max_height) / static_cast<float>(height);
+    const float scale = std::min(1.0f, std::min(scale_x, scale_y));
+
+    const int target_width = std::max(1, static_cast<int>(width * scale));
+    const int target_height = std::max(1, static_cast<int>(height * scale));
+    if (out_width) {
+        *out_width = target_width;
+    }
+    if (out_height) {
+        *out_height = target_height;
+    }
+
+    std::vector<unsigned char> out(static_cast<size_t>(target_width * target_height * 4), 0);
+    for (int y = 0; y < target_height; ++y) {
+        const int src_y = std::min(height - 1, y * height / target_height);
+        for (int x = 0; x < target_width; ++x) {
+            const int src_x = std::min(width - 1, x * width / target_width);
+            const size_t src_idx = static_cast<size_t>((src_y * width + src_x) * 4);
+            const size_t dst_idx = static_cast<size_t>((y * target_width + x) * 4);
+            for (size_t c = 0; c < 4; ++c) {
+                out[dst_idx + c] = rgba[src_idx + c];
+            }
+        }
+    }
+
+    return out;
+}
+
+uint8_t quantize_channel(uint8_t value) {
+    return static_cast<uint8_t>((value * 5 + 127) / 255);
+}
+
+QuantizedImage quantize_rgba(const unsigned char* rgba, int width, int height) {
+    QuantizedImage result;
+    if (!rgba || width <= 0 || height <= 0) {
+        return result;
+    }
+
+    result.width = width;
+    result.height = height;
+    result.indices.resize(static_cast<size_t>(width * height), 0);
+
+    constexpr int kPaletteSide = 6;
+    constexpr int kPaletteSize = kPaletteSide * kPaletteSide * kPaletteSide;
+    result.palette_rgb.resize(static_cast<size_t>(kPaletteSize * 3), 0);
+    for (int r = 0; r < kPaletteSide; ++r) {
+        for (int g = 0; g < kPaletteSide; ++g) {
+            for (int b = 0; b < kPaletteSide; ++b) {
+                const int index = (r * kPaletteSide + g) * kPaletteSide + b;
+                result.palette_rgb[static_cast<size_t>(index * 3 + 0)] =
+                    static_cast<uint8_t>(r * 255 / (kPaletteSide - 1));
+                result.palette_rgb[static_cast<size_t>(index * 3 + 1)] =
+                    static_cast<uint8_t>(g * 255 / (kPaletteSide - 1));
+                result.palette_rgb[static_cast<size_t>(index * 3 + 2)] =
+                    static_cast<uint8_t>(b * 255 / (kPaletteSide - 1));
+            }
+        }
+    }
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const size_t src_idx = static_cast<size_t>((y * width + x) * 4);
+            const uint8_t alpha = rgba[src_idx + 3];
+            const uint8_t r = static_cast<uint8_t>((rgba[src_idx + 0] * alpha) / 255);
+            const uint8_t g = static_cast<uint8_t>((rgba[src_idx + 1] * alpha) / 255);
+            const uint8_t b = static_cast<uint8_t>((rgba[src_idx + 2] * alpha) / 255);
+            const int index = (quantize_channel(r) * kPaletteSide + quantize_channel(g)) * kPaletteSide +
+                              quantize_channel(b);
+            result.indices[static_cast<size_t>(y * width + x)] = static_cast<uint8_t>(index);
+        }
+    }
+
+    return result;
+}
+
+void append_sixel_run(std::string* output, char symbol, int count) {
+    if (!output || count <= 0) {
+        return;
+    }
+    if (count > 3) {
+        *output += "!";
+        *output += std::to_string(count);
+        output->push_back(symbol);
+        return;
+    }
+    output->append(static_cast<size_t>(count), symbol);
+}
+
+bool encode_sixel_image(const unsigned char* rgba,
+                        int width,
+                        int height,
+                        std::string* output) {
+    if (!rgba || width <= 0 || height <= 0 || !output) {
+        return false;
+    }
+
+    const QuantizedImage image = quantize_rgba(rgba, width, height);
+    if (image.indices.empty() || image.palette_rgb.empty()) {
+        return false;
+    }
+
+    output->clear();
+    *output += "\033Pq";
+
+    const int palette_size = static_cast<int>(image.palette_rgb.size() / 3);
+    for (int i = 0; i < palette_size; ++i) {
+        const int r = static_cast<int>(image.palette_rgb[static_cast<size_t>(i * 3 + 0)]) * 100 / 255;
+        const int g = static_cast<int>(image.palette_rgb[static_cast<size_t>(i * 3 + 1)]) * 100 / 255;
+        const int b = static_cast<int>(image.palette_rgb[static_cast<size_t>(i * 3 + 2)]) * 100 / 255;
+        *output += "#" + std::to_string(i) + ";2;" + std::to_string(r) + ";" +
+                   std::to_string(g) + ";" + std::to_string(b);
+    }
+
+    std::vector<int> band_colors;
+    std::vector<bool> used(static_cast<size_t>(palette_size), false);
+    for (int band_y = 0; band_y < image.height; band_y += 6) {
+        std::fill(used.begin(), used.end(), false);
+        band_colors.clear();
+        for (int dy = 0; dy < 6 && band_y + dy < image.height; ++dy) {
+            for (int x = 0; x < image.width; ++x) {
+                const uint8_t index =
+                    image.indices[static_cast<size_t>((band_y + dy) * image.width + x)];
+                if (!used[index]) {
+                    used[index] = true;
+                    band_colors.push_back(index);
+                }
+            }
+        }
+
+        bool first_color = true;
+        for (int color : band_colors) {
+            if (!first_color) {
+                output->push_back('$');
+            }
+            first_color = false;
+            *output += "#" + std::to_string(color);
+
+            char current_symbol = 0;
+            int run_length = 0;
+            for (int x = 0; x < image.width; ++x) {
+                int bits = 0;
+                for (int dy = 0; dy < 6 && band_y + dy < image.height; ++dy) {
+                    if (image.indices[static_cast<size_t>((band_y + dy) * image.width + x)] == color) {
+                        bits |= (1 << dy);
+                    }
+                }
+                const char symbol = static_cast<char>(63 + bits);
+                if (run_length == 0) {
+                    current_symbol = symbol;
+                    run_length = 1;
+                } else if (symbol == current_symbol) {
+                    ++run_length;
+                } else {
+                    append_sixel_run(output, current_symbol, run_length);
+                    current_symbol = symbol;
+                    run_length = 1;
+                }
+            }
+            append_sixel_run(output, current_symbol, run_length);
+        }
+        output->push_back('-');
+    }
+
+    return true;
+}
+
+bool show_sixel_image(const unsigned char* rgba, int width, int height) {
+    constexpr int kMaxViewerWidth = 320;
+    constexpr int kMaxViewerHeight = 240;
+    int scaled_width = 0;
+    int scaled_height = 0;
+    const auto scaled = resample_rgba(rgba, width, height,
+                                      kMaxViewerWidth, kMaxViewerHeight,
+                                      &scaled_width, &scaled_height);
+    if (scaled.empty()) {
+        return false;
+    }
+
+    std::string encoded;
+    if (!encode_sixel_image(scaled.data(), scaled_width, scaled_height, &encoded)) {
+        return false;
+    }
+
+    std::cout << "\n" << encoded << "\033\\\n";
+    return true;
+}
+
+bool show_sixel_image(const FetchedImage& image) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc* rgba = stbi_load_from_memory(image.bytes.data(),
+                                          static_cast<int>(image.bytes.size()),
+                                          &width, &height, &channels, 4);
+    if (!rgba || width <= 0 || height <= 0) {
+        if (rgba) {
+            stbi_image_free(rgba);
+        }
+        return false;
+    }
+
+    const bool ok = show_sixel_image(rgba, width, height);
+    stbi_image_free(rgba);
+    return ok;
+}
+
 } // namespace
+
+TerminalGraphicsMode parse_terminal_graphics_mode(std::string_view value) {
+    std::string normalized(value);
+    normalized = to_lower_ascii(normalized);
+    if (normalized == "off") {
+        return TerminalGraphicsMode::Off;
+    }
+    if (normalized == "viewer-only") {
+        return TerminalGraphicsMode::ViewerOnly;
+    }
+    return TerminalGraphicsMode::Auto;
+}
+
+void configure_terminal_graphics(TerminalGraphicsMode mode) {
+    g_terminal_graphics_mode = mode;
+}
 
 bool terminal_inline_images_supported() {
     return detect_protocol() != TerminalImageProtocol::None;
+}
+
+bool terminal_uses_compact_image_preview() {
+    if (g_terminal_graphics_mode == TerminalGraphicsMode::Off ||
+        g_terminal_graphics_mode == TerminalGraphicsMode::ViewerOnly) {
+        return false;
+    }
+    return detect_protocol() == TerminalImageProtocol::Sixel;
 }
 
 bool display_inline_image_from_url(ftxui::ScreenInteractive& screen,
@@ -186,9 +481,49 @@ bool display_inline_image_from_url(ftxui::ScreenInteractive& screen,
 
     bool shown = false;
     auto show = screen.WithRestoredIO([&] {
-        shown = (protocol == TerminalImageProtocol::ITerm2)
-            ? show_iterm2_image(*image)
-            : show_kitty_image(*image);
+        if (protocol == TerminalImageProtocol::ITerm2) {
+            shown = show_iterm2_image(*image);
+        } else if (protocol == TerminalImageProtocol::Kitty) {
+            shown = show_kitty_image(*image);
+        } else {
+            shown = show_sixel_image(*image);
+        }
+        if (!shown) {
+            return;
+        }
+        std::cout << "Press Enter to return..." << std::flush;
+        std::string line;
+        std::getline(std::cin, line);
+    });
+    show();
+    return shown;
+}
+
+bool display_inline_image(ftxui::ScreenInteractive& screen,
+                          const InlineImageThumbnail& thumbnail,
+                          const std::string& title) {
+    const TerminalImageProtocol protocol = detect_protocol();
+    if (protocol == TerminalImageProtocol::None ||
+        thumbnail.rgba.empty() ||
+        thumbnail.width <= 0 ||
+        thumbnail.height <= 0) {
+        return false;
+    }
+
+    bool shown = false;
+    auto show = screen.WithRestoredIO([&] {
+        if (!title.empty()) {
+            std::cout << title << "\n";
+        }
+
+        if (protocol == TerminalImageProtocol::Sixel) {
+            shown = show_sixel_image(thumbnail.rgba.data(), thumbnail.width, thumbnail.height);
+        } else if (protocol == TerminalImageProtocol::Kitty) {
+            shown = show_kitty_rgba(thumbnail.rgba.data(), thumbnail.width, thumbnail.height);
+        } else {
+            shown = false;
+        }
+
         if (!shown) {
             return;
         }

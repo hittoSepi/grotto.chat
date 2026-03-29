@@ -1,6 +1,7 @@
 #include "ui/message_view.hpp"
 #include "ui/color_scheme.hpp"
 #include "ui/markdown_renderer.hpp"
+#include "ui/terminal_image.hpp"
 #include "i18n/strings.hpp"
 #include <ftxui/dom/elements.hpp>
 #include <algorithm>
@@ -153,6 +154,49 @@ std::vector<RenderedLine> render_one_lines(const Message& msg,
     width = std::max(1, width);
 
     if (msg.type == Message::Type::Preview) {
+        if (msg.inline_image && terminal_uses_compact_image_preview()) {
+            std::vector<RenderedLine> rows;
+            std::vector<std::string> header_lines;
+            size_t start = 0;
+            while (start <= msg.content.size() && header_lines.size() < 2) {
+                size_t end = msg.content.find('\n', start);
+                std::string line = (end == std::string::npos)
+                    ? msg.content.substr(start)
+                    : msg.content.substr(start, end - start);
+                if (!line.empty()) {
+                    header_lines.push_back(line);
+                }
+                if (end == std::string::npos) {
+                    break;
+                }
+                start = end + 1;
+            }
+            if (header_lines.empty()) {
+                header_lines.push_back("[image]");
+            }
+            header_lines.push_back("[terminal graphics preview available, right-click to open]");
+
+            const int content_width = std::max(1, width - visible_width(ts));
+            for (size_t i = 0; i < header_lines.size(); ++i) {
+                std::string line = header_lines[i];
+                if (visible_width(line) > content_width) {
+                    line.resize(static_cast<size_t>(content_width));
+                }
+                const std::string ts_prefix = (i == 0 ? ts : std::string(ts.size(), ' '));
+                rows.push_back({
+                    message_index,
+                    ts_prefix + line,
+                    hbox({
+                        text(ts_prefix) | color(palette::comment()),
+                        text(line) | color(i + 1 == header_lines.size()
+                            ? palette::yellow()
+                            : palette::blue1()) | flex,
+                    })
+                });
+            }
+            return rows;
+        }
+
         if (msg.inline_image && supports_truecolor_preview()) {
             return render_color_preview(msg, message_index, ts, width);
         }

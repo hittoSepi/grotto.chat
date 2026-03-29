@@ -44,6 +44,7 @@ max_cache = 200
 inline_images = true
 image_columns = 40
 image_rows = 16
+terminal_graphics = "auto"  # "auto", "off", or "viewer-only"
 
 [tls]
 verify_peer = true

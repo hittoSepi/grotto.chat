@@ -35,6 +35,7 @@ TEST_CASE("voice ICE settings survive save/load", "[config]") {
     };
     cfg.voice.turn_username = "grotto";
     cfg.voice.turn_password = "secret";
+    cfg.preview.terminal_graphics = "viewer-only";
 
     grotto::save_config(cfg, path);
     const auto loaded = grotto::load_config(path);
@@ -42,6 +43,7 @@ TEST_CASE("voice ICE settings survive save/load", "[config]") {
     REQUIRE(loaded.voice.ice_servers == cfg.voice.ice_servers);
     REQUIRE(loaded.voice.turn_username == cfg.voice.turn_username);
     REQUIRE(loaded.voice.turn_password == cfg.voice.turn_password);
+    REQUIRE(loaded.preview.terminal_graphics == cfg.preview.terminal_graphics);
 
     cleanup(dir);
 }
@@ -57,6 +59,7 @@ TEST_CASE("voice ICE settings survive export/import", "[config]") {
     };
     original.voice.turn_username = "relay";
     original.voice.turn_password = "relay-secret";
+    original.preview.terminal_graphics = "off";
 
     grotto::export_settings(original, path);
 
@@ -65,6 +68,7 @@ TEST_CASE("voice ICE settings survive export/import", "[config]") {
     REQUIRE(imported.voice.ice_servers == original.voice.ice_servers);
     REQUIRE(imported.voice.turn_username == original.voice.turn_username);
     REQUIRE(imported.voice.turn_password == original.voice.turn_password);
+    REQUIRE(imported.preview.terminal_graphics == original.preview.terminal_graphics);
 
     cleanup(dir);
 }

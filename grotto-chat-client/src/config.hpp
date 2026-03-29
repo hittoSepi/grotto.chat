@@ -52,6 +52,7 @@ struct PreviewConfig {
     bool inline_images = true;
     int  image_columns = 40;
     int  image_rows    = 16;
+    std::string terminal_graphics = "auto";  // "auto" | "off" | "viewer-only"
 };
 
 struct TlsConfig {

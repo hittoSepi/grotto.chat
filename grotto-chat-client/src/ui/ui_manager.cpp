@@ -102,6 +102,7 @@ UIManager::UIManager(AppState& state, ClientConfig& cfg)
     // Initialize user list panel config from persisted settings
     user_list_config_.width = cfg.ui.user_list_width;
     user_list_config_.collapsed = cfg.ui.user_list_collapsed;
+    configure_terminal_graphics(parse_terminal_graphics_mode(cfg_.preview.terminal_graphics));
 }
 
 void UIManager::toggle_user_list() {
@@ -287,7 +288,12 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
                     int message_index = visible[line_y].message_index;
                     if (message_index >= 0 &&
                         message_index < static_cast<int>(ch_state.messages.size())) {
-                        if (auto url = find_url_in_text(ch_state.messages[message_index].content)) {
+                        const auto& msg = ch_state.messages[message_index];
+                        if (msg.inline_image &&
+                            display_inline_image(screen_, *msg.inline_image, msg.content)) {
+                            return;
+                        }
+                        if (auto url = find_url_in_text(msg.content)) {
                             if (display_inline_image_from_url(screen_, *url)) {
                                 return;
                             }
