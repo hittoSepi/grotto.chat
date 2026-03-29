@@ -753,6 +753,12 @@ ChatEnvelope CryptoEngine::encrypt(const std::string& sender_id,
             signal_ctx_);
         if (parse_rc == SG_SUCCESS) {
             const bool has_pre_key_id = pre_key_signal_message_has_pre_key_id(msg) == 1;
+            signal_message* inner = pre_key_signal_message_get_signal_message(msg);
+            const auto base_key = extract_public_key_no_prefix(pre_key_signal_message_get_base_key(msg));
+            const auto identity_key = extract_public_key_no_prefix(pre_key_signal_message_get_identity_key(msg));
+            const auto ratchet_key = extract_public_key_no_prefix(
+                inner ? signal_message_get_sender_ratchet_key(inner) : nullptr);
+            signal_buffer* body = inner ? signal_message_get_body(inner) : nullptr;
             spdlog::debug(
                 "Outgoing PRE_KEY message to '{}': version={} registration_id={} signed_pre_key_id={} has_pre_key_id={} pre_key_id={}",
                 recipient_id,
@@ -761,6 +767,16 @@ ChatEnvelope CryptoEngine::encrypt(const std::string& sender_id,
                 pre_key_signal_message_get_signed_pre_key_id(msg),
                 has_pre_key_id,
                 has_pre_key_id ? pre_key_signal_message_get_pre_key_id(msg) : 0);
+            spdlog::debug(
+                "Outgoing PRE_KEY internals to '{}': base_key={} identity_key={} inner_version={} inner_counter={} inner_ratchet={} inner_body_len={} ciphertext_len={}",
+                recipient_id,
+                short_hex(base_key),
+                short_hex(identity_key),
+                inner ? static_cast<unsigned>(signal_message_get_message_version(inner)) : 0U,
+                inner ? signal_message_get_counter(inner) : 0U,
+                short_hex(ratchet_key),
+                body ? signal_buffer_len(body) : 0U,
+                env.ciphertext().size());
             SIGNAL_UNREF(msg);
         } else {
             spdlog::warn("Failed to deserialize outgoing PRE_KEY message for {}: {}", recipient_id, parse_rc);
@@ -834,6 +850,12 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
             const bool has_pre_key_id = pre_key_signal_message_has_pre_key_id(msg) == 1;
             const uint32_t pre_key_id = has_pre_key_id ? pre_key_signal_message_get_pre_key_id(msg) : 0;
             const uint32_t signed_pre_key_id = pre_key_signal_message_get_signed_pre_key_id(msg);
+            signal_message* inner = pre_key_signal_message_get_signal_message(msg);
+            const auto base_key = extract_public_key_no_prefix(pre_key_signal_message_get_base_key(msg));
+            const auto identity_key = extract_public_key_no_prefix(pre_key_signal_message_get_identity_key(msg));
+            const auto ratchet_key = extract_public_key_no_prefix(
+                inner ? signal_message_get_sender_ratchet_key(inner) : nullptr);
+            signal_buffer* body = inner ? signal_message_get_body(inner) : nullptr;
             spdlog::debug("PRE_KEY message from '{}' local_spk_present={} local_prekey_counter_next={}",
                           env.sender_id(),
                           local_store_ && local_store_->contains_signed_pre_key(spk_.id),
@@ -848,6 +870,16 @@ DecryptResult CryptoEngine::decrypt(const ChatEnvelope& env) {
                 has_pre_key_id,
                 pre_key_id,
                 has_pre_key_id && local_store_ && local_store_->contains_pre_key(pre_key_id));
+            spdlog::debug(
+                "PRE_KEY wire internals from '{}': base_key={} identity_key={} inner_version={} inner_counter={} inner_ratchet={} inner_body_len={} ciphertext_len={}",
+                env.sender_id(),
+                short_hex(base_key),
+                short_hex(identity_key),
+                inner ? static_cast<unsigned>(signal_message_get_message_version(inner)) : 0U,
+                inner ? signal_message_get_counter(inner) : 0U,
+                short_hex(ratchet_key),
+                body ? signal_buffer_len(body) : 0U,
+                ct_len);
 
             auto local_spk = load_local_signed_pre_key_diagnostics(local_store_, signal_ctx_, signed_pre_key_id);
             auto local_opk = has_pre_key_id ? load_local_pre_key_diagnostics(local_store_, signal_ctx_, pre_key_id)
