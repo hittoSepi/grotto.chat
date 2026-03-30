@@ -103,6 +103,8 @@ public:
     // ── Voice ─────────────────────────────────────────────────────────────
     VoiceState voice_snapshot() const;
     void set_voice_state(VoiceState vs);
+    RuntimeVoiceIceConfig runtime_voice_ice_config() const;
+    void set_runtime_voice_ice_config(RuntimeVoiceIceConfig cfg);
 
     // ── Connection state ─────────────────────────────────────────────────
     bool connected() const;
@@ -132,6 +134,7 @@ private:
     std::unordered_map<std::string, PresenceStatus> online_users_;
 
     VoiceState voice_state_;
+    RuntimeVoiceIceConfig runtime_voice_ice_config_;
 
     // Channel membership: channel_id -> (user_id -> ChannelUserInfo)
     std::unordered_map<std::string, std::unordered_map<std::string, ChannelUserInfo>> channel_users_;

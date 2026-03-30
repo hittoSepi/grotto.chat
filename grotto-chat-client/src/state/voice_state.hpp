@@ -14,4 +14,11 @@ struct VoiceState {
     std::string voice_mode = "ptt";          // "ptt" or "vox"
 };
 
+struct RuntimeVoiceIceConfig {
+    std::vector<std::string> ice_servers;
+    std::string turn_username;
+    std::string turn_password;
+    bool from_server = false;
+};
+
 } // namespace grotto

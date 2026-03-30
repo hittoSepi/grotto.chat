@@ -107,6 +107,10 @@ Server::Server(const ServerConfig& config)
     listener_->set_max_chat_payload_bytes(config_.max_chat_payload_bytes);
     listener_->set_max_connections(config_.max_connections);
     listener_->set_motd(config_.motd);
+    listener_->set_voice_ice_config(
+        config_.voice_ice_servers,
+        config_.voice_turn_username,
+        config_.voice_turn_password);
 
     // Set global pointer for signal handler
     g_server = this;

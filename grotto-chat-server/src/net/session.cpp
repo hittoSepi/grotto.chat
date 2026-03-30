@@ -588,6 +588,18 @@ void Session::handle_auth_response(const AuthResponse& auth) {
     send_envelope(MT_AUTH_OK, Empty());
     set_state(SessionState::Established);
 
+    if (!server_ctx_.voice_ice_servers().empty()) {
+        VoiceIceConfig voice_cfg;
+        for (const auto& ice_server : server_ctx_.voice_ice_servers()) {
+            voice_cfg.add_ice_servers(ice_server);
+        }
+        voice_cfg.set_turn_username(server_ctx_.voice_turn_username());
+        voice_cfg.set_turn_password(server_ctx_.voice_turn_password());
+        send_envelope(MT_VOICE_ICE_CONFIG, voice_cfg);
+        spdlog::debug("[{}] Sent VoiceIceConfig bootstrap to user: {}",
+                      remote_endpoint_, user_id_);
+    }
+
     // --- Send MOTD if configured ---
     const std::string& motd = server_ctx_.motd();
     if ( !motd.empty() ) {

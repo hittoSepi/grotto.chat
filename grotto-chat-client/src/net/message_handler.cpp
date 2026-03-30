@@ -40,6 +40,7 @@ void MessageHandler::dispatch(const Envelope& env) {
     case MT_VOICE_ROOM_JOIN:   handle_voice_room_join(env);   break;
     case MT_VOICE_ROOM_LEAVE:  handle_voice_room_leave(env);  break;
     case MT_VOICE_ROOM_STATE:  handle_voice_room_state(env);  break;
+    case MT_VOICE_ICE_CONFIG:  handle_voice_ice_config(env);  break;
     case MT_PING:              handle_ping(env);              break;
     case MT_ERROR:          handle_error(env);          break;
     case MT_COMMAND_RESPONSE: handle_command_response(env); break;
@@ -457,6 +458,33 @@ void MessageHandler::handle_voice_room_leave(const Envelope& env) {
             std::chrono::system_clock::now().time_since_epoch()).count();
         state_.push_message(leave.channel_id(), std::move(msg));
     });
+}
+
+void MessageHandler::handle_voice_ice_config(const Envelope& env) {
+    VoiceIceConfig cfg;
+    if (!cfg.ParseFromArray(env.payload().data(),
+            static_cast<int>(env.payload().size()))) {
+        spdlog::warn("Failed to parse VoiceIceConfig");
+        return;
+    }
+
+    RuntimeVoiceIceConfig runtime_cfg;
+    runtime_cfg.from_server = true;
+    runtime_cfg.turn_username = cfg.turn_username();
+    runtime_cfg.turn_password = cfg.turn_password();
+    runtime_cfg.ice_servers.reserve(static_cast<size_t>(cfg.ice_servers_size()));
+    for (const auto& ice_server : cfg.ice_servers()) {
+        if (!ice_server.empty()) {
+            runtime_cfg.ice_servers.push_back(ice_server);
+        }
+    }
+
+    state_.post_ui([this, runtime_cfg = std::move(runtime_cfg)]() mutable {
+        state_.set_runtime_voice_ice_config(std::move(runtime_cfg));
+    });
+
+    spdlog::info("Received VoiceIceConfig from server ({} ICE servers)",
+                 cfg.ice_servers_size());
 }
 
 void MessageHandler::handle_ping(const Envelope& env) {

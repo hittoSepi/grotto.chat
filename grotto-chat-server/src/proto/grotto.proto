@@ -34,6 +34,7 @@ enum MessageType {
   MT_VOICE_ROOM_JOIN  = 41;  // User joining a voice room
   MT_VOICE_ROOM_LEAVE = 42;  // User leaving a voice room
   MT_VOICE_ROOM_STATE = 43;  // Full participant list (sent to joiner)
+  MT_VOICE_ICE_CONFIG = 44;  // ICE/TURN config bootstrap sent post-auth
 
   // Server management
   MT_INVITE           = 50;  // Invite code for server registration
@@ -170,6 +171,12 @@ message VoiceRoomLeave {
 message VoiceRoomState {
   string channel_id          = 1;
   repeated string participants = 2;
+}
+
+message VoiceIceConfig {
+  repeated string ice_servers = 1;
+  string turn_username = 2;
+  string turn_password = 3;
 }
 
 // Error message

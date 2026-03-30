@@ -284,6 +284,16 @@ void AppState::set_voice_state(VoiceState vs) {
     voice_state_ = std::move(vs);
 }
 
+RuntimeVoiceIceConfig AppState::runtime_voice_ice_config() const {
+    std::shared_lock lk(mu_);
+    return runtime_voice_ice_config_;
+}
+
+void AppState::set_runtime_voice_ice_config(RuntimeVoiceIceConfig cfg) {
+    std::unique_lock lk(mu_);
+    runtime_voice_ice_config_ = std::move(cfg);
+}
+
 // ── Connection ────────────────────────────────────────────────────────────────
 
 bool AppState::connected() const {

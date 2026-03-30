@@ -86,6 +86,16 @@ namespace grotto {
 			config.db_path = get_optional<std::string>( database, "path", "./grotto.db" );
 		}
 
+		// [voice] section - optional
+		if ( data.contains( "voice" ) ) {
+			const auto &voice = data.at( "voice" );
+			config.voice_turn_username = get_optional<std::string>( voice, "turn_username", "" );
+			config.voice_turn_password = get_optional<std::string>( voice, "turn_password", "" );
+			if ( voice.contains( "ice_servers" ) ) {
+				config.voice_ice_servers = get_optional<std::vector<std::string>>( voice, "ice_servers", {} );
+			}
+		}
+
 		// [limits] section - optional
 		if ( data.contains( "limits" ) ) {
 			const auto &limits = data.at( "limits" );

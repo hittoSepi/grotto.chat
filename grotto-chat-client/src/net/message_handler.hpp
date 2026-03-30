@@ -77,6 +77,7 @@ private:
     void handle_voice_room_join(const Envelope& env);
     void handle_voice_room_leave(const Envelope& env);
     void handle_voice_room_state(const Envelope& env);
+    void handle_voice_ice_config(const Envelope& env);
     void handle_ping(const Envelope& env);
     void handle_error(const Envelope& env);
     void handle_command_response(const Envelope& env);

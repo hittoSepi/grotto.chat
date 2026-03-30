@@ -17,16 +17,27 @@ VoiceEngine::~VoiceEngine() {
 
 rtc::Configuration VoiceEngine::make_rtc_config() {
     rtc::Configuration config;
-    if (cfg_.voice.ice_servers.empty()) {
+    auto runtime_ice = state_.runtime_voice_ice_config();
+    const auto& ice_servers = !runtime_ice.ice_servers.empty()
+        ? runtime_ice.ice_servers
+        : cfg_.voice.ice_servers;
+    const auto& turn_username = !runtime_ice.turn_username.empty()
+        ? runtime_ice.turn_username
+        : cfg_.voice.turn_username;
+    const auto& turn_password = !runtime_ice.turn_password.empty()
+        ? runtime_ice.turn_password
+        : cfg_.voice.turn_password;
+
+    if (ice_servers.empty()) {
         // Default STUN servers
         config.iceServers.push_back({"stun:stun.l.google.com:19302"});
         config.iceServers.push_back({"stun:stun1.l.google.com:19302"});
     } else {
-        for (const auto& server : cfg_.voice.ice_servers) {
+        for (const auto& server : ice_servers) {
             rtc::IceServer ice(server);
-            if (!cfg_.voice.turn_username.empty()) {
-                ice.username = cfg_.voice.turn_username;
-                ice.password = cfg_.voice.turn_password;
+            if (!turn_username.empty()) {
+                ice.username = turn_username;
+                ice.password = turn_password;
             }
             config.iceServers.push_back(std::move(ice));
         }

@@ -156,8 +156,21 @@ turn_password = "${TURN_PASSWORD}"
 EOF
 )
 
+SERVER_SNIPPET=$(cat <<EOF
+[voice]
+ice_servers = [
+  "stun:${DOMAIN}:3478",
+  "turn:${DOMAIN}:3478?transport=udp",
+  "turns:${DOMAIN}:5349?transport=tcp",
+]
+turn_username = "${TURN_USER}"
+turn_password = "${TURN_PASSWORD}"
+EOF
+)
+
 if [ "$PRINT_ONLY" -eq 1 ]; then
     printf '%s\n\n' "$TURN_CONFIG"
+    printf '%s\n\n' "$SERVER_SNIPPET"
     printf '%s\n' "$CLIENT_SNIPPET"
     exit 0
 fi
@@ -223,6 +236,9 @@ echo "  password:     ${TURN_PASSWORD}"
 echo
 echo "Add this to client.toml:"
 printf '%s\n' "$CLIENT_SNIPPET"
+echo
+echo "Add this to server.toml for auth-time ICE bootstrap:"
+printf '%s\n' "$SERVER_SNIPPET"
 echo
 echo "Useful checks:"
 echo "  systemctl status coturn"

@@ -50,6 +50,16 @@ key_file = "./certs/server.key"
 # SQLite database file path
 path = "./grotto.db"
 
+[voice]
+# Optional ICE/TURN bootstrap sent to clients after auth
+# ice_servers = [
+#   "stun:cave.grotto.chat:3478",
+#   "turn:cave.grotto.chat:3478?transport=udp",
+#   "turns:cave.grotto.chat:5349?transport=tcp",
+# ]
+# turn_username = "grotto"
+# turn_password = "replace-with-your-turn-password"
+
 [limits]
 # Maximum message size in bytes (64 KB default)
 max_message_bytes = 65536
@@ -135,6 +145,11 @@ struct ServerConfig {
     
     // [motd]
     std::string motd;                        // Message of the Day (empty = disabled)
+
+    // [voice]
+    std::vector<std::string> voice_ice_servers;
+    std::string voice_turn_username;
+    std::string voice_turn_password;
     
     // [server] - public listing
     bool is_public = false;                  // List this server in the public directory

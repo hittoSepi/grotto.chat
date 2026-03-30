@@ -67,6 +67,9 @@ public:
     int msg_rate_per_sec() const override { return msg_rate_per_sec_; }
     size_t max_chat_payload_bytes() const override { return max_chat_payload_bytes_; }
     const std::string& motd() const override { return motd_; }
+    const std::vector<std::string>& voice_ice_servers() const override { return voice_ice_servers_; }
+    const std::string& voice_turn_username() const override { return voice_turn_username_; }
+    const std::string& voice_turn_password() const override { return voice_turn_password_; }
 
     // Set limits from config
     void set_ping_intervals(int interval_sec, int timeout_sec);
@@ -74,6 +77,13 @@ public:
     void set_max_chat_payload_bytes(size_t max_chat_payload_bytes) { max_chat_payload_bytes_ = max_chat_payload_bytes; }
     void set_max_connections(int max_connections);
     void set_motd(const std::string& motd) { motd_ = motd; }
+    void set_voice_ice_config(const std::vector<std::string>& ice_servers,
+                              const std::string& turn_username,
+                              const std::string& turn_password) {
+        voice_ice_servers_ = ice_servers;
+        voice_turn_username_ = turn_username;
+        voice_turn_password_ = turn_password;
+    }
 
     // Set database reference (for command handler)
     void set_database(db::Database& db) { db_ = &db; }
@@ -139,6 +149,9 @@ private:
     
     // MOTD (Message of the Day)
     std::string motd_;
+    std::vector<std::string> voice_ice_servers_;
+    std::string voice_turn_username_;
+    std::string voice_turn_password_;
 };
 
 } // namespace grotto::net

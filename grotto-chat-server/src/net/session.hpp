@@ -197,6 +197,9 @@ public:
     virtual int msg_rate_per_sec() const = 0;
     virtual size_t max_chat_payload_bytes() const = 0;
     virtual const std::string& motd() const = 0;
+    virtual const std::vector<std::string>& voice_ice_servers() const = 0;
+    virtual const std::string& voice_turn_username() const = 0;
+    virtual const std::string& voice_turn_password() const = 0;
 };
 
 } // namespace grotto::net
