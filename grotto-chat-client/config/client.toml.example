@@ -1,10 +1,10 @@
-# IRCord Client Configuration
+# GROTTO.chat client Configuration
 # Copy this file to your config directory:
-#   Windows: %APPDATA%\ircord\config.toml
-#   Linux:   ~/.config/ircord/config.toml
+#   Windows: %APPDATA%\grotto\config.toml
+#   Linux:   ~/.config/grotto/config.toml
 
 [server]
-host = "chat.rausku.com"
+host = "chat.grotto.cave"
 port = 6697
 cert_pin = ""  # SHA-256 fingerprint for certificate pinning (optional)
 
@@ -29,14 +29,7 @@ frame_ms = 20
 mode = "ptt"  # "ptt" (push-to-talk) or "vox" (voice-activated)
 ptt_key = "F1"
 vad_threshold = 0.02
-# Empty list = built-in public Google STUN fallback.
-ice_servers = [
-  "stun:turn.example.com:3478",
-  "turn:turn.example.com:3478?transport=udp",
-  "turns:turn.example.com:5349?transport=tcp",
-]
-turn_username = "ircord"
-turn_password = "replace-with-your-turn-password"
+
 
 [preview]
 enabled = true
