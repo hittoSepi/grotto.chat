@@ -75,6 +75,9 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (ui.contains("font_scale"))       cfg.ui.font_scale       = toml::find<int>(ui, "font_scale");
             if (ui.contains("show_timestamps"))  cfg.ui.show_timestamps  = toml::find<bool>(ui, "show_timestamps");
             if (ui.contains("show_user_colors")) cfg.ui.show_user_colors = toml::find<bool>(ui, "show_user_colors");
+            if (ui.contains("copy_selection_on_release")) {
+                cfg.ui.copy_selection_on_release = toml::find<bool>(ui, "copy_selection_on_release");
+            }
             if (ui.contains("user_list_width"))  cfg.ui.user_list_width  = toml::find<int>(ui, "user_list_width");
             if (ui.contains("user_list_collapsed")) {
                 cfg.ui.user_list_collapsed = toml::find<bool>(ui, "user_list_collapsed");
@@ -235,6 +238,7 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["ui"]["font_scale"] = cfg.ui.font_scale;
     data["ui"]["show_timestamps"] = cfg.ui.show_timestamps;
     data["ui"]["show_user_colors"] = cfg.ui.show_user_colors;
+    data["ui"]["copy_selection_on_release"] = cfg.ui.copy_selection_on_release;
     data["ui"]["user_list_width"] = cfg.ui.user_list_width;
     data["ui"]["user_list_collapsed"] = cfg.ui.user_list_collapsed;
     data["ui"]["language"] = cfg.ui.language;
@@ -303,6 +307,7 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["ui"]["font_scale"] = cfg.ui.font_scale;
         data["ui"]["show_timestamps"] = cfg.ui.show_timestamps;
         data["ui"]["show_user_colors"] = cfg.ui.show_user_colors;
+        data["ui"]["copy_selection_on_release"] = cfg.ui.copy_selection_on_release;
         data["ui"]["user_list_width"] = cfg.ui.user_list_width;
         data["ui"]["user_list_collapsed"] = cfg.ui.user_list_collapsed;
         data["ui"]["language"] = cfg.ui.language;
@@ -370,6 +375,9 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             if (ui.contains("font_scale")) cfg.ui.font_scale = toml::find<int>(ui, "font_scale");
             if (ui.contains("show_timestamps")) cfg.ui.show_timestamps = toml::find<bool>(ui, "show_timestamps");
             if (ui.contains("show_user_colors")) cfg.ui.show_user_colors = toml::find<bool>(ui, "show_user_colors");
+            if (ui.contains("copy_selection_on_release")) {
+                cfg.ui.copy_selection_on_release = toml::find<bool>(ui, "copy_selection_on_release");
+            }
             if (ui.contains("user_list_width")) cfg.ui.user_list_width = toml::find<int>(ui, "user_list_width");
             if (ui.contains("user_list_collapsed")) {
                 cfg.ui.user_list_collapsed = toml::find<bool>(ui, "user_list_collapsed");

@@ -495,8 +495,11 @@ bool UIManager::handle_mouse_event(const Event& event) {
             return true;
         }
         if (mouse_tracker_.is_selecting()) {
-            // Auto-copy text selection on mouse release (works even if Ctrl+C is unreliable).
-            copy_message_selection_to_clipboard();
+            if (cfg_.ui.copy_selection_on_release) {
+                copy_message_selection_to_clipboard();
+            }
+            auto sel = mouse_tracker_.selection_region();
+            has_persistent_text_selection_ = (sel.width > 1 || sel.height > 1);
             mouse_tracker_.end_selection();
             return true;
         }
@@ -520,6 +523,10 @@ bool UIManager::handle_mouse_event(const Event& event) {
 
 
 void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
+    if (!is_right_click && !mouse_tracker_.is_over_message_area()) {
+        has_persistent_text_selection_ = false;
+    }
+
     // Check tab bar clicks
     int tab_idx = get_tab_index_at_position(mouse_x, mouse_y);
     if (tab_idx >= 0) {
@@ -601,6 +608,7 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
                     remember_selected_image(*ch, message_index);
                 }
             }
+            has_persistent_text_selection_ = false;
             mouse_tracker_.start_selection(mouse_x, mouse_y);
         }
         return;
@@ -723,7 +731,11 @@ void UIManager::update_text_selection(int mouse_x, int mouse_y) {
 }
 
 void UIManager::end_text_selection() {
-    copy_message_selection_to_clipboard();
+    if (cfg_.ui.copy_selection_on_release) {
+        copy_message_selection_to_clipboard();
+    }
+    auto sel = mouse_tracker_.selection_region();
+    has_persistent_text_selection_ = (sel.width > 1 || sel.height > 1);
     mouse_tracker_.end_selection();
 }
 
@@ -830,7 +842,11 @@ void UIManager::copy_message_selection_to_clipboard() {
 }
 
 void UIManager::copy_selection_to_clipboard() {
-    // If there is no active mouse selection, copy the input line contents
+    if (mouse_tracker_.is_selecting() || has_persistent_text_selection_) {
+        copy_message_selection_to_clipboard();
+        return;
+    }
+    // If there is no message selection, copy the input line contents
     std::string text = input_line_.text();
     if (!text.empty()) {
         copy_to_clipboard(text);
@@ -928,7 +944,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     int selected_start_col = -1;
     int selected_end_row = -1;
     int selected_end_col = -1;
-    if (mouse_tracker_.is_selecting()) {
+    if (mouse_tracker_.is_selecting() || has_persistent_text_selection_) {
         const auto msg_region = mouse_tracker_.message_region();
         int start_row = mouse_tracker_.selection_start_y() - msg_region.y;
         int end_row = mouse_tracker_.selection_end_y() - msg_region.y;

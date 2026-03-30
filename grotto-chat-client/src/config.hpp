@@ -25,6 +25,7 @@ struct UiConfig {
     int         font_scale        = 100;     // Percentage (100 = 100%)
     bool        show_timestamps   = true;
     bool        show_user_colors  = true;
+    bool        copy_selection_on_release = true;
     // User list panel settings (persisted)
     int         user_list_width   = 20;      // Width in columns
     bool        user_list_collapsed = false; // Start collapsed?

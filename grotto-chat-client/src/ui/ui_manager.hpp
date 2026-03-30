@@ -129,6 +129,7 @@ private:
     int resize_start_width_ = 0;
 
     std::unordered_map<std::string, int> selected_image_indices_;
+    bool has_persistent_text_selection_ = false;
     GraphicsCompositor graphics_compositor_;
     GraphicsFrame pending_graphics_frame_;
     std::string toast_text_;
