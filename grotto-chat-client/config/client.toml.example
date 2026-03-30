@@ -4,7 +4,7 @@
 #   Linux:   ~/.config/grotto/config.toml
 
 [server]
-host = "chat.grotto.cave"
+host = "cave.grotto.chat"
 port = 6697
 cert_pin = ""  # SHA-256 fingerprint for certificate pinning (optional)
 
