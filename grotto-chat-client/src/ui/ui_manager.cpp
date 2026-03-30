@@ -217,25 +217,6 @@ std::string substring_by_display_columns(const std::string& text, int start_col,
     return text.substr(start_byte, end_byte - start_byte);
 }
 
-std::vector<std::string> split_nonempty_lines(const std::string& text, size_t max_lines) {
-    std::vector<std::string> lines;
-    size_t start = 0;
-    while (start <= text.size() && lines.size() < max_lines) {
-        size_t end = text.find('\n', start);
-        std::string line = (end == std::string::npos)
-            ? text.substr(start)
-            : text.substr(start, end - start);
-        if (!line.empty()) {
-            lines.push_back(line);
-        }
-        if (end == std::string::npos) {
-            break;
-        }
-        start = end + 1;
-    }
-    return lines;
-}
-
 std::optional<std::filesystem::path> find_daemon_avatar_resource() {
     std::vector<std::filesystem::path> candidates{
         std::filesystem::path("resources") / "grotto-daemon-avatar.png",
@@ -343,61 +324,6 @@ std::optional<GraphicsDrawCommand> make_server_background_command(int viewport_x
         rows,
         image,
     };
-}
-
-Element render_image_preview_pane(const Message& msg, int pane_width, int pane_height) {
-    if (!msg.inline_image || pane_width <= 8 || pane_height <= 6) {
-        return text("") | flex;
-    }
-
-    const auto& thumbnail = *msg.inline_image;
-    const int inner_width = std::max(8, pane_width - 4);
-    const int header_rows = 3;
-    const int image_text_rows = std::max(4, pane_height - header_rows - 2);
-    const int target_pixel_height = std::max(4, image_text_rows * 2);
-
-    const float scale_x = static_cast<float>(inner_width) / static_cast<float>(thumbnail.width);
-    const float scale_y = static_cast<float>(target_pixel_height) / static_cast<float>(thumbnail.height);
-    const float scale = std::max(1.0f, std::min(scale_x, scale_y));
-
-    const int scaled_width = std::max(1, static_cast<int>(thumbnail.width * scale));
-    const int scaled_height = std::max(1, static_cast<int>(thumbnail.height * scale));
-
-    Elements rows;
-    auto header_lines = split_nonempty_lines(msg.content, 2);
-    if (header_lines.empty()) {
-        header_lines.push_back("[image]");
-    }
-
-    for (size_t i = 0; i < header_lines.size(); ++i) {
-        std::string line = header_lines[i];
-        if (visible_width(line) > inner_width) {
-            line.resize(static_cast<size_t>(inner_width));
-        }
-        rows.push_back(text(line) | color(i == 0 ? palette::blue1() : palette::comment()));
-    }
-    rows.push_back(separator());
-
-    const int rendered_line_limit = std::max(1, image_text_rows);
-    for (int y = 0; y < scaled_height && static_cast<int>(rows.size()) < static_cast<int>(header_lines.size()) + 1 + rendered_line_limit; y += 2) {
-        Elements cells;
-        for (int x = 0; x < scaled_width; ++x) {
-            const int src_x = std::min(thumbnail.width - 1, x * thumbnail.width / scaled_width);
-            const int src_y_top = std::min(thumbnail.height - 1, y * thumbnail.height / scaled_height);
-            const int src_y_bottom = std::min(thumbnail.height - 1, (y + 1) * thumbnail.height / scaled_height);
-            const size_t top = static_cast<size_t>((src_y_top * thumbnail.width + src_x) * 4);
-            const size_t bottom = static_cast<size_t>((src_y_bottom * thumbnail.width + src_x) * 4);
-            ftxui::Color fg = Color::RGB(thumbnail.rgba[top + 0], thumbnail.rgba[top + 1], thumbnail.rgba[top + 2]);
-            ftxui::Color bg = Color::RGB(thumbnail.rgba[bottom + 0], thumbnail.rgba[bottom + 1], thumbnail.rgba[bottom + 2]);
-            cells.push_back(text("▀") | color(fg) | bgcolor(bg));
-        }
-        rows.push_back(hbox(std::move(cells)));
-    }
-
-    return window(
-        text(" image "),
-        vbox(std::move(rows)) | xflex | yflex
-    ) | size(WIDTH, EQUAL, pane_width) | size(HEIGHT, EQUAL, pane_height);
 }
 
 } // namespace
