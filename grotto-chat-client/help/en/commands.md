@@ -34,6 +34,7 @@
 `/settings`                open settings screen  
 `/version`                 show client and server version (alias: `/ver`)  
 `/status`                  show connection status (alias: `/st`)  
+`/diag ui`                 show UI/clipboard/graphics diagnostics  
 `/help [topic]`            show this help or a specific topic (alias: `/h`)  
 `/reload_help`             reload help files from disk (alias: `/rh`)  
 

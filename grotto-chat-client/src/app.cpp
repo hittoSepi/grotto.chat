@@ -2,6 +2,8 @@
 #include "input/command_parser.hpp"
 #include "ui/login_screen.hpp"
 #include "ui/settings_screen.hpp"
+#include "ui/mouse_support.hpp"
+#include "ui/terminal_image.hpp"
 #include "version.hpp"
 #include "i18n/strings.hpp"
 #include <spdlog/spdlog.h>
@@ -97,6 +99,20 @@ std::string ascii_lower_copy(std::string text) {
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
     return text;
+}
+
+std::string inline_protocol_name(ui::TerminalInlineProtocol protocol) {
+    switch (protocol) {
+        case ui::TerminalInlineProtocol::Kitty:
+            return "kitty";
+        case ui::TerminalInlineProtocol::Sixel:
+            return "sixel";
+        case ui::TerminalInlineProtocol::ITerm2:
+            return "iterm2";
+        case ui::TerminalInlineProtocol::None:
+        default:
+            return "none";
+    }
 }
 
 }  // namespace
@@ -481,6 +497,28 @@ void App::handle_command(const ParsedCommand& cmd) {
     }
     if (cmd.name == "/clear") {
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::CLEARED));
+        ui_->notify();
+        return;
+    }
+    if (cmd.name == "/diag") {
+        const std::string topic = cmd.args.empty() ? "ui" : ascii_lower_copy(cmd.args[0]);
+        if (topic != "ui") {
+            ui_->push_system_msg("Usage: /diag ui");
+            ui_->notify();
+            return;
+        }
+
+        const std::string compositor_protocol = inline_protocol_name(
+            ui::terminal_inline_protocol_for_compositor());
+        const std::string detected_protocol = inline_protocol_name(
+            ui::terminal_inline_protocol());
+        ui_->push_system_msg("[diag/ui]");
+        ui_->push_system_msg("  copy_selection_on_release=" +
+                             std::string(cfg_.ui.copy_selection_on_release ? "true" : "false"));
+        ui_->push_system_msg("  clipboard_backend=" + ui::clipboard_backend_name());
+        ui_->push_system_msg("  preview.terminal_graphics=" + cfg_.preview.terminal_graphics);
+        ui_->push_system_msg("  terminal_protocol_detected=" + detected_protocol);
+        ui_->push_system_msg("  compositor_protocol=" + compositor_protocol);
         ui_->notify();
         return;
     }

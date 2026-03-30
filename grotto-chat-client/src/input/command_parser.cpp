@@ -11,6 +11,7 @@ static const std::vector<std::string> kKnownCommands = {
     "/trust", "/safety",
     "/set", "/clear", "/search",
     "/quit", "/disconnect", "/status", "/help", "/reload_help", "/settings", "/version",
+    "/diag",
     "/names", "/whois",
     "/upload", "/download",
     // Aliases

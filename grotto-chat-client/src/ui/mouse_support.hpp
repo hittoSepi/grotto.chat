@@ -182,6 +182,7 @@ private:
 
 // Clipboard utility
 void initialize_clipboard_backend();
+std::string clipboard_backend_name();
 void copy_to_clipboard(const std::string& text);
 std::optional<std::string> read_from_clipboard();
 

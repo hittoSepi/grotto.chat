@@ -27,6 +27,7 @@
 - `/settings` — Open settings screen
 - `/version` — Show client and server version
 - `/status` — Show connection status
+- `/diag ui` — Show UI/clipboard/graphics diagnostics
 - `/help [topic]` — Show help
 - `/reload_help` — Reload help files from disk
 

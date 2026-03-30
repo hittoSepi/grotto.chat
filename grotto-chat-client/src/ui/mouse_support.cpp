@@ -237,6 +237,27 @@ void initialize_clipboard_backend() {
 #endif
 }
 
+std::string clipboard_backend_name() {
+#ifdef _WIN32
+    return "win32-clipboard";
+#elif __APPLE__
+    return "pbcopy";
+#else
+    probe_linux_clipboard_backend();
+    switch (g_linux_clipboard_backend) {
+        case LinuxClipboardBackend::WlCopy:
+            return "wl-copy";
+        case LinuxClipboardBackend::Xclip:
+            return "xclip";
+        case LinuxClipboardBackend::Osc52:
+            return "osc52";
+        case LinuxClipboardBackend::Unknown:
+        default:
+            return "unknown";
+    }
+#endif
+}
+
 void MouseTracker::record_click(int x, int y) {
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(

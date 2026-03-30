@@ -34,6 +34,7 @@
 `/settings`                avaa asetusnäyttö  
 `/version`                 näytä clientin ja serverin versio (alias: `/ver`)  
 `/status`                  näytä yhteystila (alias: `/st`)  
+`/diag ui`                 näytä UI/leikepöytä/grafiikka -diagnostiikka  
 `/help [aihe]`             näytä tämä ohje tai tietty aihe (alias: `/h`)  
 `/reload_help`             lataa ohjetiedostot uudelleen levyltä (alias: `/rh`)  
 
