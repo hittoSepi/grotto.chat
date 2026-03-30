@@ -2,15 +2,15 @@
 
 ## Perusjutut
 
-`/msg <nimi> <teksti>`     lähetä yksityisviesti  
+`/msg <nimi> <teksti>`     lähetä yksityisviesti (alias: `/w`)  
 `/me <toiminta>`           lähetä toimintaviesti (* Rausku juo kahvia)  
 `/nick <uusi_nimi>`        vaihda nimimerkkiä  
 
 ## Kanavat
 
-`/join <#kanava>`          liity kanavalle (nimi alkaa #)  
-`/part [#kanava]`          poistu nykyiseltä tai nimetyltä kanavalta  
-`/names`                   listaa paikalla olevat  
+`/join <#kanava>`          liity kanavalle (nimi alkaa #, alias: `/j`)  
+`/part [#kanava]`          poistu nykyiseltä tai nimetyltä kanavalta (alias: `/p`)  
+`/names`                   listaa paikalla olevat (alias: `/ns`)  
 `/whois <nimi>`            näytä käyttäjän tiedot  
 
 ## Ääni
@@ -32,15 +32,20 @@
 `/search <haku>`           etsi viestihistoriasta  
 `/clear`                   tyhjennä viestinäkymä  
 `/settings`                avaa asetusnäyttö  
-`/version`                 näytä clientin ja serverin versio  
-`/status`                  näytä yhteystila  
-`/help [aihe]`             näytä tämä ohje tai tietty aihe  
-`/reload_help`             lataa ohjetiedostot uudelleen levyltä  
+`/version`                 näytä clientin ja serverin versio (alias: `/ver`)  
+`/status`                  näytä yhteystila (alias: `/st`)  
+`/help [aihe]`             näytä tämä ohje tai tietty aihe (alias: `/h`)  
+`/reload_help`             lataa ohjetiedostot uudelleen levyltä (alias: `/rh`)  
 
 ## Yhteys
 
 `/disconnect`              katkaise yhteys serveriin  
-`/quit`                    sulje Grotto lopullisesti  
+`/quit`                    sulje Grotto lopullisesti (alias: `/q`)  
+
+## Tiedostot
+
+`/upload <polku>`          lähetä tiedosto (alias: `/up`)  
+`/download <id> [polku]`   lataa tiedosto (alias: `/dl`)  
 
 ---
 

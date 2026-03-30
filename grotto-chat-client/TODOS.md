@@ -4,7 +4,7 @@
     - [ ] servulle yhteyden tekeminen "hidas", katso `dev_docs/desktop-client/becoming-online.png`
       - voisi ainakin ilmoittaa paremmin että vielä connectaa
     - [ ] ctrl+c sammuttaa vieläkin ohjelman. (mahdoton ongelma?)
-    - [ ] aliaksia slash komennoille esim /join toimisi /j ja niin edelleen
+    - [x] aliaksia slash komennoille esim /join toimisi /j ja niin edelleen
     - [x] server tabissa ei tarvi näyttää käyttäjä sidepanelia 
     - [ ] login ruutu on liian kapea, vähän leveämmänksi
     - [x] jos kirjoitat /help se ei mahdu koko ruutuun mutta rullausalue ei muutu

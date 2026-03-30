@@ -2,15 +2,15 @@
 
 ## Basics
 
-`/msg <name> <text>`       send a private message  
+`/msg <name> <text>`       send a private message (alias: `/w`)  
 `/me <action>`             send an action message (* Rausku drinks coffee)  
 `/nick <new_name>`         change nickname  
 
 ## Channels
 
-`/join <#channel>`         join a channel (name starts with #)  
-`/part [#channel]`         leave current or specified channel  
-`/names`                   list online users  
+`/join <#channel>`         join a channel (name starts with #, alias: `/j`)  
+`/part [#channel]`         leave current or specified channel (alias: `/p`)  
+`/names`                   list online users (alias: `/ns`)  
 `/whois <name>`            show user info  
 
 ## Voice
@@ -32,15 +32,20 @@
 `/search <query>`          search message history  
 `/clear`                   clear message view  
 `/settings`                open settings screen  
-`/version`                 show client and server version  
-`/status`                  show connection status  
-`/help [topic]`            show this help or a specific topic  
-`/reload_help`             reload help files from disk  
+`/version`                 show client and server version (alias: `/ver`)  
+`/status`                  show connection status (alias: `/st`)  
+`/help [topic]`            show this help or a specific topic (alias: `/h`)  
+`/reload_help`             reload help files from disk (alias: `/rh`)  
 
 ## Connection
 
 `/disconnect`              disconnect from server  
-`/quit`                    close Grotto for good  
+`/quit`                    close Grotto for good (alias: `/q`)  
+
+## File Transfer
+
+`/upload <path>`           upload a file (alias: `/up`)  
+`/download <id> [path]`    download a file (alias: `/dl`)  
 
 ---
 
