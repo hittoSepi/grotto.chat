@@ -1138,24 +1138,57 @@ Element UIManager::build_document(int term_rows) {
         input_el,
     }) | bgcolor(palette::bg());
 
+    Element document = std::move(base_document);
+
     const auto now = std::chrono::steady_clock::now();
-    if (toast_text_.empty() || now >= toast_until_) {
-        return base_document;
+    if (!toast_text_.empty() && now < toast_until_) {
+        auto toast_overlay = vbox({
+            hbox({
+                filler(),
+                text(" " + toast_text_ + " ")
+                    | color(palette::fg())
+                    | bgcolor(palette::bg_highlight()),
+            }),
+            filler(),
+        });
+        document = dbox({
+            std::move(document),
+            std::move(toast_overlay),
+        });
     }
 
-    auto toast_overlay = vbox({
+    if (!quit_confirm_visible_) {
+        return document;
+    }
+
+    const bool is_finnish = (cfg_.ui.language == "fi");
+    const std::string title = is_finnish ? "Poistumisvarmistus" : "Quit Confirmation";
+    const std::string question = is_finnish
+        ? "Haluatko varmasti poistua?"
+        : "Are you sure you want to quit?";
+    const std::string hint = is_finnish
+        ? "[Enter/Y] Kyllä   [Esc/N] Peruuta"
+        : "[Enter/Y] Yes   [Esc/N] Cancel";
+
+    auto confirm_overlay = vbox({
+        filler(),
         hbox({
             filler(),
-            text(" " + toast_text_ + " ")
-                | color(palette::fg())
-                | bgcolor(palette::bg_highlight()),
+            vbox({
+                text(title) | bold | color(palette::blue()),
+                separator(),
+                text(question),
+                text(""),
+                text(hint) | color(palette::comment()),
+            }) | border | bgcolor(palette::bg()) | size(WIDTH, GREATER_THAN, 36),
+            filler(),
         }),
         filler(),
     });
 
     return dbox({
-        std::move(base_document),
-        std::move(toast_overlay),
+        std::move(document),
+        std::move(confirm_overlay),
     });
 }
 
@@ -1193,6 +1226,23 @@ void UIManager::run(SubmitFn on_submit,
     });
 
     auto event_handler = CatchEvent(renderer, [&](Event event) -> bool {
+        if (quit_confirm_visible_) {
+            if (event == Event::Custom) {
+                return true;
+            }
+            if (event == Event::Escape || event == Event::Character("n") || event == Event::Character("N")) {
+                quit_confirm_visible_ = false;
+                return true;
+            }
+            if (event == Event::Return || event == Event::Character("y") || event == Event::Character("Y")) {
+                if (on_quit) on_quit();
+                screen_.ExitLoopClosure()();
+                return true;
+            }
+            // Modal open: consume all other events.
+            return true;
+        }
+
         // Handle mouse events first
         if (event.is_mouse()) {
             return handle_mouse_event(event);
@@ -1335,8 +1385,7 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (event == Event::Escape) {
-            if (on_quit) on_quit();
-            screen_.ExitLoopClosure()();
+            quit_confirm_visible_ = true;
             return true;
         }
         if (event.is_character()) {

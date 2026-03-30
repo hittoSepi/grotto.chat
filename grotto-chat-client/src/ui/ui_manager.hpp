@@ -135,6 +135,7 @@ private:
     GraphicsFrame pending_graphics_frame_;
     std::string toast_text_;
     std::chrono::steady_clock::time_point toast_until_{};
+    bool quit_confirm_visible_ = false;
 };
 
 } // namespace grotto::ui
