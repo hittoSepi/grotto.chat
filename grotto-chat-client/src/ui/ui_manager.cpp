@@ -4,6 +4,7 @@
 #include "ui/status_bar.hpp"
 #include "ui/message_view.hpp"
 #include "ui/terminal_image.hpp"
+#include "ui/modal_overlay.hpp"
 #include "ui/layout.hpp"
 
 #include <ftxui/component/component.hpp>
@@ -939,7 +940,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
                                         msg_width,
                                         mouse_tracker_.message_region().x,
                                         mouse_tracker_.message_region().y);
-    if (is_server_channel(active_ch)) {
+    if (is_server_channel(active_ch) && !quit_confirm_visible_) {
         auto scrim_background = make_server_scrim_background_command(
             pending_graphics_frame_.viewport_x,
             pending_graphics_frame_.viewport_y,
@@ -1209,56 +1210,27 @@ Element UIManager::build_document(int term_rows) {
     quit_confirm_yes_button_ = {button_start_x, button_y, static_cast<int>(yes_label.size()), 1};
     quit_confirm_no_button_ = {button_start_x + static_cast<int>(yes_label.size()) + 3, button_y, static_cast<int>(no_label.size()), 1};
 
-    Elements scrim_rows;
-    scrim_rows.reserve(static_cast<size_t>(std::max(1, term_rows)));
-    const auto scrim_fg = ftxui::Color::RGB(0x08, 0x08, 0x12);
-    for (int row = 0; row < std::max(1, term_rows); ++row) {
-        std::string shade_line;
-        shade_line.reserve(static_cast<size_t>(std::max(1, term_cols)) * 3);
-        for (int col = 0; col < std::max(1, term_cols); ++col) {
-            shade_line += "▒";
-        }
-        scrim_rows.push_back(text(shade_line) | color(scrim_fg));
-    }
-    auto scrim_overlay = vbox(std::move(scrim_rows));
-    Element with_scrim = dbox({
-        std::move(document),
-        std::move(scrim_overlay),
-    });
+    auto modal = build_modal_box(
+        title,
+        {
+            hbox({
+                text(question) | color(palette::fg()),
+                filler(),
+            }),
+            hbox({ filler() }),
+            hbox({
+                filler(),
+                text(yes_label) | bold | color(palette::bg()) | bgcolor(palette::blue()),
+                text("   "),
+                text(no_label) | color(palette::fg()) | bgcolor(palette::bg_highlight()),
+                filler(),
+            }),
+            hbox({ filler() }),
+        },
+        box_width) | size(HEIGHT, EQUAL, box_height);
 
-    auto confirm_overlay = vbox({
-        filler(),
-        hbox({
-            filler(),
-            vbox({
-                hbox({
-                    text(title) | bold | color(palette::blue()),
-                    filler(),
-                }) | bgcolor(palette::bg()),
-                separator(),
-                hbox({
-                    text(question) | color(palette::fg()),
-                    filler(),
-                }) | bgcolor(palette::bg()),
-                hbox({ filler() }) | bgcolor(palette::bg()),
-                hbox({
-                    filler(),
-                    text(yes_label) | bold | color(palette::bg()) | bgcolor(palette::blue()),
-                    text("   ") | bgcolor(palette::bg()),
-                    text(no_label) | color(palette::fg()) | bgcolor(palette::bg_highlight()),
-                    filler(),
-                }) | bgcolor(palette::bg()),
-                hbox({ filler() }) | bgcolor(palette::bg()),
-            }) | border | bgcolor(palette::bg()) | size(WIDTH, EQUAL, box_width) | size(HEIGHT, EQUAL, box_height),
-            filler(),
-        }),
-        filler(),
-    });
-
-    return dbox({
-        std::move(with_scrim),
-        std::move(confirm_overlay),
-    });
+    auto scrim = build_pattern_scrim(term_cols, term_rows, "▓", ftxui::Color::RGB(0x06, 0x11, 0x0a));
+    return overlay_centered_modal(std::move(document), std::move(modal), std::move(scrim));
 }
 
 void UIManager::run(SubmitFn on_submit,

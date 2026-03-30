@@ -1,6 +1,8 @@
 #include "ui/settings_screen.hpp"
 #include "ui/color_scheme.hpp"
+#include "ui/modal_overlay.hpp"
 #include "i18n/strings.hpp"
+#include "voice/audio_device.hpp"
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
@@ -16,6 +18,7 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <optional>
 
 using namespace ftxui;
 
@@ -67,6 +70,7 @@ std::string category_label(SettingsCategory cat) {
     switch (cat) {
         case SettingsCategory::General: return i18n::tr(i18n::I18nKey::CATEGORY_GENERAL);
         case SettingsCategory::Appearance: return i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE);
+        case SettingsCategory::Voice: return i18n::tr(i18n::I18nKey::CATEGORY_VOICE);
         case SettingsCategory::Connection: return i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION);
         case SettingsCategory::Notifications: return i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS);
         case SettingsCategory::Account: return i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT);
@@ -125,6 +129,95 @@ std::string theme_from_index(const std::vector<std::string>& options, int index)
     return options[static_cast<size_t>(index)];
 }
 
+int voice_mode_to_index(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value == "vox" ? 1 : 0;
+}
+
+std::string voice_mode_from_index(int index) {
+    return index == 1 ? "vox" : "ptt";
+}
+
+int find_device_index(const std::vector<std::string>& values,
+                      const std::string& selected_value) {
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (values[i] == selected_value) {
+            return static_cast<int>(i);
+        }
+    }
+    return 0;
+}
+
+std::optional<std::string> key_name_from_event(const Event& event) {
+    if (event == Event::F1) return "F1";
+    if (event == Event::F2) return "F2";
+    if (event == Event::F3) return "F3";
+    if (event == Event::F4) return "F4";
+    if (event == Event::F5) return "F5";
+    if (event == Event::F6) return "F6";
+    if (event == Event::F7) return "F7";
+    if (event == Event::F8) return "F8";
+    if (event == Event::F9) return "F9";
+    if (event == Event::F10) return "F10";
+    if (event == Event::F11) return "F11";
+    if (event == Event::F12) return "F12";
+    if (event == Event::Tab) return "Tab";
+    if (event == Event::Return) return "Enter";
+    if (event == Event::Backspace) return "Backspace";
+    if (event == Event::Delete) return "Delete";
+    if (event == Event::Insert) return "Insert";
+    if (event == Event::Home) return "Home";
+    if (event == Event::End) return "End";
+    if (event == Event::PageUp) return "PageUp";
+    if (event == Event::PageDown) return "PageDown";
+    if (event == Event::ArrowUp) return "ArrowUp";
+    if (event == Event::ArrowDown) return "ArrowDown";
+    if (event == Event::ArrowLeft) return "ArrowLeft";
+    if (event == Event::ArrowRight) return "ArrowRight";
+
+    if (event == Event::CtrlA) return "Ctrl+A";
+    if (event == Event::CtrlB) return "Ctrl+B";
+    if (event == Event::CtrlC) return "Ctrl+C";
+    if (event == Event::CtrlD) return "Ctrl+D";
+    if (event == Event::CtrlE) return "Ctrl+E";
+    if (event == Event::CtrlF) return "Ctrl+F";
+    if (event == Event::CtrlG) return "Ctrl+G";
+    if (event == Event::CtrlH) return "Ctrl+H";
+    if (event == Event::CtrlI) return "Ctrl+I";
+    if (event == Event::CtrlJ) return "Ctrl+J";
+    if (event == Event::CtrlK) return "Ctrl+K";
+    if (event == Event::CtrlL) return "Ctrl+L";
+    if (event == Event::CtrlM) return "Ctrl+M";
+    if (event == Event::CtrlN) return "Ctrl+N";
+    if (event == Event::CtrlO) return "Ctrl+O";
+    if (event == Event::CtrlP) return "Ctrl+P";
+    if (event == Event::CtrlQ) return "Ctrl+Q";
+    if (event == Event::CtrlR) return "Ctrl+R";
+    if (event == Event::CtrlS) return "Ctrl+S";
+    if (event == Event::CtrlT) return "Ctrl+T";
+    if (event == Event::CtrlU) return "Ctrl+U";
+    if (event == Event::CtrlV) return "Ctrl+V";
+    if (event == Event::CtrlW) return "Ctrl+W";
+    if (event == Event::CtrlX) return "Ctrl+X";
+    if (event == Event::CtrlY) return "Ctrl+Y";
+    if (event == Event::CtrlZ) return "Ctrl+Z";
+
+    if (event.is_character()) {
+        std::string value = event.character();
+        if (value == " ") return "Space";
+        if (value.size() == 1) {
+            unsigned char c = static_cast<unsigned char>(value[0]);
+            if (std::isalpha(c)) {
+                return std::string(1, static_cast<char>(std::toupper(c)));
+            }
+        }
+        return value;
+    }
+
+    return std::nullopt;
+}
+
 } // anonymous namespace
 
 const std::vector<std::string>& available_themes() {
@@ -180,6 +273,9 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             case SettingsCategory::Appearance:
                 content = render_appearance();
                 break;
+            case SettingsCategory::Voice:
+                content = render_voice();
+                break;
             case SettingsCategory::Connection:
                 content = render_connection();
                 break;
@@ -208,14 +304,42 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             actions,
         }) | border | flex;
         
-        return hbox({
+        Element root = hbox({
             sidebar,
             main_content,
         }) | bgcolor(palette::bg()) | color(palette::fg());
+
+        if (voice_key_capture_visible_) {
+            auto modal = build_modal_box(
+                i18n::tr(i18n::I18nKey::VOICE_PTT_CAPTURE_TITLE),
+                {
+                    hbox({ text(i18n::tr(i18n::I18nKey::VOICE_PTT_CAPTURE_HINT)), filler() }),
+                    hbox({ text(i18n::tr(i18n::I18nKey::VOICE_PTT_CAPTURE_CANCEL_HINT)), filler() }),
+                },
+                44);
+            root = overlay_centered_modal(std::move(root), std::move(modal));
+        }
+        return root;
     });
     
     // Event handler
     auto component = CatchEvent(renderer, [this, exit_closure, &cfg](Event event) -> bool {
+        if (voice_key_capture_visible_) {
+            if (event == Event::Escape) {
+                voice_key_capture_visible_ = false;
+                return true;
+            }
+            if (event.is_mouse()) {
+                return true;
+            }
+            if (auto captured = key_name_from_event(event)) {
+                voice_ptt_key_ = *captured;
+                voice_key_capture_visible_ = false;
+                return true;
+            }
+            return true;
+        }
+
         if (event == Event::CtrlC || event.input() == "\x03" || event.input() == "\x04") {
             return true;
         }
@@ -229,7 +353,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             exit_closure();
             return true;
         }
-        // F1-F5 to switch categories
+        // F1-F6 to switch categories
         if (event == Event::F1) {
             active_category_ = SettingsCategory::General;
             return true;
@@ -239,14 +363,18 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             return true;
         }
         if (event == Event::F3) {
-            active_category_ = SettingsCategory::Connection;
+            active_category_ = SettingsCategory::Voice;
             return true;
         }
         if (event == Event::F4) {
-            active_category_ = SettingsCategory::Notifications;
+            active_category_ = SettingsCategory::Connection;
             return true;
         }
         if (event == Event::F5) {
+            active_category_ = SettingsCategory::Notifications;
+            return true;
+        }
+        if (event == Event::F6) {
             active_category_ = SettingsCategory::Account;
             return true;
         }
@@ -275,6 +403,7 @@ void SettingsScreen::build_ui() {
     sidebar_container_ = Container::Vertical({
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_GENERAL) + " ", [this] { active_category_ = SettingsCategory::General; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE) + " ", [this] { active_category_ = SettingsCategory::Appearance; }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_VOICE) + " ", [this] { active_category_ = SettingsCategory::Voice; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION) + " ", [this] { active_category_ = SettingsCategory::Connection; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS) + " ", [this] { active_category_ = SettingsCategory::Notifications; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT) + " ", [this] { active_category_ = SettingsCategory::Account; }),
@@ -293,6 +422,19 @@ void SettingsScreen::build_ui() {
     image_rows_input_ = Input(&image_rows_, "16");
     terminal_graphics_selected_ = terminal_graphics_to_index(terminal_graphics_);
     terminal_graphics_toggle_ = Toggle(&terminal_graphics_options_, &terminal_graphics_selected_);
+    voice_mode_options_ = {
+        i18n::tr(i18n::I18nKey::VOICE_MODE_PTT),
+        i18n::tr(i18n::I18nKey::VOICE_MODE_VOX),
+    };
+    voice_input_device_dropdown_ = Dropdown(&voice_input_device_options_, &voice_input_device_selected_);
+    voice_output_device_dropdown_ = Dropdown(&voice_output_device_options_, &voice_output_device_selected_);
+    voice_mode_dropdown_ = Dropdown(&voice_mode_options_, &voice_mode_selected_);
+    voice_capture_key_button_ = Button(i18n::tr(i18n::I18nKey::VOICE_SET_HOTKEY_BUTTON), [this] {
+        voice_key_capture_visible_ = true;
+    });
+    voice_vad_threshold_slider_ = Slider("", &voice_vad_threshold_percent_, 0, 100, 1);
+    voice_input_volume_slider_ = Slider("", &voice_input_volume_value_, 0, 200, 1);
+    voice_output_volume_slider_ = Slider("", &voice_output_volume_value_, 0, 200, 1);
     reconnect_delay_input_ = Input(&reconnect_delay_sec_text_, "5");
     timeout_input_ = Input(&connection_timeout_sec_text_, "30");
     cert_pin_input_ = Input(&tls_cert_pin_, "");
@@ -343,6 +485,13 @@ void SettingsScreen::build_ui() {
         image_columns_input_,
         image_rows_input_,
         terminal_graphics_toggle_,
+        voice_input_device_dropdown_,
+        voice_output_device_dropdown_,
+        voice_mode_dropdown_,
+        voice_capture_key_button_,
+        voice_vad_threshold_slider_,
+        voice_input_volume_slider_,
+        voice_output_volume_slider_,
         copy_selection_on_release_cb_,
         inline_images_cb_,
         show_timestamps_cb_,
@@ -446,6 +595,63 @@ Element SettingsScreen::render_general() {
         image_rows_row,
         terminal_graphics_row,
         text(i18n::tr(i18n::I18nKey::TERMINAL_GRAPHICS_HINT)) | color(palette::comment()) | dim,
+    });
+}
+
+Element SettingsScreen::render_voice() {
+    auto input_device_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_INPUT_DEVICE_LABEL)) | color(palette::fg_dark()),
+        voice_input_device_dropdown_->Render() | border | flex,
+    });
+
+    auto output_device_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_OUTPUT_DEVICE_LABEL)) | color(palette::fg_dark()),
+        voice_output_device_dropdown_->Render() | border | flex,
+    });
+
+    auto input_volume_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_INPUT_VOLUME_LABEL)) | color(palette::fg_dark()),
+        voice_input_volume_slider_->Render() | flex,
+        text(" " + std::to_string(voice_input_volume_value_) + "%") | color(palette::cyan()),
+    });
+
+    auto output_volume_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_OUTPUT_VOLUME_LABEL)) | color(palette::fg_dark()),
+        voice_output_volume_slider_->Render() | flex,
+        text(" " + std::to_string(voice_output_volume_value_) + "%") | color(palette::cyan()),
+    });
+
+    auto voice_mode_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_MODE_LABEL)) | color(palette::fg_dark()),
+        voice_mode_dropdown_->Render() | border,
+    });
+
+    auto ptt_key_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_PTT_HOTKEY_LABEL)) | color(palette::fg_dark()),
+        text(voice_ptt_key_) | bold | color(palette::cyan()),
+        text("  "),
+        voice_capture_key_button_->Render(),
+    });
+
+    auto vad_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_VAD_THRESHOLD_LABEL)) | color(palette::fg_dark()),
+        voice_vad_threshold_slider_->Render() | flex,
+        text(" " + std::to_string(voice_vad_threshold_percent_) + "%") | color(palette::cyan()),
+    });
+
+    return vbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_SETTINGS)) | bold | color(palette::blue()),
+        separator(),
+        input_device_row,
+        output_device_row,
+        text(""),
+        input_volume_row,
+        output_volume_row,
+        text(""),
+        voice_mode_row,
+        ptt_key_row,
+        vad_row,
+        text(i18n::tr(i18n::I18nKey::VOICE_SETTINGS_HINT)) | color(palette::comment()) | dim,
     });
 }
 
@@ -554,6 +760,28 @@ Element SettingsScreen::render_account() {
 }
 
 void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
+    // Voice device options (label list + value list)
+    voice_input_device_values_.clear();
+    voice_output_device_values_.clear();
+    voice_input_device_options_.clear();
+    voice_output_device_options_.clear();
+    voice_mode_options_ = {
+        i18n::tr(i18n::I18nKey::VOICE_MODE_PTT),
+        i18n::tr(i18n::I18nKey::VOICE_MODE_VOX),
+    };
+    voice_input_device_values_.push_back("");
+    voice_output_device_values_.push_back("");
+    voice_input_device_options_.push_back(i18n::tr(i18n::I18nKey::VOICE_SYSTEM_DEFAULT));
+    voice_output_device_options_.push_back(i18n::tr(i18n::I18nKey::VOICE_SYSTEM_DEFAULT));
+    for (const auto& name : voice::AudioDevice::list_input_devices()) {
+        voice_input_device_values_.push_back(name);
+        voice_input_device_options_.push_back(name);
+    }
+    for (const auto& name : voice::AudioDevice::list_output_devices()) {
+        voice_output_device_values_.push_back(name);
+        voice_output_device_options_.push_back(name);
+    }
+
     // Appearance
     theme_ = cfg.ui.theme;
     theme_selected_ = theme_to_index(theme_options_.empty() ? available_themes() : theme_options_, theme_);
@@ -572,6 +800,16 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     image_rows_ = std::to_string(cfg.preview.image_rows);
     terminal_graphics_ = cfg.preview.terminal_graphics;
     terminal_graphics_selected_ = terminal_graphics_to_index(terminal_graphics_);
+
+    // Voice
+    voice_input_device_selected_ = find_device_index(voice_input_device_values_, cfg.voice.input_device);
+    voice_output_device_selected_ = find_device_index(voice_output_device_values_, cfg.voice.output_device);
+    voice_mode_selected_ = voice_mode_to_index(cfg.voice.mode);
+    voice_ptt_key_ = cfg.voice.ptt_key;
+    voice_vad_threshold_percent_ = std::clamp(
+        static_cast<int>(cfg.voice.vad_threshold * 100.0f + 0.5f), 0, 100);
+    voice_input_volume_value_ = std::clamp(cfg.voice.input_volume, 0, 200);
+    voice_output_volume_value_ = std::clamp(cfg.voice.output_volume, 0, 200);
     
     // Connection
     auto_reconnect_ = cfg.connection.auto_reconnect;
@@ -627,6 +865,22 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
     image_rows_ = std::to_string(cfg.preview.image_rows);
     terminal_graphics_selected_ = terminal_graphics_to_index(cfg.preview.terminal_graphics);
 
+    // Voice settings
+    if (voice_input_device_selected_ >= 0 &&
+        voice_input_device_selected_ < static_cast<int>(voice_input_device_values_.size())) {
+        cfg.voice.input_device = voice_input_device_values_[static_cast<size_t>(voice_input_device_selected_)];
+    }
+    if (voice_output_device_selected_ >= 0 &&
+        voice_output_device_selected_ < static_cast<int>(voice_output_device_values_.size())) {
+        cfg.voice.output_device = voice_output_device_values_[static_cast<size_t>(voice_output_device_selected_)];
+    }
+    cfg.voice.mode = voice_mode_from_index(voice_mode_selected_);
+    cfg.voice.ptt_key = voice_ptt_key_.empty() ? "F1" : voice_ptt_key_;
+    cfg.voice.vad_threshold =
+        std::clamp(static_cast<float>(voice_vad_threshold_percent_) / 100.0f, 0.0f, 1.0f);
+    cfg.voice.input_volume = clamp_int(voice_input_volume_value_, 0, 200);
+    cfg.voice.output_volume = clamp_int(voice_output_volume_value_, 0, 200);
+
     // Connection
     cfg.connection.auto_reconnect = auto_reconnect_;
     cfg.connection.reconnect_delay_sec = clamp_int(parse_int_or(reconnect_delay_sec_text_, kDefaultReconnectDelay), 1, 300);
@@ -672,6 +926,15 @@ void SettingsScreen::reset_to_defaults() {
     terminal_graphics_selected_ = terminal_graphics_to_index(terminal_graphics_);
     language_ = "fi";
     language_selected_ = language_to_index(language_);
+
+    // Voice defaults
+    voice_input_device_selected_ = 0;
+    voice_output_device_selected_ = 0;
+    voice_mode_selected_ = 0;
+    voice_ptt_key_ = "F1";
+    voice_vad_threshold_percent_ = 2;
+    voice_input_volume_value_ = 100;
+    voice_output_volume_value_ = 100;
     
     // Connection defaults
     auto_reconnect_ = kDefaultAutoReconnect;
@@ -705,6 +968,17 @@ void SettingsScreen::export_settings() {
         data["preview"]["image_columns"] = std::stoi(image_columns_);
         data["preview"]["image_rows"] = std::stoi(image_rows_);
         data["preview"]["terminal_graphics"] = terminal_graphics_;
+        data["voice"]["input_device"] = (voice_input_device_selected_ >= 0 &&
+            voice_input_device_selected_ < static_cast<int>(voice_input_device_values_.size()))
+            ? voice_input_device_values_[static_cast<size_t>(voice_input_device_selected_)] : "";
+        data["voice"]["output_device"] = (voice_output_device_selected_ >= 0 &&
+            voice_output_device_selected_ < static_cast<int>(voice_output_device_values_.size()))
+            ? voice_output_device_values_[static_cast<size_t>(voice_output_device_selected_)] : "";
+        data["voice"]["input_volume"] = voice_input_volume_value_;
+        data["voice"]["output_volume"] = voice_output_volume_value_;
+        data["voice"]["mode"] = voice_mode_from_index(voice_mode_selected_);
+        data["voice"]["ptt_key"] = voice_ptt_key_;
+        data["voice"]["vad_threshold"] = static_cast<double>(voice_vad_threshold_percent_) / 100.0;
         
         data["connection"]["auto_reconnect"] = auto_reconnect_;
         data["connection"]["reconnect_delay"] = std::stoi(reconnect_delay_sec_text_);
@@ -759,6 +1033,34 @@ void SettingsScreen::import_settings() {
             if (preview.contains("terminal_graphics")) {
                 terminal_graphics_ = toml::find<std::string>(preview, "terminal_graphics");
                 terminal_graphics_selected_ = terminal_graphics_to_index(terminal_graphics_);
+            }
+        }
+
+        if (data.contains("voice")) {
+            auto& voice = data.at("voice");
+            if (voice.contains("input_device")) {
+                voice_input_device_selected_ = find_device_index(
+                    voice_input_device_values_, toml::find<std::string>(voice, "input_device"));
+            }
+            if (voice.contains("output_device")) {
+                voice_output_device_selected_ = find_device_index(
+                    voice_output_device_values_, toml::find<std::string>(voice, "output_device"));
+            }
+            if (voice.contains("input_volume")) {
+                voice_input_volume_value_ = std::clamp(toml::find<int>(voice, "input_volume"), 0, 200);
+            }
+            if (voice.contains("output_volume")) {
+                voice_output_volume_value_ = std::clamp(toml::find<int>(voice, "output_volume"), 0, 200);
+            }
+            if (voice.contains("mode")) {
+                voice_mode_selected_ = voice_mode_to_index(toml::find<std::string>(voice, "mode"));
+            }
+            if (voice.contains("ptt_key")) {
+                voice_ptt_key_ = toml::find<std::string>(voice, "ptt_key");
+            }
+            if (voice.contains("vad_threshold")) {
+                voice_vad_threshold_percent_ = std::clamp(
+                    static_cast<int>(toml::find<double>(voice, "vad_threshold") * 100.0 + 0.5), 0, 100);
             }
         }
         

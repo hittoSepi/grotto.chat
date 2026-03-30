@@ -35,6 +35,8 @@ struct UiConfig {
 struct VoiceConfig {
     std::string input_device;
     std::string output_device;
+    int         input_volume  = 100;       // Percentage (100 = unity)
+    int         output_volume = 100;       // Percentage (100 = unity)
     int         opus_bitrate  = 64000;
     int         frame_ms      = 20;
     std::string mode          = "ptt";     // "ptt" or "vox"

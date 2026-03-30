@@ -89,6 +89,8 @@ ClientConfig load_config(const std::filesystem::path& path) {
             auto& v = data.at("voice");
             if (v.contains("input_device"))  cfg.voice.input_device  = toml::find<std::string>(v, "input_device");
             if (v.contains("output_device")) cfg.voice.output_device = toml::find<std::string>(v, "output_device");
+            if (v.contains("input_volume"))  cfg.voice.input_volume  = toml::find<int>(v, "input_volume");
+            if (v.contains("output_volume")) cfg.voice.output_volume = toml::find<int>(v, "output_volume");
             if (v.contains("opus_bitrate"))  cfg.voice.opus_bitrate  = toml::find<int>(v, "opus_bitrate");
             if (v.contains("frame_ms"))      cfg.voice.frame_ms      = toml::find<int>(v, "frame_ms");
             if (v.contains("mode"))          cfg.voice.mode          = toml::find<std::string>(v, "mode");
@@ -246,6 +248,8 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     // Patch voice section
     data["voice"]["input_device"] = cfg.voice.input_device;
     data["voice"]["output_device"] = cfg.voice.output_device;
+    data["voice"]["input_volume"] = cfg.voice.input_volume;
+    data["voice"]["output_volume"] = cfg.voice.output_volume;
     data["voice"]["opus_bitrate"] = cfg.voice.opus_bitrate;
     data["voice"]["frame_ms"] = cfg.voice.frame_ms;
     data["voice"]["mode"] = cfg.voice.mode;
@@ -314,6 +318,8 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         
         data["voice"]["input_device"] = cfg.voice.input_device;
         data["voice"]["output_device"] = cfg.voice.output_device;
+        data["voice"]["input_volume"] = cfg.voice.input_volume;
+        data["voice"]["output_volume"] = cfg.voice.output_volume;
         data["voice"]["opus_bitrate"] = cfg.voice.opus_bitrate;
         data["voice"]["frame_ms"] = cfg.voice.frame_ms;
         data["voice"]["mode"] = cfg.voice.mode;
@@ -390,6 +396,8 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             auto& v = data.at("voice");
             if (v.contains("input_device")) cfg.voice.input_device = toml::find<std::string>(v, "input_device");
             if (v.contains("output_device")) cfg.voice.output_device = toml::find<std::string>(v, "output_device");
+            if (v.contains("input_volume")) cfg.voice.input_volume = toml::find<int>(v, "input_volume");
+            if (v.contains("output_volume")) cfg.voice.output_volume = toml::find<int>(v, "output_volume");
             if (v.contains("opus_bitrate")) cfg.voice.opus_bitrate = toml::find<int>(v, "opus_bitrate");
             if (v.contains("frame_ms")) cfg.voice.frame_ms = toml::find<int>(v, "frame_ms");
             if (v.contains("mode")) cfg.voice.mode = toml::find<std::string>(v, "mode");

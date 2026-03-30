@@ -14,6 +14,7 @@ namespace grotto::ui {
 enum class SettingsCategory {
     General,
     Appearance,
+    Voice,
     Connection,
     Notifications,
     Account
@@ -53,6 +54,7 @@ private:
     // Category renderers
     ftxui::Element render_general();
     ftxui::Element render_appearance();
+    ftxui::Element render_voice();
     ftxui::Element render_connection();
     ftxui::Element render_notifications();
     ftxui::Element render_account();
@@ -93,6 +95,21 @@ private:
     int language_selected_ = 0;
     std::vector<std::string> language_options_ = {"Suomi", "English"};
 
+    // === Voice Settings ===
+    std::vector<std::string> voice_input_device_values_;
+    std::vector<std::string> voice_output_device_values_;
+    std::vector<std::string> voice_input_device_options_;
+    std::vector<std::string> voice_output_device_options_;
+    int voice_input_device_selected_ = 0;
+    int voice_output_device_selected_ = 0;
+    std::vector<std::string> voice_mode_options_ = {"PTT", "Voice Activation"};
+    int voice_mode_selected_ = 0;
+    std::string voice_ptt_key_;
+    int voice_vad_threshold_percent_ = 2;
+    int voice_input_volume_value_ = 100;
+    int voice_output_volume_value_ = 100;
+    bool voice_key_capture_visible_ = false;
+
     // === Connection Settings ===
     bool auto_reconnect_;
     int reconnect_delay_sec_;
@@ -132,6 +149,13 @@ private:
     ftxui::Component image_columns_input_;
     ftxui::Component image_rows_input_;
     ftxui::Component terminal_graphics_toggle_;
+    ftxui::Component voice_input_device_dropdown_;
+    ftxui::Component voice_output_device_dropdown_;
+    ftxui::Component voice_mode_dropdown_;
+    ftxui::Component voice_capture_key_button_;
+    ftxui::Component voice_vad_threshold_slider_;
+    ftxui::Component voice_input_volume_slider_;
+    ftxui::Component voice_output_volume_slider_;
     ftxui::Component reconnect_delay_input_;
     ftxui::Component timeout_input_;
     ftxui::Component cert_pin_input_;
