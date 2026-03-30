@@ -217,17 +217,17 @@ std::string substring_by_display_columns(const std::string& text, int start_col,
     return text.substr(start_byte, end_byte - start_byte);
 }
 
-std::optional<std::filesystem::path> find_daemon_avatar_resource() {
+std::optional<std::filesystem::path> find_resource_path(const std::string& filename) {
     std::vector<std::filesystem::path> candidates{
-        std::filesystem::path("resources") / "grotto-daemon-avatar.png",
-        std::filesystem::path("grotto-chat-client") / "resources" / "grotto-daemon-avatar.png",
+        std::filesystem::path("resources") / filename,
+        std::filesystem::path("grotto-chat-client") / "resources" / filename,
     };
 
     std::error_code cwd_ec;
     const auto cwd = std::filesystem::current_path(cwd_ec);
     if (!cwd_ec) {
-        candidates.push_back(cwd / "resources" / "grotto-daemon-avatar.png");
-        candidates.push_back(cwd / "grotto-chat-client" / "resources" / "grotto-daemon-avatar.png");
+        candidates.push_back(cwd / "resources" / filename);
+        candidates.push_back(cwd / "grotto-chat-client" / "resources" / filename);
     }
 
     for (const auto& path : candidates) {
@@ -237,6 +237,14 @@ std::optional<std::filesystem::path> find_daemon_avatar_resource() {
         }
     }
     return std::nullopt;
+}
+
+std::optional<std::filesystem::path> find_daemon_avatar_resource() {
+    return find_resource_path("grotto-daemon-avatar.png");
+}
+
+std::optional<std::filesystem::path> find_modal_scrim_resource(const std::string& filename) {
+    return find_resource_path(filename);
 }
 
 std::optional<InlineImageThumbnail> load_thumbnail_from_png_file(const std::filesystem::path& path) {
@@ -258,6 +266,58 @@ std::optional<InlineImageThumbnail> load_thumbnail_from_png_file(const std::file
     thumbnail.rgba.assign(rgba, rgba + bytes);
     stbi_image_free(rgba);
     return thumbnail;
+}
+
+const std::shared_ptr<InlineImageThumbnail>& modal_scrim_fullscreen_thumbnail() {
+    static const std::shared_ptr<InlineImageThumbnail> cached = []() -> std::shared_ptr<InlineImageThumbnail> {
+        auto path = find_modal_scrim_resource("modal-scrim-fullscreen.png");
+        if (!path) {
+            return {};
+        }
+        auto thumbnail = load_thumbnail_from_png_file(*path);
+        if (!thumbnail) {
+            return {};
+        }
+        return std::make_shared<InlineImageThumbnail>(std::move(*thumbnail));
+    }();
+    return cached;
+}
+
+const std::shared_ptr<InlineImageThumbnail>& modal_scrim_tile_thumbnail() {
+    static const std::shared_ptr<InlineImageThumbnail> cached = []() -> std::shared_ptr<InlineImageThumbnail> {
+        auto path = find_modal_scrim_resource("modal-scrim-tile.png");
+        if (!path) {
+            return {};
+        }
+        auto thumbnail = load_thumbnail_from_png_file(*path);
+        if (!thumbnail) {
+            return {};
+        }
+        return std::make_shared<InlineImageThumbnail>(std::move(*thumbnail));
+    }();
+    return cached;
+}
+
+std::shared_ptr<InlineImageThumbnail> generated_modal_scrim_tile_thumbnail() {
+    static const std::shared_ptr<InlineImageThumbnail> generated = [] {
+        auto image = std::make_shared<InlineImageThumbnail>();
+        image->width = 16;
+        image->height = 16;
+        image->rgba.resize(static_cast<size_t>(image->width * image->height * 4), 0);
+        for (int y = 0; y < image->height; ++y) {
+            for (int x = 0; x < image->width; ++x) {
+                const bool dark_cell = ((x + y) % 2 == 0);
+                const uint8_t alpha = dark_cell ? 150 : 120;
+                const size_t idx = static_cast<size_t>((y * image->width + x) * 4);
+                image->rgba[idx + 0] = 0;
+                image->rgba[idx + 1] = 0;
+                image->rgba[idx + 2] = 0;
+                image->rgba[idx + 3] = alpha;
+            }
+        }
+        return image;
+    }();
+    return generated;
 }
 
 const std::shared_ptr<InlineImageThumbnail>& server_daemon_avatar_thumbnail() {
@@ -323,6 +383,41 @@ std::optional<GraphicsDrawCommand> make_server_background_command(int viewport_x
         columns,
         rows,
         image,
+    };
+}
+
+std::optional<GraphicsDrawCommand> make_modal_scrim_graphics_command(int viewport_x,
+                                                                     int viewport_y,
+                                                                     int viewport_width,
+                                                                     int viewport_height) {
+    if (viewport_width <= 0 || viewport_height <= 0) {
+        return std::nullopt;
+    }
+    const auto backend = active_graphics_backend_kind();
+    if (backend != GraphicsBackendKind::Kitty) {
+        return std::nullopt;
+    }
+
+    std::shared_ptr<InlineImageThumbnail> scrim = modal_scrim_fullscreen_thumbnail();
+    if (!scrim || scrim->rgba.empty()) {
+        scrim = modal_scrim_tile_thumbnail();
+    }
+    if (!scrim || scrim->rgba.empty()) {
+        scrim = generated_modal_scrim_tile_thumbnail();
+    }
+    if (!scrim || scrim->rgba.empty()) {
+        return std::nullopt;
+    }
+
+    return GraphicsDrawCommand{
+        backend,
+        -1000002,
+        -1,
+        viewport_x,
+        viewport_y,
+        viewport_width,
+        viewport_height,
+        scrim,
     };
 }
 
@@ -1163,8 +1258,17 @@ Element UIManager::build_document(int term_rows) {
         return document;
     }
 
-    // Keep modal focused and uncluttered: hide inline graphics while confirm is open.
+    const auto modal_scrim_cmd = make_modal_scrim_graphics_command(
+        0, 0, std::max(1, term_cols), std::max(1, term_rows));
+    // Keep modal focused and uncluttered while confirm is open.
     pending_graphics_frame_.commands.clear();
+    if (modal_scrim_cmd) {
+        pending_graphics_frame_.viewport_x = 0;
+        pending_graphics_frame_.viewport_y = 0;
+        pending_graphics_frame_.viewport_width = std::max(1, term_cols);
+        pending_graphics_frame_.viewport_height = std::max(1, term_rows);
+        pending_graphics_frame_.commands.push_back(*modal_scrim_cmd);
+    }
 
     const bool is_finnish = (cfg_.ui.language == "fi");
     const std::string title = is_finnish ? "Poistumisvarmistus" : "Quit Confirmation";
@@ -1186,13 +1290,25 @@ Element UIManager::build_document(int term_rows) {
     quit_confirm_yes_button_ = {button_start_x, button_y, static_cast<int>(yes_label.size()), 1};
     quit_confirm_no_button_ = {button_start_x + static_cast<int>(yes_label.size()) + 3, button_y, static_cast<int>(no_label.size()), 1};
 
-    Elements scrim_rows;
-    scrim_rows.reserve(static_cast<size_t>(std::max(1, term_rows)));
-    for (int row = 0; row < std::max(1, term_rows); ++row) {
-        scrim_rows.push_back(text(std::string(static_cast<size_t>(std::max(1, term_cols)), ' '))
-                             | bgcolor(palette::bg_dark()));
+    Element with_scrim = std::move(document);
+    if (!modal_scrim_cmd) {
+        Elements scrim_rows;
+        scrim_rows.reserve(static_cast<size_t>(std::max(1, term_rows)));
+        const auto scrim_fg = ftxui::Color::RGB(0x08, 0x08, 0x12);
+        for (int row = 0; row < std::max(1, term_rows); ++row) {
+            std::string shade_line;
+            shade_line.reserve(static_cast<size_t>(std::max(1, term_cols)) * 3);
+            for (int col = 0; col < std::max(1, term_cols); ++col) {
+                shade_line += "▒";
+            }
+            scrim_rows.push_back(text(shade_line) | color(scrim_fg));
+        }
+        auto scrim_overlay = vbox(std::move(scrim_rows));
+        with_scrim = dbox({
+            std::move(with_scrim),
+            std::move(scrim_overlay),
+        });
     }
-    auto scrim_overlay = vbox(std::move(scrim_rows));
 
     auto confirm_overlay = vbox({
         filler(),
@@ -1224,8 +1340,7 @@ Element UIManager::build_document(int term_rows) {
     });
 
     return dbox({
-        std::move(document),
-        std::move(scrim_overlay),
+        std::move(with_scrim),
         std::move(confirm_overlay),
     });
 }
