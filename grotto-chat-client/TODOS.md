@@ -1,6 +1,6 @@
 # TODOS
 
-    - [ ] servulle jää quitanneet nimet kummitelemaan, vai pitäisikö ne näyttää jotenkin offline (servun ongelma)
+    - [x] servulle jää quitanneet nimet kummitelemaan, vai pitäisikö ne näyttää jotenkin offline (servun ongelma)
     - [x] servulle yhteyden tekeminen "hidas", katso `dev_docs/desktop-client/becoming-online.png`
       - voisi ainakin ilmoittaa paremmin että vielä connectaa
     - [ ] ctrl+c sammuttaa vieläkin ohjelman. (mahdoton ongelma?)

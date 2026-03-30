@@ -159,6 +159,7 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
 
     // User list panel
     {I18nKey::USERS_HEADER, " USERS: "},
+    {I18nKey::OFFLINE_HEADER, " OFFLINE: "},
     {I18nKey::VOICE_HEADER, " VOICE: "},
 
     // Voice engine
@@ -327,6 +328,7 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
 
     // User list panel
     {I18nKey::USERS_HEADER, " KÄYTTÄJÄT: "},
+    {I18nKey::OFFLINE_HEADER, " OFFLINE: "},
     {I18nKey::VOICE_HEADER, " ÄÄNI: "},
 
     // Voice engine

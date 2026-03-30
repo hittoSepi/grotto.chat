@@ -146,18 +146,48 @@ Element render_user_list_panel(
     }
     
     Elements panel_content;
+
+    std::vector<ChannelUserInfo> online_users;
+    std::vector<ChannelUserInfo> offline_users;
+    online_users.reserve(users.size());
+    offline_users.reserve(users.size());
+    for (const auto& user : users) {
+        if (user.presence == PresenceStatus::Offline) {
+            offline_users.push_back(user);
+        } else {
+            online_users.push_back(user);
+        }
+    }
     
     // ── USERS: header ──────────────────────────────────────────────────────
-    std::string users_header = i18n::tr(i18n::I18nKey::USERS_HEADER) + std::to_string(users.size());
+    std::string users_header = i18n::tr(i18n::I18nKey::USERS_HEADER) +
+                               std::to_string(online_users.size());
     panel_content.push_back(text(users_header) | bold | color(palette::fg_dark()));
     panel_content.push_back(separator() | color(palette::bg_highlight()));
     current_y += 2;  // Header + separator
     
-    // ── User list ──────────────────────────────────────────────────────────
-    for (const auto& user : users) {
+    // ── Online users ───────────────────────────────────────────────────────
+    for (const auto& user : online_users) {
         out_user_positions.push_back({user.user_id, base_x, current_y, config.width, 1});
         panel_content.push_back(render_user_entry(user, local_user_id));
         current_y++;
+    }
+
+    // ── Offline users section ──────────────────────────────────────────────
+    if (config.show_offline && !offline_users.empty()) {
+        panel_content.push_back(text(""));  // Spacer
+        current_y++;
+        std::string offline_header = i18n::tr(i18n::I18nKey::OFFLINE_HEADER) +
+                                     std::to_string(offline_users.size());
+        panel_content.push_back(text(offline_header) | bold | color(palette::comment()));
+        panel_content.push_back(separator() | color(palette::bg_highlight()));
+        current_y += 2;
+
+        for (const auto& user : offline_users) {
+            out_user_positions.push_back({user.user_id, base_x, current_y, config.width, 1});
+            panel_content.push_back(render_user_entry(user, local_user_id) | color(palette::comment()));
+            current_y++;
+        }
     }
     
     // ── VOICE: section (if anyone is in voice) ─────────────────────────────

@@ -19,7 +19,7 @@ struct UserHitRegion {
 struct UserListConfig {
     int  width        = 20;      // Default width in columns
     bool collapsed    = false;   // Start expanded
-    bool show_offline = false;   // Show offline users
+    bool show_offline = true;    // Show offline users
 };
 
 // Render data for a user entry

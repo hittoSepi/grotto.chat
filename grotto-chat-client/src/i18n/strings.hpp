@@ -155,6 +155,7 @@ enum class I18nKey {
 
     // User list panel
     USERS_HEADER,
+    OFFLINE_HEADER,
     VOICE_HEADER,
 
     // Voice engine
