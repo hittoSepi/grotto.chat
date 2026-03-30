@@ -398,6 +398,7 @@ std::vector<GraphicsDrawCommand> collect_visible_draw_commands(
             viewport_y + (i - top_idx),
             row.graphics_columns,
             row.graphics_rows,
+            0,
             row.graphics_image,
         });
     }

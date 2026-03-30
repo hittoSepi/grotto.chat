@@ -239,10 +239,6 @@ std::optional<std::filesystem::path> find_resource_path(const std::string& filen
     return std::nullopt;
 }
 
-std::optional<std::filesystem::path> find_daemon_avatar_resource() {
-    return find_resource_path("grotto-daemon-avatar.png");
-}
-
 std::optional<std::filesystem::path> find_modal_scrim_resource(const std::string& filename) {
     return find_resource_path(filename);
 }
@@ -320,76 +316,10 @@ std::shared_ptr<InlineImageThumbnail> generated_modal_scrim_tile_thumbnail() {
     return generated;
 }
 
-const std::shared_ptr<InlineImageThumbnail>& server_daemon_avatar_thumbnail() {
-    static const std::shared_ptr<InlineImageThumbnail> cached = []() -> std::shared_ptr<InlineImageThumbnail> {
-        auto path = find_daemon_avatar_resource();
-        if (!path) {
-            return {};
-        }
-        auto thumbnail = load_thumbnail_from_png_file(*path);
-        if (!thumbnail) {
-            return {};
-        }
-        return std::make_shared<InlineImageThumbnail>(std::move(*thumbnail));
-    }();
-    return cached;
-}
-
-std::optional<GraphicsDrawCommand> make_server_background_command(int viewport_x,
-                                                                  int viewport_y,
-                                                                  int viewport_width,
-                                                                  int viewport_height) {
-    if (viewport_width < 20 || viewport_height < 8) {
-        return std::nullopt;
-    }
-
-    const auto& image = server_daemon_avatar_thumbnail();
-    if (!image || image->width <= 0 || image->height <= 0 || image->rgba.empty()) {
-        return std::nullopt;
-    }
-
-    const auto backend = active_graphics_backend_kind();
-    if (backend == GraphicsBackendKind::ColorBlocks) {
-        return std::nullopt;
-    }
-
-    // Watermark-style placement: intentionally small and tucked in top-right.
-    const int max_columns_fit = std::max(8, viewport_width - 6);
-    int columns = std::clamp(viewport_width * 22 / 100, 10, 24);
-    columns = std::clamp(columns, 8, max_columns_fit);
-    const float aspect = static_cast<float>(image->height) / static_cast<float>(image->width);
-    // Keep the same cell-ratio behavior as graphics_layout: text rows are
-    // approximately half of pixel rows.
-    constexpr float kCellRowScale = 0.5f;
-    int rows = std::max(4, static_cast<int>(aspect * static_cast<float>(columns) * kCellRowScale + 0.5f));
-
-    const int max_rows = std::max(4, viewport_height - 2);
-    if (rows > max_rows) {
-        rows = max_rows;
-        const float denom = std::max(0.01f, aspect * kCellRowScale);
-        const int adjusted_columns = static_cast<int>(static_cast<float>(rows) / denom + 0.5f);
-        columns = std::clamp(adjusted_columns, 8, max_columns_fit);
-    }
-
-    const int x = viewport_x + std::max(0, viewport_width - columns - 1);
-    const int y = viewport_y;
-
-    return GraphicsDrawCommand{
-        backend,
-        -1000000,
-        -1,
-        x,
-        y,
-        columns,
-        rows,
-        image,
-    };
-}
-
-std::optional<GraphicsDrawCommand> make_modal_scrim_graphics_command(int viewport_x,
-                                                                     int viewport_y,
-                                                                     int viewport_width,
-                                                                     int viewport_height) {
+std::optional<GraphicsDrawCommand> make_server_scrim_background_command(int viewport_x,
+                                                                        int viewport_y,
+                                                                        int viewport_width,
+                                                                        int viewport_height) {
     if (viewport_width <= 0 || viewport_height <= 0) {
         return std::nullopt;
     }
@@ -417,6 +347,7 @@ std::optional<GraphicsDrawCommand> make_modal_scrim_graphics_command(int viewpor
         viewport_y,
         viewport_width,
         viewport_height,
+        -2000,
         scrim,
     };
 }
@@ -1009,15 +940,15 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
                                         mouse_tracker_.message_region().x,
                                         mouse_tracker_.message_region().y);
     if (is_server_channel(active_ch)) {
-        auto background = make_server_background_command(
+        auto scrim_background = make_server_scrim_background_command(
             pending_graphics_frame_.viewport_x,
             pending_graphics_frame_.viewport_y,
             pending_graphics_frame_.viewport_width,
             pending_graphics_frame_.viewport_height);
-        if (background) {
+        if (scrim_background) {
             pending_graphics_frame_.commands.insert(
                 pending_graphics_frame_.commands.begin(),
-                std::move(*background));
+                std::move(*scrim_background));
         }
     }
     
@@ -1258,18 +1189,6 @@ Element UIManager::build_document(int term_rows) {
         return document;
     }
 
-    const auto modal_scrim_cmd = make_modal_scrim_graphics_command(
-        0, 0, std::max(1, term_cols), std::max(1, term_rows));
-    // Keep modal focused and uncluttered while confirm is open.
-    pending_graphics_frame_.commands.clear();
-    if (modal_scrim_cmd) {
-        pending_graphics_frame_.viewport_x = 0;
-        pending_graphics_frame_.viewport_y = 0;
-        pending_graphics_frame_.viewport_width = std::max(1, term_cols);
-        pending_graphics_frame_.viewport_height = std::max(1, term_rows);
-        pending_graphics_frame_.commands.push_back(*modal_scrim_cmd);
-    }
-
     const bool is_finnish = (cfg_.ui.language == "fi");
     const std::string title = is_finnish ? "Poistumisvarmistus" : "Quit Confirmation";
     const std::string question = is_finnish
@@ -1290,25 +1209,22 @@ Element UIManager::build_document(int term_rows) {
     quit_confirm_yes_button_ = {button_start_x, button_y, static_cast<int>(yes_label.size()), 1};
     quit_confirm_no_button_ = {button_start_x + static_cast<int>(yes_label.size()) + 3, button_y, static_cast<int>(no_label.size()), 1};
 
-    Element with_scrim = std::move(document);
-    if (!modal_scrim_cmd) {
-        Elements scrim_rows;
-        scrim_rows.reserve(static_cast<size_t>(std::max(1, term_rows)));
-        const auto scrim_fg = ftxui::Color::RGB(0x08, 0x08, 0x12);
-        for (int row = 0; row < std::max(1, term_rows); ++row) {
-            std::string shade_line;
-            shade_line.reserve(static_cast<size_t>(std::max(1, term_cols)) * 3);
-            for (int col = 0; col < std::max(1, term_cols); ++col) {
-                shade_line += "▒";
-            }
-            scrim_rows.push_back(text(shade_line) | color(scrim_fg));
+    Elements scrim_rows;
+    scrim_rows.reserve(static_cast<size_t>(std::max(1, term_rows)));
+    const auto scrim_fg = ftxui::Color::RGB(0x08, 0x08, 0x12);
+    for (int row = 0; row < std::max(1, term_rows); ++row) {
+        std::string shade_line;
+        shade_line.reserve(static_cast<size_t>(std::max(1, term_cols)) * 3);
+        for (int col = 0; col < std::max(1, term_cols); ++col) {
+            shade_line += "▒";
         }
-        auto scrim_overlay = vbox(std::move(scrim_rows));
-        with_scrim = dbox({
-            std::move(with_scrim),
-            std::move(scrim_overlay),
-        });
+        scrim_rows.push_back(text(shade_line) | color(scrim_fg));
     }
+    auto scrim_overlay = vbox(std::move(scrim_rows));
+    Element with_scrim = dbox({
+        std::move(document),
+        std::move(scrim_overlay),
+    });
 
     auto confirm_overlay = vbox({
         filler(),

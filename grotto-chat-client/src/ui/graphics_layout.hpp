@@ -60,6 +60,7 @@ struct GraphicsDrawCommand {
     int viewport_y = 0;
     int width = 0;
     int height = 0;
+    int z_index = 0;
     std::shared_ptr<InlineImageThumbnail> image;
 };
 

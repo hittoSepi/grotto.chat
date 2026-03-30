@@ -80,7 +80,8 @@ bool same_backend_commands(const GraphicsFrame& a,
             ca.viewport_x != cb.viewport_x ||
             ca.viewport_y != cb.viewport_y ||
             ca.width != cb.width ||
-            ca.height != cb.height) {
+            ca.height != cb.height ||
+            ca.z_index != cb.z_index) {
             return false;
         }
 

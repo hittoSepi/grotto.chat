@@ -228,7 +228,8 @@ bool draw_kitty_rgba_at(const unsigned char* rgba,
                         int x,
                         int y,
                         int columns,
-                        int rows) {
+                        int rows,
+                        int z_index) {
     if (!rgba || width <= 0 || height <= 0 || columns <= 0 || rows <= 0) {
         return false;
     }
@@ -247,6 +248,7 @@ bool draw_kitty_rgba_at(const unsigned char* rgba,
         if (first) {
             std::cout << "a=T,f=32,s=" << width << ",v=" << height
                       << ",c=" << columns << ",r=" << rows
+                      << ",z=" << z_index
                       << ",m=" << (more ? 1 : 0);
         } else {
             std::cout << "m=" << (more ? 1 : 0);
@@ -700,7 +702,8 @@ void draw_inline_graphics_commands(const std::vector<GraphicsDrawCommand>& comma
                                cmd.viewport_x,
                                cmd.viewport_y,
                                cmd.width,
-                               cmd.height);
+                               cmd.height,
+                               cmd.z_index);
         }
     }
     std::cout.flush();
