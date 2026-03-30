@@ -7,6 +7,34 @@
 
 namespace grotto::voice {
 
+namespace {
+
+const char* rtc_state_name(rtc::PeerConnection::State state) {
+    switch (state) {
+    case rtc::PeerConnection::State::New: return "new";
+    case rtc::PeerConnection::State::Connecting: return "connecting";
+    case rtc::PeerConnection::State::Connected: return "connected";
+    case rtc::PeerConnection::State::Disconnected: return "disconnected";
+    case rtc::PeerConnection::State::Failed: return "failed";
+    case rtc::PeerConnection::State::Closed: return "closed";
+    default: return "unknown";
+    }
+}
+
+const char* ice_config_source_name(bool from_server,
+                                   bool has_runtime_ice,
+                                   bool has_local_ice) {
+    if (from_server && has_runtime_ice) {
+        return "server";
+    }
+    if (has_local_ice) {
+        return "config";
+    }
+    return "builtin-stun";
+}
+
+} // namespace
+
 VoiceEngine::VoiceEngine(AppState& state, const ClientConfig& cfg)
     : state_(state), cfg_(cfg), voice_mode_(cfg.voice.mode) {}
 
@@ -18,7 +46,9 @@ VoiceEngine::~VoiceEngine() {
 rtc::Configuration VoiceEngine::make_rtc_config() {
     rtc::Configuration config;
     auto runtime_ice = state_.runtime_voice_ice_config();
-    const auto& ice_servers = !runtime_ice.ice_servers.empty()
+    const bool has_runtime_ice = !runtime_ice.ice_servers.empty();
+    const bool has_local_ice = !cfg_.voice.ice_servers.empty();
+    const auto& ice_servers = has_runtime_ice
         ? runtime_ice.ice_servers
         : cfg_.voice.ice_servers;
     const auto& turn_username = !runtime_ice.turn_username.empty()
@@ -27,6 +57,11 @@ rtc::Configuration VoiceEngine::make_rtc_config() {
     const auto& turn_password = !runtime_ice.turn_password.empty()
         ? runtime_ice.turn_password
         : cfg_.voice.turn_password;
+
+    spdlog::info("Building RTC config from {} (ice_servers={}, turn_user={})",
+                 ice_config_source_name(runtime_ice.from_server, has_runtime_ice, has_local_ice),
+                 ice_servers.size(),
+                 turn_username.empty() ? "<none>" : turn_username);
 
     if (ice_servers.empty()) {
         // Default STUN servers
@@ -364,17 +399,24 @@ void VoiceEngine::on_voice_signal(const VoiceSignal& vs) {
         break;
 
     case VoiceSignal::OFFER: {
+        spdlog::debug("Received OFFER from {}", from);
         auto peer = get_or_create_peer(from, false);
         if (peer && peer->pc) {
-            ensure_send_track(peer);
-            peer->pc->setRemoteDescription(
-                rtc::Description(sdp, rtc::Description::Type::Offer));
-            peer->pc->setLocalDescription(rtc::Description::Type::Answer);
+            try {
+                ensure_send_track(peer);
+                peer->pc->setRemoteDescription(
+                    rtc::Description(sdp, rtc::Description::Type::Offer));
+                peer->pc->setLocalDescription(rtc::Description::Type::Answer);
+            } catch (const std::exception& e) {
+                spdlog::debug("Ignoring OFFER from {} in current signaling state: {}",
+                              from, e.what());
+            }
         }
         break;
     }
 
     case VoiceSignal::ANSWER: {
+        spdlog::debug("Received ANSWER from {}", from);
         std::shared_ptr<PeerConn> peer;
         {
             std::lock_guard lk(mu_);
@@ -382,13 +424,19 @@ void VoiceEngine::on_voice_signal(const VoiceSignal& vs) {
             if (it != peers_.end()) peer = it->second;
         }
         if (peer && peer->pc) {
-            peer->pc->setRemoteDescription(
-                rtc::Description(sdp, rtc::Description::Type::Answer));
+            try {
+                peer->pc->setRemoteDescription(
+                    rtc::Description(sdp, rtc::Description::Type::Answer));
+            } catch (const std::exception& e) {
+                spdlog::debug("Ignoring ANSWER from {} in current signaling state: {}",
+                              from, e.what());
+            }
         }
         break;
     }
 
     case VoiceSignal::ICE_CANDIDATE: {
+        spdlog::debug("Received ICE candidate from {}", from);
         std::shared_ptr<PeerConn> peer;
         {
             std::lock_guard lk(mu_);
@@ -396,7 +444,12 @@ void VoiceEngine::on_voice_signal(const VoiceSignal& vs) {
             if (it != peers_.end()) peer = it->second;
         }
         if (peer && peer->pc) {
-            peer->pc->addRemoteCandidate(rtc::Candidate(sdp));
+            try {
+                peer->pc->addRemoteCandidate(rtc::Candidate(sdp));
+            } catch (const std::exception& e) {
+                spdlog::debug("Ignoring ICE candidate from {} in current signaling state: {}",
+                              from, e.what());
+            }
         }
         break;
     }
@@ -449,6 +502,9 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
         sig.set_sdp_or_ice(std::string(desc));
         sig.set_signal_type(desc.type() == rtc::Description::Type::Offer ?
                      VoiceSignal::OFFER : VoiceSignal::ANSWER);
+        spdlog::debug("Sending {} to {}",
+                      desc.type() == rtc::Description::Type::Offer ? "OFFER" : "ANSWER",
+                      peer_id);
         if (send_signal_) send_signal_(sig);
     });
 
@@ -458,10 +514,12 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
         sig.set_to_user(peer_id);
         sig.set_sdp_or_ice(std::string(cand));
         sig.set_signal_type(VoiceSignal::ICE_CANDIDATE);
+        spdlog::debug("Sending ICE candidate to {}", peer_id);
         if (send_signal_) send_signal_(sig);
     });
 
     peer->pc->onStateChange([this, peer_id, peer](rtc::PeerConnection::State state) {
+        spdlog::info("WebRTC state for {} -> {}", peer_id, rtc_state_name(state));
         if (state == rtc::PeerConnection::State::Connected) {
             spdlog::info("WebRTC connected to {}", peer_id);
             peer->connected = true;

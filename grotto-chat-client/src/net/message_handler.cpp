@@ -485,6 +485,9 @@ void MessageHandler::handle_voice_ice_config(const Envelope& env) {
 
     spdlog::info("Received VoiceIceConfig from server ({} ICE servers)",
                  cfg.ice_servers_size());
+    for (const auto& ice_server : cfg.ice_servers()) {
+        spdlog::debug("VoiceIceConfig server entry: {}", ice_server);
+    }
 }
 
 void MessageHandler::handle_ping(const Envelope& env) {
