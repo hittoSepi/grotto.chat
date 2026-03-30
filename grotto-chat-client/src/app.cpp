@@ -101,20 +101,6 @@ std::string ascii_lower_copy(std::string text) {
     return text;
 }
 
-std::string inline_protocol_name(ui::TerminalInlineProtocol protocol) {
-    switch (protocol) {
-        case ui::TerminalInlineProtocol::Kitty:
-            return "kitty";
-        case ui::TerminalInlineProtocol::Sixel:
-            return "sixel";
-        case ui::TerminalInlineProtocol::ITerm2:
-            return "iterm2";
-        case ui::TerminalInlineProtocol::None:
-        default:
-            return "none";
-    }
-}
-
 }  // namespace
 
 App::App() = default;
@@ -153,6 +139,7 @@ bool App::init(const std::filesystem::path& config_path,
     if (!user_id_override.empty()) cfg_.identity.user_id = user_id_override;
     std::filesystem::create_directories(cfg_.config_dir);
     i18n::set_language(cfg_.ui.language);
+    refresh_runtime_capabilities();
 
     // ── Login Screen (FTXUI) ──────────────────────────────────────────────
     // Show the graphical login screen to get credentials
@@ -508,17 +495,27 @@ void App::handle_command(const ParsedCommand& cmd) {
             return;
         }
 
-        const std::string compositor_protocol = inline_protocol_name(
-            ui::terminal_inline_protocol_for_compositor());
-        const std::string detected_protocol = inline_protocol_name(
-            ui::terminal_inline_protocol());
         ui_->push_system_msg("[diag/ui]");
         ui_->push_system_msg("  copy_selection_on_release=" +
                              std::string(cfg_.ui.copy_selection_on_release ? "true" : "false"));
         ui_->push_system_msg("  clipboard_backend=" + ui::clipboard_backend_name());
         ui_->push_system_msg("  preview.terminal_graphics=" + cfg_.preview.terminal_graphics);
-        ui_->push_system_msg("  terminal_protocol_detected=" + detected_protocol);
-        ui_->push_system_msg("  compositor_protocol=" + compositor_protocol);
+        ui_->push_system_msg("  terminal_protocol_detected=" +
+                             terminal_inline_protocol_name(runtime_capabilities_.terminal_protocol_detected));
+        ui_->push_system_msg("  compositor_protocol=" +
+                             terminal_inline_protocol_name(runtime_capabilities_.compositor_protocol));
+        ui_->push_system_msg("  inline_native_enabled=" +
+                             std::string(runtime_capabilities_.inline_native_enabled ? "true" : "false"));
+        ui_->push_system_msg("  clipboard_available=" +
+                             std::string(runtime_capabilities_.clipboard_available ? "true" : "false"));
+        ui_->push_system_msg("  audio_input_devices=" +
+                             std::to_string(runtime_capabilities_.audio_input_device_count));
+        ui_->push_system_msg("  audio_output_devices=" +
+                             std::to_string(runtime_capabilities_.audio_output_device_count));
+        ui_->push_system_msg("  audio_capture_available=" +
+                             std::string(runtime_capabilities_.audio_capture_available ? "true" : "false"));
+        ui_->push_system_msg("  audio_playback_available=" +
+                             std::string(runtime_capabilities_.audio_playback_available ? "true" : "false"));
         ui_->notify();
         return;
     }
@@ -1004,6 +1001,7 @@ void App::open_settings() {
     switch (result) {
         case ui::SettingsResult::Saved:
             save_current_config();
+            refresh_runtime_capabilities();
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::SETTINGS_SAVED));
             break;
         case ui::SettingsResult::Cancelled:
@@ -1037,6 +1035,19 @@ void App::on_theme_changed(const std::string& theme_name) {
 
 void App::save_current_config() {
     save_config(cfg_, config_path_);
+}
+
+void App::refresh_runtime_capabilities() {
+    runtime_capabilities_ = detect_runtime_capabilities(cfg_);
+    spdlog::info(
+        "Runtime capabilities: terminal_mode={}, detected_protocol={}, compositor_protocol={}, inline_native={}, clipboard_backend={}, audio_in={}, audio_out={}",
+        terminal_graphics_mode_name(runtime_capabilities_.configured_terminal_graphics_mode),
+        terminal_inline_protocol_name(runtime_capabilities_.terminal_protocol_detected),
+        terminal_inline_protocol_name(runtime_capabilities_.compositor_protocol),
+        runtime_capabilities_.inline_native_enabled,
+        runtime_capabilities_.clipboard_backend,
+        runtime_capabilities_.audio_input_device_count,
+        runtime_capabilities_.audio_output_device_count);
 }
 
 } // namespace grotto

@@ -189,6 +189,7 @@ set(CLIENT_SOURCES
     src/main.cpp
     src/app.cpp
     src/config.cpp
+    src/runtime/runtime_capabilities.cpp
     src/state/app_state.cpp
     src/ui/ui_manager.cpp
     src/ui/login_screen.cpp

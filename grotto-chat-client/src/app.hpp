@@ -12,6 +12,7 @@
 #include "input/command_parser.hpp"
 #include "file/file_transfer.hpp"
 #include "help/help_manager.hpp"
+#include "runtime/runtime_capabilities.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <chrono>
@@ -70,8 +71,10 @@ private:
     
     // Save config to file
     void save_current_config();
+    void refresh_runtime_capabilities();
 
     ClientConfig cfg_;
+    RuntimeCapabilities runtime_capabilities_;
     std::filesystem::path config_path_;
     std::string server_version_ = "unknown (server does not advertise version yet)";
 
