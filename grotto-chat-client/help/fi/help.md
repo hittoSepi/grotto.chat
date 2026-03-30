@@ -22,6 +22,13 @@ Kirjoita `/help <aihe>` jos haluat tietää enemmän:
 `Alt+←/→`      edellinen/seuraava kanava  
 `F12`          asetukset  
 
+Ensiaskeleet kirjautumisen jälkeen:
+
+1. Liity kanavalle: `/join #general` (tai `/j #general`)  
+2. Katso paikalla olevat: `/names` (tai `/ns`)  
+3. Lähetä yksityisviesti: `/msg <nimi> <teksti>` (tai `/w <nimi> <teksti>`)  
+4. Komentolista: `/help commands`  
+
 Yleisimmät komennot:
 
 `/join #kanava`     liity kanavalle  

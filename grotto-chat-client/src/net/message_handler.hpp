@@ -103,6 +103,7 @@ private:
     CommandResponseFn    command_response_fn_;
 
     bool   authenticated_ = false;
+    bool   onboarding_shown_ = false;
     uint64_t next_seq_    = 1;
 
     // Pending KEY_REQUEST recipients (to flush when KEY_BUNDLE arrives)

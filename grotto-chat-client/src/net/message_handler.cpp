@@ -102,6 +102,23 @@ void MessageHandler::on_auth_ok() {
     auto ku = crypto_.prepare_key_upload(100);
     send_envelope(MT_KEY_UPLOAD, ku);
     spdlog::debug("Uploaded {} one-time pre-keys", ku.opk_ids_size());
+
+    if (onboarding_shown_) {
+        return;
+    }
+    onboarding_shown_ = true;
+
+    if (cfg_.ui.language == "fi") {
+        push_system("Aloitus: liity kanavalle komennolla /join #<kanava>");
+        push_system("Pika-apu: /help tai /help commands");
+        push_system("Yksityisviesti: /msg <nimi> <teksti> (alias /w)");
+        push_system("Asetukset: F12");
+    } else {
+        push_system("Getting started: join a channel with /join #<channel>");
+        push_system("Quick help: /help or /help commands");
+        push_system("Private message: /msg <name> <text> (alias /w)");
+        push_system("Settings: F12");
+    }
 }
 
 void MessageHandler::on_transport_disconnected() {

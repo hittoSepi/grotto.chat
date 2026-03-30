@@ -22,6 +22,13 @@ Type `/help <topic>` if you want to know more:
 `Alt+←/→`      previous/next channel  
 `F12`          settings  
 
+First steps after login:
+
+1. Join a channel: `/join #general` (or `/j #general`)  
+2. List users: `/names` (or `/ns`)  
+3. Send DM: `/msg <name> <text>` (or `/w <name> <text>`)  
+4. Need command list: `/help commands`  
+
 Most common commands:
 
 `/join #channel`    join a channel  

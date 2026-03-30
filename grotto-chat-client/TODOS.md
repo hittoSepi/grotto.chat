@@ -18,7 +18,7 @@
     - [x] priva viestin vastaanottajalla aukeaa tabi omalla nimellä, eikä sen kuka lähettänyty
     - [x] priva viestin vastaanottajalla ei päivity userlist
     - [x] jos msg vastaanottajaa ei ole, anna palautetta userille
-    - [ ] parempi /help ja jotkin alkuohjeet miten toimia kun servulle päästy, peruskäyttäjä ei välttämättä tiedä että pitää /join #<kanava> ja niin edelleen
+    - [x] parempi /help ja jotkin alkuohjeet miten toimia kun servulle päästy, peruskäyttäjä ei välttämättä tiedä että pitää /join #<kanava> ja niin edelleen
     - [x] käyttäjän viestin pituudessa pitää olla raja
       - client plaintext max 4096 tavua
       - server encrypted chat payload configurable `max_chat_payload_bytes`
