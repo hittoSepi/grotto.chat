@@ -1,6 +1,7 @@
 #include "voice/voice_engine.hpp"
 #include "i18n/strings.hpp"
 #include <spdlog/spdlog.h>
+#include <algorithm>
 #include <chrono>
 #include <variant>
 
@@ -33,6 +34,132 @@ rtc::Configuration VoiceEngine::make_rtc_config() {
     return config;
 }
 
+bool VoiceEngine::open_audio_or_report(const std::string& failure_context) {
+    if (audio_.open(cfg_.voice.input_device, cfg_.voice.output_device,
+            [this](const float* pcm, uint32_t frames) { on_capture(pcm, frames); },
+            [this](float* out, uint32_t frames) { mix_output(out, frames); })) {
+        audio_.start();
+        return true;
+    }
+
+    spdlog::error("Failed to open audio device for {}", failure_context);
+    state_.post_ui([this]() {
+        Message msg;
+        msg.type = Message::Type::System;
+        msg.sender_id = "voice";
+        msg.content = i18n::tr(i18n::I18nKey::FAILED_OPEN_AUDIO_DEVICE);
+        msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        auto ch = state_.active_channel().value_or("server");
+        state_.push_message(ch, std::move(msg));
+    });
+    return false;
+}
+
+void VoiceEngine::clear_participant_voice_statuses(const std::vector<std::string>& participants) {
+    for (const auto& participant : participants) {
+        state_.set_user_voice_status(participant, ChannelUserInfo::VoiceStatus::Off);
+    }
+}
+
+void VoiceEngine::set_voice_state_for_session(const std::string& active_channel,
+                                              const std::vector<std::string>& participants) {
+    if (session_kind_ == VoiceSessionKind::Direct && !active_channel.empty()) {
+        state_.ensure_channel(active_channel);
+        ChannelUserInfo peer_info;
+        peer_info.user_id = active_channel;
+        peer_info.presence = state_.presence(active_channel);
+        state_.add_channel_user(active_channel, peer_info);
+    }
+
+    VoiceState vs = state_.voice_snapshot();
+    clear_participant_voice_statuses(vs.participants);
+    vs.in_voice = true;
+    vs.muted = muted_;
+    vs.deafened = deafened_;
+    vs.active_channel = active_channel;
+    vs.participants = participants;
+    vs.speaking_peers.clear();
+    vs.voice_mode = voice_mode_;
+    state_.set_voice_state(std::move(vs));
+
+    for (const auto& participant : participants) {
+        state_.set_user_voice_status(participant, ChannelUserInfo::VoiceStatus::Off);
+    }
+}
+
+void VoiceEngine::reset_voice_state() {
+    VoiceState vs = state_.voice_snapshot();
+    clear_participant_voice_statuses(vs.participants);
+    vs.in_voice = false;
+    vs.muted = false;
+    vs.deafened = false;
+    vs.active_channel.clear();
+    vs.participants.clear();
+    vs.speaking_peers.clear();
+    vs.voice_mode = voice_mode_;
+    state_.set_voice_state(std::move(vs));
+}
+
+void VoiceEngine::push_voice_event_to_channel(const std::string& channel_id, const std::string& text) {
+    state_.post_ui([this, channel_id, text]() {
+        state_.ensure_channel(channel_id);
+        Message msg;
+        msg.type = Message::Type::VoiceEvent;
+        msg.sender_id = "voice";
+        msg.content = text;
+        msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        state_.push_message(channel_id, std::move(msg));
+    });
+}
+
+void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::string& remote_peer) {
+    if (!in_voice_) {
+        return;
+    }
+
+    const auto previous_state = state_.voice_snapshot();
+    const auto previous_kind = session_kind_;
+    const std::string session_target = active_channel_;
+
+    audio_.stop();
+
+    {
+        std::lock_guard lk(mu_);
+        peers_.clear();
+    }
+
+    in_voice_ = false;
+    muted_ = false;
+    deafened_ = false;
+    ptt_active_ = false;
+    session_kind_ = VoiceSessionKind::None;
+    active_channel_.clear();
+
+    reset_voice_state();
+
+    if (previous_kind == VoiceSessionKind::Room && !session_target.empty()) {
+        VoiceRoomLeave leave;
+        leave.set_channel_id(session_target);
+        if (send_room_msg_) {
+            send_room_msg_(MT_VOICE_ROOM_LEAVE, leave);
+        }
+    }
+
+    if (notify_remote_hangup && previous_kind == VoiceSessionKind::Direct && !remote_peer.empty()) {
+        VoiceSignal hup;
+        hup.set_from_user(state_.local_user_id());
+        hup.set_to_user(remote_peer);
+        hup.set_signal_type(VoiceSignal::CALL_HANGUP);
+        if (send_signal_) {
+            send_signal_(hup);
+        }
+    }
+
+    clear_participant_voice_statuses(previous_state.participants);
+}
+
 // ── Room ──────────────────────────────────────────────────────────────────────
 
 void VoiceEngine::join_room(const std::string& channel_id) {
@@ -45,42 +172,30 @@ void VoiceEngine::join_room(const std::string& channel_id) {
 
 void VoiceEngine::on_room_joined(const std::string& channel_id,
                                   const std::vector<std::string>& peers) {
-    if (in_voice_) leave_room();
+    if (in_voice_) {
+        end_current_session(true);
+    }
 
     active_channel_ = channel_id;
     in_voice_       = true;
     muted_          = false;
     deafened_       = false;
+    ptt_active_     = false;
+    session_kind_   = VoiceSessionKind::Room;
 
-    if (!audio_.open(cfg_.voice.input_device, cfg_.voice.output_device,
-            [this](const float* pcm, uint32_t frames) { on_capture(pcm, frames); },
-            [this](float* out, uint32_t frames)        { mix_output(out, frames); })) {
-        spdlog::error("Failed to open audio device for voice room");
-        state_.post_ui([this]() {
-            Message msg;
-            msg.type = Message::Type::System;
-            msg.sender_id = "voice";
-            msg.content = i18n::tr(i18n::I18nKey::FAILED_OPEN_AUDIO_DEVICE);
-            msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            auto ch = state_.active_channel().value_or("server");
-            state_.push_message(ch, std::move(msg));
-        });
+    if (!open_audio_or_report("voice room")) {
         in_voice_ = false;
+        session_kind_ = VoiceSessionKind::None;
+        active_channel_.clear();
         return;
     }
-    audio_.start();
 
     // We are the joiner — create PeerConnections to all existing participants as offerer
     for (const auto& peer_id : peers) {
         get_or_create_peer(peer_id, /*is_offerer=*/true);
     }
 
-    VoiceState vs = state_.voice_snapshot();
-    vs.in_voice       = true;
-    vs.active_channel = channel_id;
-    vs.voice_mode     = voice_mode_;
-    state_.set_voice_state(vs);
+    set_voice_state_for_session(channel_id, peers);
 
     spdlog::info("Voice room joined: {} with {} peers", channel_id, peers.size());
 }
@@ -95,67 +210,46 @@ void VoiceEngine::on_peer_joined(const std::string& peer_id) {
 
 void VoiceEngine::on_peer_left(const std::string& peer_id) {
     if (!in_voice_) return;
-    std::lock_guard lk(mu_);
-    peers_.erase(peer_id);
+    {
+        std::lock_guard lk(mu_);
+        peers_.erase(peer_id);
+    }
+    auto vs = state_.voice_snapshot();
+    auto& participants = vs.participants;
+    participants.erase(std::remove(participants.begin(), participants.end(), peer_id), participants.end());
+    vs.speaking_peers.erase(
+        std::remove(vs.speaking_peers.begin(), vs.speaking_peers.end(), peer_id),
+        vs.speaking_peers.end());
+    state_.set_voice_state(std::move(vs));
+    state_.set_user_voice_status(peer_id, ChannelUserInfo::VoiceStatus::Off);
     spdlog::info("Peer {} left voice room", peer_id);
 }
 
 void VoiceEngine::leave_room() {
-    if (!in_voice_) return;
-
-    std::string channel = active_channel_;
-
-    audio_.stop();
-
-    {
-        std::lock_guard lk(mu_);
-        peers_.clear();
-    }
-
-    in_voice_       = false;
-    active_channel_.clear();
-
-    VoiceState vs = state_.voice_snapshot();
-    vs.in_voice        = false;
-    vs.active_channel  = {};
-    vs.participants    = {};
-    state_.set_voice_state(vs);
-
-    // Notify server
-    VoiceRoomLeave leave;
-    leave.set_channel_id(channel);
-    if (send_room_msg_) send_room_msg_(MT_VOICE_ROOM_LEAVE, leave);
+    end_current_session(false);
 }
 
 // ── 1:1 call ──────────────────────────────────────────────────────────────────
 
 void VoiceEngine::call(const std::string& peer_id) {
-    if (in_voice_) leave_room();
+    if (in_voice_) {
+        end_current_session(true, active_channel_);
+    }
 
     in_voice_       = true;
     active_channel_ = peer_id;
+    muted_          = false;
+    deafened_       = false;
+    ptt_active_     = false;
+    session_kind_   = VoiceSessionKind::Direct;
 
-    if (!audio_.open(cfg_.voice.input_device, cfg_.voice.output_device,
-            [this](const float* pcm, uint32_t frames) { on_capture(pcm, frames); },
-            [this](float* out, uint32_t frames)        { mix_output(out, frames); })) {
-        spdlog::error("Failed to open audio device for call");
-        state_.post_ui([this]() {
-            Message msg;
-            msg.type = Message::Type::System;
-            msg.sender_id = "voice";
-            msg.content = i18n::tr(i18n::I18nKey::FAILED_OPEN_AUDIO_DEVICE);
-            msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            auto ch = state_.active_channel().value_or("server");
-            state_.push_message(ch, std::move(msg));
-        });
+    if (!open_audio_or_report("call")) {
         in_voice_ = false;
+        session_kind_ = VoiceSessionKind::None;
+        active_channel_.clear();
         return;
     }
-    audio_.start();
-
-    // Create PeerConnection as offerer
-    auto peer = get_or_create_peer(peer_id, /*is_offerer=*/true);
+    set_voice_state_for_session(peer_id, {peer_id});
 
     // Send CALL_INVITE
     VoiceSignal invite;
@@ -168,17 +262,24 @@ void VoiceEngine::call(const std::string& peer_id) {
 }
 
 void VoiceEngine::accept_call(const std::string& caller_id) {
+    if (in_voice_ && !(session_kind_ == VoiceSessionKind::Direct && active_channel_ == caller_id)) {
+        end_current_session(true, active_channel_);
+    }
+
     in_voice_       = true;
     active_channel_ = caller_id;
+    muted_          = false;
+    deafened_       = false;
+    ptt_active_     = false;
+    session_kind_   = VoiceSessionKind::Direct;
 
-    if (!audio_.open(cfg_.voice.input_device, cfg_.voice.output_device,
-            [this](const float* pcm, uint32_t frames) { on_capture(pcm, frames); },
-            [this](float* out, uint32_t frames)        { mix_output(out, frames); })) {
-        spdlog::error("Failed to open audio device for call accept");
+    if (!open_audio_or_report("accepted call")) {
         in_voice_ = false;
+        session_kind_ = VoiceSessionKind::None;
+        active_channel_.clear();
         return;
     }
-    audio_.start();
+    set_voice_state_for_session(caller_id, {caller_id});
 
     // Create PeerConnection as answerer
     get_or_create_peer(caller_id, /*is_offerer=*/false);
@@ -191,16 +292,10 @@ void VoiceEngine::accept_call(const std::string& caller_id) {
 }
 
 void VoiceEngine::hangup() {
-    if (!in_voice_) return;
-
-    std::string peer = active_channel_;
-    leave_room();
-
-    VoiceSignal hup;
-    hup.set_from_user(state_.local_user_id());
-    hup.set_to_user(peer);
-    hup.set_signal_type(VoiceSignal::CALL_HANGUP);
-    if (send_signal_) send_signal_(hup);
+    if (!in_voice_) {
+        return;
+    }
+    end_current_session(true, active_channel_);
 }
 
 // ── Controls ─────────────────────────────────────────────────────────────────
@@ -228,38 +323,31 @@ void VoiceEngine::on_voice_signal(const VoiceSignal& vs) {
     switch (vs.signal_type()) {
     case VoiceSignal::CALL_INVITE:
         spdlog::info("Incoming call from {}", from);
-        state_.post_ui([this, from]() {
-            Message msg;
-            msg.type      = Message::Type::VoiceEvent;
-            msg.sender_id = "voice";
-            msg.content   = from + " is calling. Type /accept " + from + " to answer.";
-            msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            auto ch = state_.active_channel().value_or("server");
-            state_.push_message(ch, std::move(msg));
-        });
+        push_voice_event_to_channel(from, i18n::tr(i18n::I18nKey::INCOMING_CALL, from));
         break;
 
     case VoiceSignal::CALL_ACCEPT: {
-        auto peer = get_or_create_peer(from, true);
-        if (peer && peer->pc) {
-            peer->pc->setLocalDescription();
-        }
+        get_or_create_peer(from, true);
+        set_voice_state_for_session(from, {from});
         break;
     }
 
     case VoiceSignal::CALL_HANGUP:
         spdlog::info("{} hung up", from);
-        {
+        if (session_kind_ == VoiceSessionKind::Direct && active_channel_ == from) {
+            push_voice_event_to_channel(from, i18n::tr(i18n::I18nKey::CALL_ENDED));
+            end_current_session(false);
+        } else {
             std::lock_guard lk(mu_);
             peers_.erase(from);
+            state_.set_user_voice_status(from, ChannelUserInfo::VoiceStatus::Off);
         }
-        if (active_channel_ == from) leave_room();
         break;
 
     case VoiceSignal::OFFER: {
         auto peer = get_or_create_peer(from, false);
         if (peer && peer->pc) {
+            ensure_send_track(peer);
             peer->pc->setRemoteDescription(
                 rtc::Description(sdp, rtc::Description::Type::Offer));
             peer->pc->setLocalDescription(rtc::Description::Type::Answer);
@@ -315,14 +403,21 @@ std::shared_ptr<PeerConn> VoiceEngine::get_or_create_peer(
     setup_peer_callbacks(peer);
 
     if (is_offerer) {
-        // Add audio track
-        auto desc = rtc::Description::Audio("audio", rtc::Description::Direction::SendRecv);
-        desc.addOpusCodec(111);
-        peer->track = peer->pc->addTrack(std::move(desc));
+        ensure_send_track(peer);
         peer->pc->setLocalDescription();
     }
 
     return peer;
+}
+
+void VoiceEngine::ensure_send_track(const std::shared_ptr<PeerConn>& peer) {
+    if (!peer || !peer->pc || peer->send_track) {
+        return;
+    }
+
+    auto desc = rtc::Description::Audio("audio", rtc::Description::Direction::SendRecv);
+    desc.addOpusCodec(111);
+    peer->send_track = peer->pc->addTrack(std::move(desc));
 }
 
 void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
@@ -351,6 +446,9 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
         if (state == rtc::PeerConnection::State::Connected) {
             spdlog::info("WebRTC connected to {}", peer_id);
             peer->connected = true;
+            if (session_kind_ == VoiceSessionKind::Direct && active_channel_ == peer_id) {
+                set_voice_state_for_session(peer_id, {peer_id});
+            }
         } else if (state == rtc::PeerConnection::State::Failed) {
             spdlog::warn("WebRTC connection failed to {}", peer_id);
             peer->connected = false;
@@ -364,14 +462,25 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
                 auto ch = state_.active_channel().value_or("server");
                 state_.push_message(ch, std::move(msg));
             });
+            if (session_kind_ == VoiceSessionKind::Direct && active_channel_ == peer_id) {
+                end_current_session(false);
+            } else {
+                state_.set_user_voice_status(peer_id, ChannelUserInfo::VoiceStatus::Off);
+            }
         } else if (state == rtc::PeerConnection::State::Disconnected) {
             spdlog::warn("WebRTC disconnected from {}", peer_id);
             peer->connected = false;
+            if (session_kind_ == VoiceSessionKind::Direct && active_channel_ == peer_id) {
+                push_voice_event_to_channel(peer_id, i18n::tr(i18n::I18nKey::CALL_ENDED));
+                end_current_session(false);
+            } else {
+                state_.set_user_voice_status(peer_id, ChannelUserInfo::VoiceStatus::Off);
+            }
         }
     });
 
     peer->pc->onTrack([peer](std::shared_ptr<rtc::Track> track) {
-        peer->track = track;
+        peer->recv_track = track;
         track->onMessage([peer](rtc::message_variant msg) {
             if (!std::holds_alternative<rtc::binary>(msg)) return;
             const auto& data = std::get<rtc::binary>(msg);
@@ -432,7 +541,7 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
 
     std::lock_guard lk(mu_);
     for (auto& [pid, peer] : peers_) {
-        if (!peer->connected || !peer->track) continue;
+        if (!peer->connected || !peer->send_track) continue;
         auto opus = peer->codec.encode(pcm_vec);
         if (opus.empty()) continue;
 
@@ -445,7 +554,7 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
         ++rtp_seq_;
         // Timestamp, SSRC left as zero for simplicity
         std::memcpy(rtp.data() + 12, opus.data(), opus.size());
-        peer->track->send(rtp);
+        peer->send_track->send(rtp);
     }
 }
 

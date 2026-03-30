@@ -369,10 +369,13 @@ void MessageHandler::handle_presence(const Envelope& env) {
 void MessageHandler::handle_voice_signal(const Envelope& env) {
     // Forward to VoiceEngine
     VoiceSignal vs;
-    if (!vs.ParseFromString(env.payload())) return;
+    if (!vs.ParseFromString(env.payload())) {
+        spdlog::warn("Failed to parse VoiceSignal");
+        return;
+    }
 
     if (voice_engine_) {
-        // voice_engine_->on_voice_signal(vs);
+        voice_engine_->on_voice_signal(vs);
         spdlog::debug("Voice signal received from {}", vs.from_user());
     }
 }

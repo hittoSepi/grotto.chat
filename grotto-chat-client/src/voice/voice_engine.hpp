@@ -25,13 +25,20 @@ using SendRoomMsgFn = std::function<void(MessageType, const google::protobuf::Me
 // Per-peer connection state
 struct PeerConn {
     std::shared_ptr<rtc::PeerConnection>  pc;
-    std::shared_ptr<rtc::Track>           track;
+    std::shared_ptr<rtc::Track>           send_track;
+    std::shared_ptr<rtc::Track>           recv_track;
     JitterBuffer                          jitter_buf;
     OpusCodec                             codec;
     std::string                           peer_id;
     bool                                  connected = false;
     float                                 last_energy = 0.0f;  // for speaking indicator
     std::chrono::steady_clock::time_point last_packet_time;
+};
+
+enum class VoiceSessionKind {
+    None,
+    Room,
+    Direct,
 };
 
 class VoiceEngine {
@@ -86,11 +93,16 @@ public:
 private:
     std::shared_ptr<PeerConn> get_or_create_peer(const std::string& peer_id,
                                                    bool is_offerer);
+    void ensure_send_track(const std::shared_ptr<PeerConn>& peer);
     void setup_peer_callbacks(std::shared_ptr<PeerConn> peer);
     rtc::Configuration make_rtc_config();
-
-    void send_signal(const std::string& to_user, VoiceSignal::SignalType type,
-                     const std::string& sdp_or_candidate);
+    bool open_audio_or_report(const std::string& failure_context);
+    void set_voice_state_for_session(const std::string& active_channel,
+                                     const std::vector<std::string>& participants);
+    void reset_voice_state();
+    void clear_participant_voice_statuses(const std::vector<std::string>& participants);
+    void push_voice_event_to_channel(const std::string& channel_id, const std::string& text);
+    void end_current_session(bool notify_remote_hangup, const std::string& remote_peer = {});
 
     AppState&          state_;
     const ClientConfig& cfg_;
@@ -105,6 +117,7 @@ private:
     bool               muted_     = false;
     bool               deafened_  = false;
     bool               ptt_active_ = false;
+    VoiceSessionKind   session_kind_ = VoiceSessionKind::None;
     std::string        active_channel_;
     std::string        voice_mode_;
 
