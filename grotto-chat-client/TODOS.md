@@ -4,14 +4,14 @@
     - [x] servulle yhteyden tekeminen "hidas", katso `dev_docs/desktop-client/becoming-online.png`
       - voisi ainakin ilmoittaa paremmin että vielä connectaa
     - [x] renderöidään grotto daemon kuva server tabiin kun aloitetaan yhdistäminen
-    - [ ] ctrl+c sammuttaa vieläkin ohjelman. (mahdoton ongelma?)
+    - [x] ctrl+c sammuttaa vieläkin ohjelman. (mahdoton ongelma?)
     - [x] aliaksia slash komennoille esim /join toimisi /j ja niin edelleen
     - [x] server tabissa ei tarvi näyttää käyttäjä sidepanelia 
     - [x] login ruutu on liian kapea, vähän leveämmänksi
     - [x] jos kirjoitat /help se ei mahdu koko ruutuun mutta rullausalue ei muutu
     - [x] ei koko ruudun levyistä underscorea, vain tekstin kohdalle. näyttää nyt vähä hölmöltä
     - [x] paste ei toimi ainakaan powershellillä ssh läpi clientille
-    - [~] tekstin valinta chat-ruutuun
+    - [x] tekstin valinta chat-ruutuun
       - [x] renderöi tekstin valinta että näkee valitun tekstin
     - [x] hiiren click koordinaatit saattavat olla väärin
     - [x] right click linkin avaus toimii aika randomisti, clientillä toimii ku right klikkaa vasempaan yläkulmaan ja ps ssh client ei ollenkaan.
