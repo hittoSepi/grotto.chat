@@ -143,10 +143,16 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
                                     ftxui::ScreenInteractive& screen,
                                     const std::string& public_key_hex,
                                     ThemeChangeFn on_theme_change) {
+    saved_ = false;
+    cancelled_ = false;
+    logout_ = false;
     original_cfg_ = cfg;
     public_key_hex_ = public_key_hex;
     on_theme_change_ = on_theme_change;
     config_path_ = cfg.config_dir / "config.toml";
+
+    auto exit_closure = screen.ExitLoopClosure();
+    exit_closure_ = exit_closure;
     
     load_settings_from_config(cfg);
     build_ui();
@@ -155,7 +161,6 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     install_interrupt_handlers();
 #endif
     screen.ForceHandleCtrlC(false);
-    auto exit_closure = screen.ExitLoopClosure();
     
     // Main renderer
     auto renderer = Renderer(container_, [this] {
@@ -249,6 +254,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     });
     
     screen.Loop(component);
+    exit_closure_ = {};
     
     if (logout_) {
         return SettingsResult::Logout;
@@ -310,14 +316,19 @@ void SettingsScreen::build_ui() {
     // Account action buttons (created once, not per-render)
     export_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_EXPORT_SETTINGS), [this] { export_settings(); });
     import_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_IMPORT_SETTINGS), [this] { import_settings(); });
-    logout_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_LOGOUT), [this] { logout_ = true; });
+    logout_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_LOGOUT), [this] {
+        logout_ = true;
+        if (exit_closure_) exit_closure_();
+    });
 
     // Action buttons
     save_button_ = Button(i18n::tr(i18n::I18nKey::BUTTON_SAVE), [this] {
         saved_ = true;
+        if (exit_closure_) exit_closure_();
     });
     cancel_button_ = Button(i18n::tr(i18n::I18nKey::BUTTON_CANCEL), [this] {
         cancelled_ = true;
+        if (exit_closure_) exit_closure_();
     });
     reset_button_ = Button(i18n::tr(i18n::I18nKey::BUTTON_RESET_DEFAULTS), [this] {
         reset_to_defaults();

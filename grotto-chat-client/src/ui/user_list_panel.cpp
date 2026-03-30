@@ -137,7 +137,7 @@ Element render_user_list_panel(
     int base_y) {
     
     out_user_positions.clear();
-    int current_y = base_y + 1;  // +1 for border
+    int current_y = base_y;
     
     if (config.collapsed) {
         // When collapsed, we still need to track the divider position

@@ -68,6 +68,7 @@ private:
     
     // Theme change callback
     ThemeChangeFn on_theme_change_;
+    std::function<void()> exit_closure_;
     
     // Config paths for import/export
     std::filesystem::path config_path_;
