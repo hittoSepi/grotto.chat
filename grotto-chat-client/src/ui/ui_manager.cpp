@@ -13,7 +13,11 @@
 #include <chrono>
 #include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <regex>
+#include <vector>
+
+#include <stb_image.h>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -136,6 +140,115 @@ std::vector<std::string> split_nonempty_lines(const std::string& text, size_t ma
         start = end + 1;
     }
     return lines;
+}
+
+std::optional<std::filesystem::path> find_daemon_avatar_resource() {
+    std::vector<std::filesystem::path> candidates{
+        std::filesystem::path("resources") / "grotto-daemon-avatar.png",
+        std::filesystem::path("grotto-chat-client") / "resources" / "grotto-daemon-avatar.png",
+    };
+
+    std::error_code cwd_ec;
+    const auto cwd = std::filesystem::current_path(cwd_ec);
+    if (!cwd_ec) {
+        candidates.push_back(cwd / "resources" / "grotto-daemon-avatar.png");
+        candidates.push_back(cwd / "grotto-chat-client" / "resources" / "grotto-daemon-avatar.png");
+    }
+
+    for (const auto& path : candidates) {
+        std::error_code ec;
+        if (std::filesystem::exists(path, ec) && !ec) {
+            return path;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<InlineImageThumbnail> load_thumbnail_from_png_file(const std::filesystem::path& path) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc* rgba = stbi_load(path.string().c_str(), &width, &height, &channels, 4);
+    if (!rgba || width <= 0 || height <= 0) {
+        if (rgba) {
+            stbi_image_free(rgba);
+        }
+        return std::nullopt;
+    }
+
+    InlineImageThumbnail thumbnail;
+    thumbnail.width = width;
+    thumbnail.height = height;
+    const size_t bytes = static_cast<size_t>(width * height * 4);
+    thumbnail.rgba.assign(rgba, rgba + bytes);
+    stbi_image_free(rgba);
+    return thumbnail;
+}
+
+const std::shared_ptr<InlineImageThumbnail>& server_daemon_avatar_thumbnail() {
+    static const std::shared_ptr<InlineImageThumbnail> cached = []() -> std::shared_ptr<InlineImageThumbnail> {
+        auto path = find_daemon_avatar_resource();
+        if (!path) {
+            return {};
+        }
+        auto thumbnail = load_thumbnail_from_png_file(*path);
+        if (!thumbnail) {
+            return {};
+        }
+        return std::make_shared<InlineImageThumbnail>(std::move(*thumbnail));
+    }();
+    return cached;
+}
+
+std::optional<GraphicsDrawCommand> make_server_background_command(int viewport_x,
+                                                                  int viewport_y,
+                                                                  int viewport_width,
+                                                                  int viewport_height) {
+    if (viewport_width < 20 || viewport_height < 8) {
+        return std::nullopt;
+    }
+
+    const auto& image = server_daemon_avatar_thumbnail();
+    if (!image || image->width <= 0 || image->height <= 0 || image->rgba.empty()) {
+        return std::nullopt;
+    }
+
+    const auto backend = active_graphics_backend_kind();
+    if (backend == GraphicsBackendKind::ColorBlocks) {
+        return std::nullopt;
+    }
+
+    // Watermark-style placement: intentionally small and tucked in top-right.
+    const int max_columns_fit = std::max(8, viewport_width - 6);
+    int columns = std::clamp(viewport_width * 22 / 100, 10, 24);
+    columns = std::clamp(columns, 8, max_columns_fit);
+    const float aspect = static_cast<float>(image->height) / static_cast<float>(image->width);
+    // Keep the same cell-ratio behavior as graphics_layout: text rows are
+    // approximately half of pixel rows.
+    constexpr float kCellRowScale = 0.5f;
+    int rows = std::max(4, static_cast<int>(aspect * static_cast<float>(columns) * kCellRowScale + 0.5f));
+
+    const int max_rows = std::max(4, viewport_height - 2);
+    if (rows > max_rows) {
+        rows = max_rows;
+        const float denom = std::max(0.01f, aspect * kCellRowScale);
+        const int adjusted_columns = static_cast<int>(static_cast<float>(rows) / denom + 0.5f);
+        columns = std::clamp(adjusted_columns, 8, max_columns_fit);
+    }
+
+    const int x = viewport_x + std::max(0, viewport_width - columns - 1);
+    const int y = viewport_y;
+
+    return GraphicsDrawCommand{
+        backend,
+        -1000000,
+        -1,
+        x,
+        y,
+        columns,
+        rows,
+        image,
+    };
 }
 
 Element render_image_preview_pane(const Message& msg, int pane_width, int pane_height) {
@@ -661,9 +774,25 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
 
     mouse_tracker_.set_message_region({0, mouse_tracker_.message_region().y, msg_width, msg_rows});
 
+    int selected_row_start = -1;
+    int selected_row_end = -1;
+    if (mouse_tracker_.is_selecting()) {
+        const auto sel = mouse_tracker_.selection_region();
+        const auto msg_region = mouse_tracker_.message_region();
+        const int sel_start = sel.y - msg_region.y;
+        const int sel_end = sel_start + sel.height - 1;
+        selected_row_start = std::clamp(sel_start, 0, std::max(0, msg_rows - 1));
+        selected_row_end = std::clamp(sel_end, selected_row_start, std::max(0, msg_rows - 1));
+    }
+
     Element msg_el = active_ch.empty()
         ? text("") | flex
-        : render_messages(ch_state, cfg_.ui.timestamp_format, msg_rows, msg_width);
+        : render_messages(ch_state,
+                          cfg_.ui.timestamp_format,
+                          msg_rows,
+                          msg_width,
+                          selected_row_start,
+                          selected_row_end);
 
     pending_graphics_frame_.viewport_x = mouse_tracker_.message_region().x;
     pending_graphics_frame_.viewport_y = mouse_tracker_.message_region().y;
@@ -677,6 +806,18 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
                                         msg_width,
                                         mouse_tracker_.message_region().x,
                                         mouse_tracker_.message_region().y);
+    if (is_server_channel(active_ch)) {
+        auto background = make_server_background_command(
+            pending_graphics_frame_.viewport_x,
+            pending_graphics_frame_.viewport_y,
+            pending_graphics_frame_.viewport_width,
+            pending_graphics_frame_.viewport_height);
+        if (background) {
+            pending_graphics_frame_.commands.insert(
+                pending_graphics_frame_.commands.begin(),
+                std::move(*background));
+        }
+    }
     
     // If user list is collapsed, just return the message view
     if (!show_user_list) {
