@@ -9,6 +9,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cstdlib>
+#include <csignal>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -18,6 +19,20 @@ using namespace ftxui;
 namespace grotto::ui {
 
 namespace {
+
+#ifndef _WIN32
+void swallow_interrupt_signal(int) {
+}
+
+void install_interrupt_handlers() {
+    struct sigaction sa {};
+    sa.sa_handler = swallow_interrupt_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGQUIT, &sa, nullptr);
+}
+#endif
 
 // Simple XOR encryption for remembered credentials (obfuscation, not high security)
 // In production, this should use proper keychain/os credential APIs
@@ -135,7 +150,10 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
     }
 
     // Get exit closure before building UI
-    screen.ForceHandleCtrlC(true);
+#ifndef _WIN32
+    install_interrupt_handlers();
+#endif
+    screen.ForceHandleCtrlC(false);
     auto exit_closure = screen.ExitLoopClosure();
 
     host_input_ = Input(&host_, "chat.rausku.com");
@@ -246,7 +264,7 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
 
     // Event handler for Escape and Enter
     auto component = CatchEvent(base_renderer, [this, exit_closure](Event event) -> bool {
-        if (event.input() == "\x03" || event.input() == "\x04") {
+        if (event == Event::CtrlC || event.input() == "\x03" || event.input() == "\x04") {
             return true;
         }
         if (event == Event::Escape) {

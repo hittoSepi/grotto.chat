@@ -13,6 +13,7 @@
 #include <chrono>
 #include <algorithm>
 #include <cctype>
+#include <csignal>
 #include <cstdlib>
 #include <filesystem>
 #include <regex>
@@ -33,11 +34,63 @@
 #endif
 #endif
 
+#ifndef _WIN32
+#include <termios.h>
+#include <unistd.h>
+#endif
+
 using namespace ftxui;
 
 namespace grotto::ui {
 
 namespace {
+
+#ifndef _WIN32
+void swallow_interrupt_signal(int) {
+}
+
+void install_interrupt_handlers() {
+    struct sigaction sa {};
+    sa.sa_handler = swallow_interrupt_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGQUIT, &sa, nullptr);
+}
+
+class ScopedDisableTtyInterruptSignals {
+public:
+    ScopedDisableTtyInterruptSignals() {
+        if (!isatty(STDIN_FILENO)) {
+            return;
+        }
+        if (tcgetattr(STDIN_FILENO, &old_) != 0) {
+            return;
+        }
+        termios raw = old_;
+        raw.c_lflag &= ~ISIG;
+#ifdef VINTR
+        raw.c_cc[VINTR] = _POSIX_VDISABLE;
+#endif
+#ifdef VQUIT
+        raw.c_cc[VQUIT] = _POSIX_VDISABLE;
+#endif
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) == 0) {
+            active_ = true;
+        }
+    }
+
+    ~ScopedDisableTtyInterruptSignals() {
+        if (active_) {
+            tcsetattr(STDIN_FILENO, TCSANOW, &old_);
+        }
+    }
+
+private:
+    bool active_ = false;
+    termios old_{};
+};
+#endif
 
 std::optional<std::string> extract_bracketed_paste(std::string_view input) {
     constexpr std::string_view kStart = "\x1b[200~";
@@ -1162,7 +1215,12 @@ void UIManager::run(SubmitFn on_submit,
                     ChannelCycleFn on_channel_cycle,
                     PttToggleFn on_ptt_toggle,
                     OpenSettingsFn on_open_settings) {
-    screen_.ForceHandleCtrlC(true);  // Let app handle Ctrl+C via CatchEvent (\x03)
+#ifndef _WIN32
+    // Re-assert swallow handlers at UI loop boundary.
+    install_interrupt_handlers();
+    ScopedDisableTtyInterruptSignals scoped_tty_interrupt_disable;
+#endif
+    screen_.ForceHandleCtrlC(false);
 
 #ifdef _WIN32
     // Disable QuickEdit mode so right-click doesn't open the system context menu.
@@ -1213,7 +1271,7 @@ void UIManager::run(SubmitFn on_submit,
             }
             return true;
         }
-        if (event.input() == "\x03") {
+        if (event == Event::CtrlC || event.input() == "\x03") {
             copy_selection_to_clipboard();
             return true;
         }

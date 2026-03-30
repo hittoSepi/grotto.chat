@@ -9,6 +9,7 @@
 #include <toml.hpp>
 
 #include <cstdlib>
+#include <csignal>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -19,6 +20,20 @@ using namespace ftxui;
 namespace grotto::ui {
 
 namespace {
+
+#ifndef _WIN32
+void swallow_interrupt_signal(int) {
+}
+
+void install_interrupt_handlers() {
+    struct sigaction sa {};
+    sa.sa_handler = swallow_interrupt_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGQUIT, &sa, nullptr);
+}
+#endif
 
 // Available themes
 const std::vector<std::string> kThemes = {
@@ -82,7 +97,10 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     load_settings_from_config(cfg);
     build_ui();
     
-    screen.ForceHandleCtrlC(true);
+#ifndef _WIN32
+    install_interrupt_handlers();
+#endif
+    screen.ForceHandleCtrlC(false);
     auto exit_closure = screen.ExitLoopClosure();
     
     // Main renderer
@@ -136,7 +154,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     
     // Event handler
     auto component = CatchEvent(renderer, [this, exit_closure, &cfg](Event event) -> bool {
-        if (event.input() == "\x03" || event.input() == "\x04") {
+        if (event == Event::CtrlC || event.input() == "\x03" || event.input() == "\x04") {
             return true;
         }
         if (event == Event::Escape) {

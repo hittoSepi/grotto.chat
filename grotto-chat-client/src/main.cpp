@@ -7,7 +7,59 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <termios.h>
+#include <unistd.h>
 #endif
+
+namespace {
+#ifndef _WIN32
+void swallow_interrupt_signal(int) {
+}
+
+void install_interrupt_handlers() {
+    struct sigaction sa {};
+    sa.sa_handler = swallow_interrupt_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGQUIT, &sa, nullptr);
+}
+
+class ScopedDisableTtyInterruptKeys {
+public:
+    ScopedDisableTtyInterruptKeys() {
+        if (!isatty(STDIN_FILENO)) {
+            return;
+        }
+        if (tcgetattr(STDIN_FILENO, &old_) != 0) {
+            return;
+        }
+        termios t = old_;
+        t.c_lflag &= ~ISIG;
+#ifdef VINTR
+        t.c_cc[VINTR] = _POSIX_VDISABLE;
+#endif
+#ifdef VQUIT
+        t.c_cc[VQUIT] = _POSIX_VDISABLE;
+#endif
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &t) == 0) {
+            active_ = true;
+        }
+    }
+
+    ~ScopedDisableTtyInterruptKeys() {
+        if (active_) {
+            tcsetattr(STDIN_FILENO, TCSANOW, &old_);
+        }
+    }
+
+private:
+    bool active_ = false;
+    termios old_{};
+};
+#endif
+} // namespace
 
 // Parse ircord:// URL and return host:port
 // Format: ircord://host:port or ircord://host (default port 6697)
@@ -75,10 +127,9 @@ int main(int argc, char* argv[]) {
         SetConsoleMode(hin, mode & ~ENABLE_PROCESSED_INPUT);
     }
 #else
-    // Ignore SIGINT globally so Ctrl+C reaches FTXUI as \x03 instead of
-    // terminating the process. This applies to login screen, settings, and
-    // the main UI.
-    std::signal(SIGINT, SIG_IGN);
+    // Swallow SIGINT/SIGQUIT globally so Ctrl+C won't terminate the process.
+    install_interrupt_handlers();
+    ScopedDisableTtyInterruptKeys scoped_tty_interrupt_keys;
 #endif
 
     std::filesystem::path config_path;
