@@ -288,6 +288,7 @@ bool App::init(const std::filesystem::path& config_path,
     };
     cb.on_disconnected = [this](const std::string& reason) {
         state_.set_connected(false);
+        state_.set_connecting(false);
         msg_handler_->on_transport_disconnected();
         crypto_->reset_group_sessions();  // Re-send SKDM on next connection
         clear_pending_channel_commands();
@@ -340,6 +341,8 @@ bool App::init(const std::filesystem::path& config_path,
 }
 
 int App::run() {
+    state_.set_connecting(true);
+
     // ── IO thread ─────────────────────────────────────────────────────────
     auto work = boost::asio::make_work_guard(ioc_);
     io_thread_ = std::thread([this]() {
@@ -407,6 +410,7 @@ void App::handle_command(const ParsedCommand& cmd) {
             ioc_.stop();
             msg_handler_->on_transport_disconnected();
             state_.set_connected(false);
+            state_.set_connecting(false);
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::DISCONNECTED_FROM_SERVER));
         } else {
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::NOT_CONNECTED));
@@ -808,6 +812,8 @@ void App::log_server_event(const std::string& text, bool activate_server) {
 void App::trace_connection_phase(const std::string& phase,
                                  bool reset_attempt_timer,
                                  bool activate_server) {
+    state_.set_connecting(true);
+
     auto now = std::chrono::steady_clock::now();
     long long elapsed_ms = 0;
     {

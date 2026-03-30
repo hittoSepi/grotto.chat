@@ -12,12 +12,17 @@ Element render_status_bar(const StatusInfo& info) {
     Elements left;
     if (info.connected) {
         left.push_back(text("\u25CF ") | color(palette::online()));
+    } else if (info.connecting) {
+        left.push_back(text("\u25D4 ") | color(palette::yellow()));
     } else {
         left.push_back(text("\u25CB ") | color(palette::error_c()));
     }
 
     if (!info.local_user_id.empty()) {
         left.push_back(text(info.local_user_id) | color(palette::fg_dark()));
+    }
+    if (!info.connected && info.connecting) {
+        left.push_back(text(" | " + i18n::tr(i18n::I18nKey::CONNECTING)) | color(palette::yellow()));
     }
     if (!info.active_channel.empty()) {
         left.push_back(text(" | " + info.active_channel) | color(palette::fg_dark()));

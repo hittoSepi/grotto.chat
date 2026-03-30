@@ -778,6 +778,7 @@ Element UIManager::build_document(int term_rows) {
     // Status bar
     StatusInfo si;
     si.connected      = state_.connected();
+    si.connecting     = state_.connecting();
     si.local_user_id  = state_.local_user_id();
     si.active_channel = active_ch;
     auto vs           = state_.voice_snapshot();

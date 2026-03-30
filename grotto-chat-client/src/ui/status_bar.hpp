@@ -7,6 +7,7 @@ namespace grotto::ui {
 
 struct StatusInfo {
     bool        connected      = false;
+    bool        connecting     = false;
     std::string local_user_id;
     std::string active_channel;
     bool        in_voice       = false;

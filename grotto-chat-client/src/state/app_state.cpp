@@ -296,6 +296,16 @@ void AppState::set_connected(bool v) {
     connected_ = v;
 }
 
+bool AppState::connecting() const {
+    std::shared_lock lk(mu_);
+    return connecting_;
+}
+
+void AppState::set_connecting(bool v) {
+    std::unique_lock lk(mu_);
+    connecting_ = v;
+}
+
 std::string AppState::local_user_id() const {
     std::shared_lock lk(mu_);
     return local_user_id_;

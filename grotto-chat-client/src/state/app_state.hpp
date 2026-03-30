@@ -107,6 +107,8 @@ public:
     // ── Connection state ─────────────────────────────────────────────────
     bool connected() const;
     void set_connected(bool v);
+    bool connecting() const;
+    void set_connecting(bool v);
     std::string local_user_id() const;
     void set_local_user_id(const std::string& id);
 
@@ -138,6 +140,7 @@ private:
     std::unordered_map<std::string, ChannelUserInfo::VoiceStatus> user_voice_status_;
 
     bool        connected_     = false;
+    bool        connecting_    = false;
     std::string local_user_id_;
 
     std::vector<SearchResult> search_results_;

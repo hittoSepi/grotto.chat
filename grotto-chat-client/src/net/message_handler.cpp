@@ -93,6 +93,7 @@ void MessageHandler::handle_auth_ok(const Envelope& env) {
     spdlog::info("Authentication successful");
     push_system(i18n::tr(i18n::I18nKey::AUTHENTICATED_AS, cfg_.identity.user_id));
     state_.set_connected(true);
+    state_.set_connecting(false);
     on_auth_ok();
 }
 
@@ -105,6 +106,7 @@ void MessageHandler::on_auth_ok() {
 
 void MessageHandler::on_transport_disconnected() {
     authenticated_ = false;
+    state_.set_connecting(false);
     pending_sends_.clear();
     crypto_.reset_all_dm_sessions();
 }
@@ -128,6 +130,7 @@ void MessageHandler::handle_auth_fail(const Envelope& env) {
         push_system(i18n::tr(i18n::I18nKey::AUTH_FAILED_CHECK_KEY));
     }
     state_.set_connected(false);
+    state_.set_connecting(false);
 }
 
 void MessageHandler::handle_chat(const Envelope& env) {
