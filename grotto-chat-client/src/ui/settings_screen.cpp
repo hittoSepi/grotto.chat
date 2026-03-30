@@ -166,7 +166,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     auto renderer = Renderer(container_, [this] {
         // Sidebar
         auto sidebar = vbox({
-            text(" " + i18n::tr(i18n::I18nKey::CATEGORY_GENERAL) + " ") | bold | color(palette::blue()),
+            text(" " + i18n::tr(i18n::I18nKey::SETTINGS_TITLE) + " ") | bold | color(palette::blue()),
             separator(),
             sidebar_container_->Render(),
         }) | border | size(WIDTH, LESS_THAN, 20);

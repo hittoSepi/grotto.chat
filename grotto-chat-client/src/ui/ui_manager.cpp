@@ -1158,29 +1158,66 @@ Element UIManager::build_document(int term_rows) {
     }
 
     if (!quit_confirm_visible_) {
+        quit_confirm_yes_button_ = {};
+        quit_confirm_no_button_ = {};
         return document;
     }
+
+    // Keep modal focused and uncluttered: hide inline graphics while confirm is open.
+    pending_graphics_frame_.commands.clear();
 
     const bool is_finnish = (cfg_.ui.language == "fi");
     const std::string title = is_finnish ? "Poistumisvarmistus" : "Quit Confirmation";
     const std::string question = is_finnish
         ? "Haluatko varmasti poistua?"
         : "Are you sure you want to quit?";
-    const std::string hint = is_finnish
-        ? "[Enter/Y] Kyllä   [Esc/N] Peruuta"
-        : "[Enter/Y] Yes   [Esc/N] Cancel";
+    const std::string yes_label = is_finnish ? " Kyllä " : " Yes ";
+    const std::string no_label = is_finnish ? " Peruuta " : " Cancel ";
+
+    const int box_width = 44;
+    const int box_height = 7;
+    const int box_x = std::max(0, (term_cols - box_width) / 2);
+    const int box_y = std::max(0, (term_rows - box_height) / 2);
+    const int inner_width = std::max(1, box_width - 2);
+
+    const int total_button_width = static_cast<int>(yes_label.size() + 3 + no_label.size());
+    const int button_start_x = box_x + 1 + std::max(0, (inner_width - total_button_width) / 2);
+    const int button_y = box_y + 4;
+    quit_confirm_yes_button_ = {button_start_x, button_y, static_cast<int>(yes_label.size()), 1};
+    quit_confirm_no_button_ = {button_start_x + static_cast<int>(yes_label.size()) + 3, button_y, static_cast<int>(no_label.size()), 1};
+
+    Elements scrim_rows;
+    scrim_rows.reserve(static_cast<size_t>(std::max(1, term_rows)));
+    for (int row = 0; row < std::max(1, term_rows); ++row) {
+        scrim_rows.push_back(text(std::string(static_cast<size_t>(std::max(1, term_cols)), ' '))
+                             | bgcolor(palette::bg_dark()));
+    }
+    auto scrim_overlay = vbox(std::move(scrim_rows));
 
     auto confirm_overlay = vbox({
         filler(),
         hbox({
             filler(),
             vbox({
-                text(title) | bold | color(palette::blue()),
+                hbox({
+                    text(title) | bold | color(palette::blue()),
+                    filler(),
+                }) | bgcolor(palette::bg()),
                 separator(),
-                text(question),
-                text(""),
-                text(hint) | color(palette::comment()),
-            }) | border | bgcolor(palette::bg()) | size(WIDTH, GREATER_THAN, 36),
+                hbox({
+                    text(question) | color(palette::fg()),
+                    filler(),
+                }) | bgcolor(palette::bg()),
+                hbox({ filler() }) | bgcolor(palette::bg()),
+                hbox({
+                    filler(),
+                    text(yes_label) | bold | color(palette::bg()) | bgcolor(palette::blue()),
+                    text("   ") | bgcolor(palette::bg()),
+                    text(no_label) | color(palette::fg()) | bgcolor(palette::bg_highlight()),
+                    filler(),
+                }) | bgcolor(palette::bg()),
+                hbox({ filler() }) | bgcolor(palette::bg()),
+            }) | border | bgcolor(palette::bg()) | size(WIDTH, EQUAL, box_width) | size(HEIGHT, EQUAL, box_height),
             filler(),
         }),
         filler(),
@@ -1188,6 +1225,7 @@ Element UIManager::build_document(int term_rows) {
 
     return dbox({
         std::move(document),
+        std::move(scrim_overlay),
         std::move(confirm_overlay),
     });
 }
@@ -1228,6 +1266,22 @@ void UIManager::run(SubmitFn on_submit,
     auto event_handler = CatchEvent(renderer, [&](Event event) -> bool {
         if (quit_confirm_visible_) {
             if (event == Event::Custom) {
+                return true;
+            }
+            if (event.is_mouse()) {
+                Event& evt = const_cast<Event&>(event);
+                auto& mouse = evt.mouse();
+                if (mouse.button == Mouse::Left && mouse.motion == Mouse::Pressed) {
+                    if (quit_confirm_yes_button_.contains(mouse.x, mouse.y)) {
+                        if (on_quit) on_quit();
+                        screen_.ExitLoopClosure()();
+                        return true;
+                    }
+                    if (quit_confirm_no_button_.contains(mouse.x, mouse.y)) {
+                        quit_confirm_visible_ = false;
+                        return true;
+                    }
+                }
                 return true;
             }
             if (event == Event::Escape || event == Event::Character("n") || event == Event::Character("N")) {

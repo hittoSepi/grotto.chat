@@ -32,6 +32,7 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::CONNECTING, "Connecting..."},
 
     // Settings categories
+    {I18nKey::SETTINGS_TITLE, "Settings"},
     {I18nKey::CATEGORY_GENERAL, "General"},
     {I18nKey::CATEGORY_APPEARANCE, "Appearance"},
     {I18nKey::CATEGORY_CONNECTION, "Connection"},
@@ -210,6 +211,7 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::CONNECTING, "Yhdistetään..."},
 
     // Settings categories
+    {I18nKey::SETTINGS_TITLE, "Asetukset"},
     {I18nKey::CATEGORY_GENERAL, "Yleiset"},
     {I18nKey::CATEGORY_APPEARANCE, "Ulkoasu"},
     {I18nKey::CATEGORY_CONNECTION, "Yhteys"},

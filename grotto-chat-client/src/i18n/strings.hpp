@@ -28,6 +28,7 @@ enum class I18nKey {
     CONNECTING,
 
     // Settings screen categories
+    SETTINGS_TITLE,
     CATEGORY_GENERAL,
     CATEGORY_APPEARANCE,
     CATEGORY_CONNECTION,

@@ -136,6 +136,8 @@ private:
     std::string toast_text_;
     std::chrono::steady_clock::time_point toast_until_{};
     bool quit_confirm_visible_ = false;
+    UIRegion quit_confirm_yes_button_{};
+    UIRegion quit_confirm_no_button_{};
 };
 
 } // namespace grotto::ui
