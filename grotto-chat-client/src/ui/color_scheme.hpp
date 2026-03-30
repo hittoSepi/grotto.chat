@@ -1,3 +1,7 @@
+#pragma once
+#include <ftxui/screen/color.hpp>
+#include <cstdint>
+#include <string_view>
 namespace grotto::ui {
 
 // Grotto palette

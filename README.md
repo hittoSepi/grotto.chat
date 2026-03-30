@@ -1,6 +1,13 @@
 # Grotto
 
-End-to-end encrypted chat and voice application for friend groups. Combines irssi's minimal terminal aesthetics with modern features like E2E encryption (Signal Protocol), voice rooms, file transfers, and link previews.
+End-to-end encrypted chat and voice for small groups.
+
+Minimal, fast, and terminal-first — inspired by irssi, built with modern primitives:
+- Signal Protocol (X3DH + Double Ratchet)
+- Group encryption via Sender Keys
+- Voice rooms (WebRTC)
+- File transfers
+- Link previews
 
 ## Components
 

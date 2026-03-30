@@ -66,6 +66,7 @@ void VoiceEngine::set_voice_state_for_session(const std::string& active_channel,
                                               const std::vector<std::string>& participants) {
     if (session_kind_ == VoiceSessionKind::Direct && !active_channel.empty()) {
         state_.ensure_channel(active_channel);
+        state_.set_active_channel(active_channel);
         ChannelUserInfo peer_info;
         peer_info.user_id = active_channel;
         peer_info.presence = state_.presence(active_channel);
@@ -226,6 +227,13 @@ void VoiceEngine::on_peer_left(const std::string& peer_id) {
 }
 
 void VoiceEngine::leave_room() {
+    if (!in_voice_) {
+        return;
+    }
+    if (session_kind_ == VoiceSessionKind::Direct) {
+        end_current_session(true, active_channel_);
+        return;
+    }
     end_current_session(false);
 }
 

@@ -1,5 +1,17 @@
 # TODOS
 
+    - [~] Voice toimimaan oikeasti
+        - [~] Audio settings
+            - [x] Input + ouput device list dropdown
+            - [x] Input volume ja output volume
+            - [x] Mode: Voice Activation vai PTT, PushToMute dropdown
+            - [x] Voice activation threshold (disabled jos ptt)
+            - [x] PTT hotkey
+            - [~] Mikä homma tehdä input test "oma input echolla omaan outputtiin"?
+            - [~] Mitä muita asetuksia sitä on?
+        - [ ] PeerToPeer voice toimimaan
+        - [ ] GroupVoice toimimaan
+    - [ ] ctrl-a voisi valita koko tekstin aktiivisesta inputista
     - [x] servulle jää quitanneet nimet kummitelemaan, vai pitäisikö ne näyttää jotenkin offline (servun ongelma)
     - [x] servulle yhteyden tekeminen "hidas", katso `dev_docs/desktop-client/becoming-online.png`
       - voisi ainakin ilmoittaa paremmin että vielä connectaa
