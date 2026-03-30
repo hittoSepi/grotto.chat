@@ -74,6 +74,9 @@ asio::awaitable<void> NetClient::run() {
         if (stopping_.load()) break;
 
         connected_.store(false);
+        while (!send_queue_.empty()) {
+            send_queue_.pop();
+        }
         if (callbacks_.on_disconnected) {
             callbacks_.on_disconnected(disconnect_reason);
         }
@@ -168,7 +171,17 @@ asio::awaitable<void> NetClient::read_loop(std::shared_ptr<SslSocket> socket) {
             continue;
         }
 
-        if (callbacks_.on_message) callbacks_.on_message(env);
+        if (callbacks_.on_message) {
+            try {
+                callbacks_.on_message(env);
+            } catch (const std::exception& e) {
+                spdlog::error("Inbound message handler threw for type {}: {}",
+                              static_cast<int>(env.type()), e.what());
+            } catch (...) {
+                spdlog::error("Inbound message handler threw for type {}",
+                              static_cast<int>(env.type()));
+            }
+        }
     }
 }
 

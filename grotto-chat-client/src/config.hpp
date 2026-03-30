@@ -105,6 +105,9 @@ std::filesystem::path default_config_dir();
 // Returns the default path for remembered login credentials.
 std::filesystem::path default_credentials_path();
 
+// Returns the remembered-credentials path under a specific config directory.
+std::filesystem::path credentials_path_for_config_dir(const std::filesystem::path& config_dir);
+
 // Clears remembered credentials and local encrypted client state.
 bool clear_local_client_state(ClientConfig& cfg,
                               const std::filesystem::path& config_path,

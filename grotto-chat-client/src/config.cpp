@@ -26,23 +26,23 @@ std::filesystem::path default_config_dir() {
 }
 
 std::filesystem::path default_credentials_path() {
-#ifdef _WIN32
-    const char* appdata = std::getenv("APPDATA");
-    if (appdata) {
-        return std::filesystem::path(appdata) / "grotto" / "credentials.enc";
+    return credentials_path_for_config_dir(default_config_dir());
+}
+
+std::filesystem::path credentials_path_for_config_dir(const std::filesystem::path& config_dir) {
+    if (config_dir.empty()) {
+        return std::filesystem::path("credentials.enc");
     }
-#else
-    const char* home = std::getenv("HOME");
-    if (home) {
-        return std::filesystem::path(home) / ".config" / "grotto" / "credentials.enc";
-    }
-#endif
-    return std::filesystem::path("credentials.enc");
+    return config_dir / "credentials.enc";
 }
 
 ClientConfig load_config(const std::filesystem::path& path) {
     ClientConfig cfg;
-    cfg.config_dir = default_config_dir();
+    if (!path.empty()) {
+        cfg.config_dir = std::filesystem::absolute(path).parent_path();
+    } else {
+        cfg.config_dir = default_config_dir();
+    }
     cfg.db_path    = cfg.config_dir / "grotto.db";
 
     if (path.empty() || !std::filesystem::exists(path)) {
@@ -155,7 +155,7 @@ bool clear_local_client_state(ClientConfig& cfg,
         }
     };
 
-    add_target(default_credentials_path());
+    add_target(credentials_path_for_config_dir(cfg.config_dir));
     add_target(cfg.db_path);
     if (!cfg.identity.key_file.empty()) {
         add_target(cfg.identity.key_file);

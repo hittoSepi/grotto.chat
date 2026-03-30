@@ -102,7 +102,7 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
 
     // Try to load remembered credentials
     try {
-        auto creds_path = default_credentials_path();
+        auto creds_path = credentials_path_for_config_dir(existing_cfg.config_dir);
         if (std::filesystem::exists(creds_path)) {
             std::ifstream file(creds_path, std::ios::binary);
             if (file) {
@@ -305,7 +305,7 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
         // Save credentials if remember is checked
         if (remember_) {
             try {
-                auto creds_path = default_credentials_path();
+                auto creds_path = credentials_path_for_config_dir(existing_cfg.config_dir);
                 std::filesystem::create_directories(creds_path.parent_path());
                 
                 std::string data = host_ + "\n" + port_str_ + "\n" + username_ + "\n" + passkey_;
@@ -321,7 +321,7 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
         } else {
             // Delete saved credentials if remember is unchecked
             try {
-                auto creds_path = default_credentials_path();
+                auto creds_path = credentials_path_for_config_dir(existing_cfg.config_dir);
                 if (std::filesystem::exists(creds_path)) {
                     std::filesystem::remove(creds_path);
                 }
