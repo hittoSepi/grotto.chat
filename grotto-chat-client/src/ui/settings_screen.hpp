@@ -6,6 +6,7 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace grotto::ui {
 
@@ -73,6 +74,8 @@ private:
 
     // === Appearance Settings ===
     std::string theme_;
+    int theme_selected_ = 0;
+    std::vector<std::string> theme_options_;
     int font_scale_;
     bool show_timestamps_;
     bool show_user_colors_;
@@ -84,6 +87,10 @@ private:
     std::string image_columns_;
     std::string image_rows_;
     std::string terminal_graphics_;
+    int terminal_graphics_selected_ = 0;
+    std::vector<std::string> terminal_graphics_options_ = {"auto", "off", "viewer-only"};
+    int language_selected_ = 0;
+    std::vector<std::string> language_options_ = {"Suomi", "English"};
 
     // === Connection Settings ===
     bool auto_reconnect_;
@@ -118,18 +125,18 @@ private:
     ftxui::Component logout_button_;
     
     // Input components for each category
-    ftxui::Component theme_input_;
+    ftxui::Component theme_toggle_;
     ftxui::Component timestamp_format_input_;
     ftxui::Component max_messages_input_;
     ftxui::Component image_columns_input_;
     ftxui::Component image_rows_input_;
-    ftxui::Component terminal_graphics_input_;
+    ftxui::Component terminal_graphics_toggle_;
     ftxui::Component reconnect_delay_input_;
     ftxui::Component timeout_input_;
     ftxui::Component cert_pin_input_;
     ftxui::Component keywords_input_;
     ftxui::Component nickname_input_;
-    ftxui::Component language_input_;
+    ftxui::Component language_toggle_;
 
     // Checkbox components (must persist across renders)
     ftxui::Component show_timestamps_cb_;

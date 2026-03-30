@@ -74,6 +74,57 @@ std::string category_label(SettingsCategory cat) {
     return "Unknown";
 }
 
+int terminal_graphics_to_index(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (value == "off") {
+        return 1;
+    }
+    if (value == "viewer-only") {
+        return 2;
+    }
+    return 0;
+}
+
+std::string terminal_graphics_from_index(int index) {
+    if (index == 1) {
+        return "off";
+    }
+    if (index == 2) {
+        return "viewer-only";
+    }
+    return "auto";
+}
+
+int language_to_index(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value == "en" ? 1 : 0;
+}
+
+std::string language_from_index(int index) {
+    return index == 1 ? "en" : "fi";
+}
+
+int theme_to_index(const std::vector<std::string>& options, const std::string& value) {
+    for (size_t i = 0; i < options.size(); ++i) {
+        if (options[i] == value) {
+            return static_cast<int>(i);
+        }
+    }
+    return 0;
+}
+
+std::string theme_from_index(const std::vector<std::string>& options, int index) {
+    if (options.empty()) {
+        return "tokyo-night";
+    }
+    if (index < 0 || index >= static_cast<int>(options.size())) {
+        return options.front();
+    }
+    return options[static_cast<size_t>(index)];
+}
+
 } // anonymous namespace
 
 const std::vector<std::string>& available_themes() {
@@ -224,18 +275,25 @@ void SettingsScreen::build_ui() {
     });
     
     // Input components
-    theme_input_ = Input(&theme_, "tokyo-night");
+    theme_options_ = available_themes();
+    if (theme_options_.empty()) {
+        theme_options_.push_back("tokyo-night");
+    }
+    theme_selected_ = theme_to_index(theme_options_, theme_);
+    theme_toggle_ = Toggle(&theme_options_, &theme_selected_);
     timestamp_format_input_ = Input(&timestamp_format_, "%H:%M");
     max_messages_input_ = Input(&max_messages_, "1000");
     image_columns_input_ = Input(&image_columns_, "40");
     image_rows_input_ = Input(&image_rows_, "16");
-    terminal_graphics_input_ = Input(&terminal_graphics_, "auto");
+    terminal_graphics_selected_ = terminal_graphics_to_index(terminal_graphics_);
+    terminal_graphics_toggle_ = Toggle(&terminal_graphics_options_, &terminal_graphics_selected_);
     reconnect_delay_input_ = Input(&reconnect_delay_sec_text_, "5");
     timeout_input_ = Input(&connection_timeout_sec_text_, "30");
     cert_pin_input_ = Input(&tls_cert_pin_, "");
     keywords_input_ = Input(&mention_keywords_, "");
     nickname_input_ = Input(&nickname_, "");
-    language_input_ = Input(&language_, "fi");
+    language_selected_ = language_to_index(language_);
+    language_toggle_ = Toggle(&language_options_, &language_selected_);
 
     // Checkbox components (created once, not per-render)
     copy_selection_on_release_cb_ = Checkbox(i18n::tr(i18n::I18nKey::COPY_ON_RELEASE), &copy_selection_on_release_);
@@ -268,12 +326,12 @@ void SettingsScreen::build_ui() {
     // Main container - all interactive components must be in the tree
     container_ = Container::Vertical({
         sidebar_container_,
-        theme_input_,
+        theme_toggle_,
         timestamp_format_input_,
         max_messages_input_,
         image_columns_input_,
         image_rows_input_,
-        terminal_graphics_input_,
+        terminal_graphics_toggle_,
         copy_selection_on_release_cb_,
         inline_images_cb_,
         show_timestamps_cb_,
@@ -289,7 +347,7 @@ void SettingsScreen::build_ui() {
         dm_cb_,
         keywords_input_,
         nickname_input_,
-        language_input_,
+        language_toggle_,
         export_button_persistent_,
         import_button_persistent_,
         logout_button_persistent_,
@@ -300,11 +358,11 @@ void SettingsScreen::build_ui() {
 }
 
 Element SettingsScreen::render_appearance() {
-    // Theme selection dropdown (using input for now)
+    // Theme selection dropdown/toggle
     auto theme_row = hbox({
         text(i18n::tr(i18n::I18nKey::THEME_LABEL)) | color(palette::fg_dark()),
-        theme_input_->Render() | size(WIDTH, GREATER_THAN, 20) | border,
-        text(" (" + std::to_string(kThemes.size()) + i18n::tr(i18n::I18nKey::THEME_AVAILABLE) + ")" ) | color(palette::comment()),
+        theme_toggle_->Render() | border,
+        text(" (" + std::to_string(theme_options_.size()) + i18n::tr(i18n::I18nKey::THEME_AVAILABLE) + ")" ) | color(palette::comment()),
     });
     
     // Font scale slider representation
@@ -341,7 +399,7 @@ Element SettingsScreen::render_appearance() {
         text(""),
         hbox({
             text(i18n::tr(i18n::I18nKey::LANGUAGE_LABEL)) | color(palette::fg_dark()),
-            language_input_->Render() | size(WIDTH, GREATER_THAN, 10) | border,
+            language_toggle_->Render() | border,
         }),
         text(""),
         text(i18n::tr(i18n::I18nKey::THEME_NOTE))
@@ -362,7 +420,7 @@ Element SettingsScreen::render_general() {
 
     auto terminal_graphics_row = hbox({
         text(i18n::tr(i18n::I18nKey::TERMINAL_GRAPHICS_LABEL)) | color(palette::fg_dark()),
-        terminal_graphics_input_->Render() | size(WIDTH, GREATER_THAN, 14) | border,
+        terminal_graphics_toggle_->Render() | border,
     });
 
     return vbox({
@@ -487,12 +545,14 @@ Element SettingsScreen::render_account() {
 void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     // Appearance
     theme_ = cfg.ui.theme;
+    theme_selected_ = theme_to_index(theme_options_.empty() ? available_themes() : theme_options_, theme_);
     timestamp_format_ = cfg.ui.timestamp_format;
     max_messages_ = std::to_string(cfg.ui.max_messages);
     font_scale_ = cfg.ui.font_scale;
     show_timestamps_ = cfg.ui.show_timestamps;
     show_user_colors_ = cfg.ui.show_user_colors;
     language_ = cfg.ui.language;
+    language_selected_ = language_to_index(language_);
     copy_selection_on_release_ = cfg.ui.copy_selection_on_release;
 
     // General preview settings
@@ -500,6 +560,7 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     image_columns_ = std::to_string(cfg.preview.image_columns);
     image_rows_ = std::to_string(cfg.preview.image_rows);
     terminal_graphics_ = cfg.preview.terminal_graphics;
+    terminal_graphics_selected_ = terminal_graphics_to_index(terminal_graphics_);
     
     // Connection
     auto_reconnect_ = cfg.connection.auto_reconnect;
@@ -533,16 +594,8 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
     auto clamp_int = [](int value, int lo, int hi) {
         return std::min(hi, std::max(lo, value));
     };
-    auto normalize_terminal_graphics = [](std::string value) {
-        std::transform(value.begin(), value.end(), value.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (value == "off" || value == "viewer-only") {
-            return value;
-        }
-        return std::string{"auto"};
-    };
-
     // Appearance
+    theme_ = theme_from_index(theme_options_, theme_selected_);
     cfg.ui.theme = theme_;
     cfg.ui.timestamp_format = timestamp_format_;
     cfg.ui.max_messages = parse_int_or(max_messages_, kDefaultMaxMessages);
@@ -550,16 +603,18 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
     cfg.ui.show_timestamps = show_timestamps_;
     cfg.ui.show_user_colors = show_user_colors_;
     cfg.ui.copy_selection_on_release = copy_selection_on_release_;
+    language_ = language_from_index(language_selected_);
     cfg.ui.language = language_;
 
     // General preview settings
     cfg.preview.inline_images = inline_images_;
     cfg.preview.image_columns = clamp_int(parse_int_or(image_columns_, cfg.preview.image_columns), 1, 400);
     cfg.preview.image_rows = clamp_int(parse_int_or(image_rows_, cfg.preview.image_rows), 1, 200);
-    cfg.preview.terminal_graphics = normalize_terminal_graphics(terminal_graphics_);
+    terminal_graphics_ = terminal_graphics_from_index(terminal_graphics_selected_);
+    cfg.preview.terminal_graphics = terminal_graphics_;
     image_columns_ = std::to_string(cfg.preview.image_columns);
     image_rows_ = std::to_string(cfg.preview.image_rows);
-    terminal_graphics_ = cfg.preview.terminal_graphics;
+    terminal_graphics_selected_ = terminal_graphics_to_index(cfg.preview.terminal_graphics);
 
     // Connection
     cfg.connection.auto_reconnect = auto_reconnect_;
@@ -592,6 +647,7 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
 void SettingsScreen::reset_to_defaults() {
     // Appearance defaults
     theme_ = "tokyo-night";
+    theme_selected_ = theme_to_index(theme_options_.empty() ? available_themes() : theme_options_, theme_);
     font_scale_ = kDefaultFontScale;
     show_timestamps_ = kDefaultShowTimestamps;
     show_user_colors_ = kDefaultShowUserColors;
@@ -602,6 +658,9 @@ void SettingsScreen::reset_to_defaults() {
     image_columns_ = "40";
     image_rows_ = "16";
     terminal_graphics_ = "auto";
+    terminal_graphics_selected_ = terminal_graphics_to_index(terminal_graphics_);
+    language_ = "fi";
+    language_selected_ = language_to_index(language_);
     
     // Connection defaults
     auto_reconnect_ = kDefaultAutoReconnect;
@@ -666,9 +725,16 @@ void SettingsScreen::import_settings() {
         
         if (data.contains("ui")) {
             auto& ui = data.at("ui");
-            if (ui.contains("theme")) theme_ = toml::find<std::string>(ui, "theme");
+            if (ui.contains("theme")) {
+                theme_ = toml::find<std::string>(ui, "theme");
+                theme_selected_ = theme_to_index(theme_options_.empty() ? available_themes() : theme_options_, theme_);
+            }
             if (ui.contains("timestamp_format")) timestamp_format_ = toml::find<std::string>(ui, "timestamp_format");
             if (ui.contains("max_messages")) max_messages_ = std::to_string(toml::find<int>(ui, "max_messages"));
+            if (ui.contains("language")) {
+                language_ = toml::find<std::string>(ui, "language");
+                language_selected_ = language_to_index(language_);
+            }
             if (ui.contains("copy_selection_on_release")) {
                 copy_selection_on_release_ = toml::find<bool>(ui, "copy_selection_on_release");
             }
@@ -681,6 +747,7 @@ void SettingsScreen::import_settings() {
             if (preview.contains("image_rows")) image_rows_ = std::to_string(toml::find<int>(preview, "image_rows"));
             if (preview.contains("terminal_graphics")) {
                 terminal_graphics_ = toml::find<std::string>(preview, "terminal_graphics");
+                terminal_graphics_selected_ = terminal_graphics_to_index(terminal_graphics_);
             }
         }
         
