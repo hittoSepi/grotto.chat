@@ -11,6 +11,7 @@ namespace grotto::ui {
 
 // Settings categories
 enum class SettingsCategory {
+    General,
     Appearance,
     Connection,
     Notifications,
@@ -49,13 +50,14 @@ private:
     void import_settings();
     
     // Category renderers
+    ftxui::Element render_general();
     ftxui::Element render_appearance();
     ftxui::Element render_connection();
     ftxui::Element render_notifications();
     ftxui::Element render_account();
 
     // UI State
-    SettingsCategory active_category_ = SettingsCategory::Appearance;
+    SettingsCategory active_category_ = SettingsCategory::General;
     bool saved_ = false;
     bool cancelled_ = false;
     bool logout_ = false;
@@ -77,11 +79,18 @@ private:
     std::string timestamp_format_;
     std::string max_messages_;
     std::string language_;
+    bool copy_selection_on_release_;
+    bool inline_images_;
+    std::string image_columns_;
+    std::string image_rows_;
+    std::string terminal_graphics_;
 
     // === Connection Settings ===
     bool auto_reconnect_;
     int reconnect_delay_sec_;
     int connection_timeout_sec_;
+    std::string reconnect_delay_sec_text_;
+    std::string connection_timeout_sec_text_;
     bool tls_verify_peer_;
     bool tls_use_custom_cert_;
     std::string tls_cert_pin_;
@@ -112,6 +121,9 @@ private:
     ftxui::Component theme_input_;
     ftxui::Component timestamp_format_input_;
     ftxui::Component max_messages_input_;
+    ftxui::Component image_columns_input_;
+    ftxui::Component image_rows_input_;
+    ftxui::Component terminal_graphics_input_;
     ftxui::Component reconnect_delay_input_;
     ftxui::Component timeout_input_;
     ftxui::Component cert_pin_input_;
@@ -122,6 +134,8 @@ private:
     // Checkbox components (must persist across renders)
     ftxui::Component show_timestamps_cb_;
     ftxui::Component show_user_colors_cb_;
+    ftxui::Component copy_selection_on_release_cb_;
+    ftxui::Component inline_images_cb_;
     ftxui::Component auto_reconnect_cb_;
     ftxui::Component tls_verify_cb_;
     ftxui::Component desktop_notif_cb_;

@@ -9,6 +9,8 @@
 #include <toml.hpp>
 
 #include <cstdlib>
+#include <algorithm>
+#include <cctype>
 #include <csignal>
 #include <filesystem>
 #include <fstream>
@@ -63,6 +65,7 @@ constexpr int kDefaultMaxMessages = 1000;
 // Category labels
 std::string category_label(SettingsCategory cat) {
     switch (cat) {
+        case SettingsCategory::General: return i18n::tr(i18n::I18nKey::CATEGORY_GENERAL);
         case SettingsCategory::Appearance: return i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE);
         case SettingsCategory::Connection: return i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION);
         case SettingsCategory::Notifications: return i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS);
@@ -107,7 +110,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     auto renderer = Renderer(container_, [this] {
         // Sidebar
         auto sidebar = vbox({
-            text(" " + i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE) + " ") | bold | color(palette::blue()),
+            text(" " + i18n::tr(i18n::I18nKey::CATEGORY_GENERAL) + " ") | bold | color(palette::blue()),
             separator(),
             sidebar_container_->Render(),
         }) | border | size(WIDTH, LESS_THAN, 20);
@@ -115,6 +118,9 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
         // Content area based on active category
         Element content;
         switch (active_category_) {
+            case SettingsCategory::General:
+                content = render_general();
+                break;
             case SettingsCategory::Appearance:
                 content = render_appearance();
                 break;
@@ -167,20 +173,24 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             exit_closure();
             return true;
         }
-        // F1-F4 to switch categories
+        // F1-F5 to switch categories
         if (event == Event::F1) {
-            active_category_ = SettingsCategory::Appearance;
+            active_category_ = SettingsCategory::General;
             return true;
         }
         if (event == Event::F2) {
-            active_category_ = SettingsCategory::Connection;
+            active_category_ = SettingsCategory::Appearance;
             return true;
         }
         if (event == Event::F3) {
-            active_category_ = SettingsCategory::Notifications;
+            active_category_ = SettingsCategory::Connection;
             return true;
         }
         if (event == Event::F4) {
+            active_category_ = SettingsCategory::Notifications;
+            return true;
+        }
+        if (event == Event::F5) {
             active_category_ = SettingsCategory::Account;
             return true;
         }
@@ -206,6 +216,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
 void SettingsScreen::build_ui() {
     // Sidebar category buttons
     sidebar_container_ = Container::Vertical({
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_GENERAL) + " ", [this] { active_category_ = SettingsCategory::General; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE) + " ", [this] { active_category_ = SettingsCategory::Appearance; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION) + " ", [this] { active_category_ = SettingsCategory::Connection; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS) + " ", [this] { active_category_ = SettingsCategory::Notifications; }),
@@ -216,14 +227,19 @@ void SettingsScreen::build_ui() {
     theme_input_ = Input(&theme_, "tokyo-night");
     timestamp_format_input_ = Input(&timestamp_format_, "%H:%M");
     max_messages_input_ = Input(&max_messages_, "1000");
-    reconnect_delay_input_ = Input(std::to_string(reconnect_delay_sec_), "5");
-    timeout_input_ = Input(std::to_string(connection_timeout_sec_), "30");
+    image_columns_input_ = Input(&image_columns_, "40");
+    image_rows_input_ = Input(&image_rows_, "16");
+    terminal_graphics_input_ = Input(&terminal_graphics_, "auto");
+    reconnect_delay_input_ = Input(&reconnect_delay_sec_text_, "5");
+    timeout_input_ = Input(&connection_timeout_sec_text_, "30");
     cert_pin_input_ = Input(&tls_cert_pin_, "");
     keywords_input_ = Input(&mention_keywords_, "");
     nickname_input_ = Input(&nickname_, "");
     language_input_ = Input(&language_, "fi");
 
     // Checkbox components (created once, not per-render)
+    copy_selection_on_release_cb_ = Checkbox(i18n::tr(i18n::I18nKey::COPY_ON_RELEASE), &copy_selection_on_release_);
+    inline_images_cb_ = Checkbox(i18n::tr(i18n::I18nKey::INLINE_IMAGES), &inline_images_);
     show_timestamps_cb_ = Checkbox(i18n::tr(i18n::I18nKey::SHOW_TIMESTAMPS), &show_timestamps_);
     show_user_colors_cb_ = Checkbox(i18n::tr(i18n::I18nKey::COLORIZE_USERNAMES), &show_user_colors_);
     auto_reconnect_cb_ = Checkbox(i18n::tr(i18n::I18nKey::AUTO_RECONNECT), &auto_reconnect_);
@@ -255,6 +271,11 @@ void SettingsScreen::build_ui() {
         theme_input_,
         timestamp_format_input_,
         max_messages_input_,
+        image_columns_input_,
+        image_rows_input_,
+        terminal_graphics_input_,
+        copy_selection_on_release_cb_,
+        inline_images_cb_,
         show_timestamps_cb_,
         show_user_colors_cb_,
         reconnect_delay_input_,
@@ -325,6 +346,37 @@ Element SettingsScreen::render_appearance() {
         text(""),
         text(i18n::tr(i18n::I18nKey::THEME_NOTE))
             | color(palette::comment()) | dim,
+    });
+}
+
+Element SettingsScreen::render_general() {
+    auto image_columns_row = hbox({
+        text(i18n::tr(i18n::I18nKey::IMAGE_COLUMNS_LABEL)) | color(palette::fg_dark()),
+        image_columns_input_->Render() | size(WIDTH, GREATER_THAN, 6) | border,
+    });
+
+    auto image_rows_row = hbox({
+        text(i18n::tr(i18n::I18nKey::IMAGE_ROWS_LABEL)) | color(palette::fg_dark()),
+        image_rows_input_->Render() | size(WIDTH, GREATER_THAN, 6) | border,
+    });
+
+    auto terminal_graphics_row = hbox({
+        text(i18n::tr(i18n::I18nKey::TERMINAL_GRAPHICS_LABEL)) | color(palette::fg_dark()),
+        terminal_graphics_input_->Render() | size(WIDTH, GREATER_THAN, 14) | border,
+    });
+
+    return vbox({
+        text(i18n::tr(i18n::I18nKey::CLIPBOARD_SETTINGS)) | bold | color(palette::blue()),
+        separator(),
+        copy_selection_on_release_cb_->Render(),
+        text(""),
+        text(i18n::tr(i18n::I18nKey::PREVIEW_SETTINGS)) | bold | color(palette::blue()),
+        separator(),
+        inline_images_cb_->Render(),
+        image_columns_row,
+        image_rows_row,
+        terminal_graphics_row,
+        text(i18n::tr(i18n::I18nKey::TERMINAL_GRAPHICS_HINT)) | color(palette::comment()) | dim,
     });
 }
 
@@ -437,44 +489,94 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     theme_ = cfg.ui.theme;
     timestamp_format_ = cfg.ui.timestamp_format;
     max_messages_ = std::to_string(cfg.ui.max_messages);
-    font_scale_ = kDefaultFontScale;
-    show_timestamps_ = kDefaultShowTimestamps;
-    show_user_colors_ = kDefaultShowUserColors;
+    font_scale_ = cfg.ui.font_scale;
+    show_timestamps_ = cfg.ui.show_timestamps;
+    show_user_colors_ = cfg.ui.show_user_colors;
     language_ = cfg.ui.language;
+    copy_selection_on_release_ = cfg.ui.copy_selection_on_release;
+
+    // General preview settings
+    inline_images_ = cfg.preview.inline_images;
+    image_columns_ = std::to_string(cfg.preview.image_columns);
+    image_rows_ = std::to_string(cfg.preview.image_rows);
+    terminal_graphics_ = cfg.preview.terminal_graphics;
     
-    // Connection (from existing config or defaults)
-    auto_reconnect_ = kDefaultAutoReconnect;
-    reconnect_delay_sec_ = (kDefaultReconnectDelay);
-    connection_timeout_sec_ = (kDefaultTimeout);
+    // Connection
+    auto_reconnect_ = cfg.connection.auto_reconnect;
+    reconnect_delay_sec_ = cfg.connection.reconnect_delay_sec;
+    reconnect_delay_sec_text_ = std::to_string(reconnect_delay_sec_);
+    connection_timeout_sec_ = cfg.connection.timeout_sec;
+    connection_timeout_sec_text_ = std::to_string(connection_timeout_sec_);
     tls_verify_peer_ = cfg.tls.verify_peer;
     tls_use_custom_cert_ = !cfg.server.cert_pin.empty();
     tls_cert_pin_ = cfg.server.cert_pin;
     
-    // Notifications (defaults)
-    desktop_notifications_ = kDefaultDesktopNotifications;
-    sound_alerts_ = kDefaultSoundAlerts;
-    notify_on_mention_ = kDefaultNotifyMention;
-    notify_on_dm_ = kDefaultNotifyDM;
-    mention_keywords_ = cfg.identity.user_id; // Default to username
+    // Notifications
+    desktop_notifications_ = cfg.notifications.desktop_notifications;
+    sound_alerts_ = cfg.notifications.sound_alerts;
+    notify_on_mention_ = cfg.notifications.notify_on_mention;
+    notify_on_dm_ = cfg.notifications.notify_on_dm;
+    mention_keywords_ = cfg.notifications.mention_keywords;
     
     // Account
     nickname_ = cfg.identity.user_id;
 }
 
 void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
+    auto parse_int_or = [](const std::string& value, int fallback) {
+        try {
+            return std::stoi(value);
+        } catch (...) {
+            return fallback;
+        }
+    };
+    auto clamp_int = [](int value, int lo, int hi) {
+        return std::min(hi, std::max(lo, value));
+    };
+    auto normalize_terminal_graphics = [](std::string value) {
+        std::transform(value.begin(), value.end(), value.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (value == "off" || value == "viewer-only") {
+            return value;
+        }
+        return std::string{"auto"};
+    };
+
     // Appearance
     cfg.ui.theme = theme_;
     cfg.ui.timestamp_format = timestamp_format_;
-    try {
-        cfg.ui.max_messages = std::stoi(max_messages_);
-    } catch (...) {
-        cfg.ui.max_messages = kDefaultMaxMessages;
-    }
+    cfg.ui.max_messages = parse_int_or(max_messages_, kDefaultMaxMessages);
+    cfg.ui.font_scale = font_scale_;
+    cfg.ui.show_timestamps = show_timestamps_;
+    cfg.ui.show_user_colors = show_user_colors_;
+    cfg.ui.copy_selection_on_release = copy_selection_on_release_;
     cfg.ui.language = language_;
-    
+
+    // General preview settings
+    cfg.preview.inline_images = inline_images_;
+    cfg.preview.image_columns = clamp_int(parse_int_or(image_columns_, cfg.preview.image_columns), 1, 400);
+    cfg.preview.image_rows = clamp_int(parse_int_or(image_rows_, cfg.preview.image_rows), 1, 200);
+    cfg.preview.terminal_graphics = normalize_terminal_graphics(terminal_graphics_);
+    image_columns_ = std::to_string(cfg.preview.image_columns);
+    image_rows_ = std::to_string(cfg.preview.image_rows);
+    terminal_graphics_ = cfg.preview.terminal_graphics;
+
     // Connection
+    cfg.connection.auto_reconnect = auto_reconnect_;
+    cfg.connection.reconnect_delay_sec = clamp_int(parse_int_or(reconnect_delay_sec_text_, kDefaultReconnectDelay), 1, 300);
+    cfg.connection.timeout_sec = clamp_int(parse_int_or(connection_timeout_sec_text_, kDefaultTimeout), 1, 300);
+    reconnect_delay_sec_text_ = std::to_string(cfg.connection.reconnect_delay_sec);
+    connection_timeout_sec_text_ = std::to_string(cfg.connection.timeout_sec);
+    
     cfg.tls.verify_peer = tls_verify_peer_;
     cfg.server.cert_pin = tls_cert_pin_;
+
+    // Notifications
+    cfg.notifications.desktop_notifications = desktop_notifications_;
+    cfg.notifications.sound_alerts = sound_alerts_;
+    cfg.notifications.notify_on_mention = notify_on_mention_;
+    cfg.notifications.notify_on_dm = notify_on_dm_;
+    cfg.notifications.mention_keywords = mention_keywords_;
     
     // Account
     if (!nickname_.empty() && nickname_ != cfg.identity.user_id) {
@@ -495,11 +597,18 @@ void SettingsScreen::reset_to_defaults() {
     show_user_colors_ = kDefaultShowUserColors;
     timestamp_format_ = "%H:%M";
     max_messages_ = std::to_string(kDefaultMaxMessages);
+    copy_selection_on_release_ = true;
+    inline_images_ = true;
+    image_columns_ = "40";
+    image_rows_ = "16";
+    terminal_graphics_ = "auto";
     
     // Connection defaults
     auto_reconnect_ = kDefaultAutoReconnect;
     reconnect_delay_sec_ = kDefaultReconnectDelay;
+    reconnect_delay_sec_text_ = std::to_string(kDefaultReconnectDelay);
     connection_timeout_sec_ = kDefaultTimeout;
+    connection_timeout_sec_text_ = std::to_string(kDefaultTimeout);
     tls_verify_peer_ = kDefaultTlsVerify;
     tls_use_custom_cert_ = false;
     tls_cert_pin_.clear();
@@ -521,10 +630,15 @@ void SettingsScreen::export_settings() {
         data["ui"]["theme"] = theme_;
         data["ui"]["timestamp_format"] = timestamp_format_;
         data["ui"]["max_messages"] = std::stoi(max_messages_);
+        data["ui"]["copy_selection_on_release"] = copy_selection_on_release_;
+        data["preview"]["inline_images"] = inline_images_;
+        data["preview"]["image_columns"] = std::stoi(image_columns_);
+        data["preview"]["image_rows"] = std::stoi(image_rows_);
+        data["preview"]["terminal_graphics"] = terminal_graphics_;
         
         data["connection"]["auto_reconnect"] = auto_reconnect_;
-        data["connection"]["reconnect_delay"] = reconnect_delay_sec_;
-        data["connection"]["timeout"] = connection_timeout_sec_;
+        data["connection"]["reconnect_delay"] = std::stoi(reconnect_delay_sec_text_);
+        data["connection"]["timeout"] = std::stoi(connection_timeout_sec_text_);
         
         data["notifications"]["desktop"] = desktop_notifications_;
         data["notifications"]["sound"] = sound_alerts_;
@@ -555,14 +669,27 @@ void SettingsScreen::import_settings() {
             if (ui.contains("theme")) theme_ = toml::find<std::string>(ui, "theme");
             if (ui.contains("timestamp_format")) timestamp_format_ = toml::find<std::string>(ui, "timestamp_format");
             if (ui.contains("max_messages")) max_messages_ = std::to_string(toml::find<int>(ui, "max_messages"));
+            if (ui.contains("copy_selection_on_release")) {
+                copy_selection_on_release_ = toml::find<bool>(ui, "copy_selection_on_release");
+            }
+        }
+
+        if (data.contains("preview")) {
+            auto& preview = data.at("preview");
+            if (preview.contains("inline_images")) inline_images_ = toml::find<bool>(preview, "inline_images");
+            if (preview.contains("image_columns")) image_columns_ = std::to_string(toml::find<int>(preview, "image_columns"));
+            if (preview.contains("image_rows")) image_rows_ = std::to_string(toml::find<int>(preview, "image_rows"));
+            if (preview.contains("terminal_graphics")) {
+                terminal_graphics_ = toml::find<std::string>(preview, "terminal_graphics");
+            }
         }
         
         if (data.contains("connection")) {
             
             auto& conn = data.at("connection");
             if (conn.contains("auto_reconnect")) auto_reconnect_ = toml::find<bool>(conn, "auto_reconnect");
-            if (conn.contains("reconnect_delay")) reconnect_delay_sec_ = std::atoi(std::to_string(toml::find<int>(conn, "reconnect_delay")).c_str());
-            if (conn.contains("timeout")) connection_timeout_sec_ = int(toml::find<int>(conn, "timeout"));
+            if (conn.contains("reconnect_delay")) reconnect_delay_sec_text_ = std::to_string(toml::find<int>(conn, "reconnect_delay"));
+            if (conn.contains("timeout")) connection_timeout_sec_text_ = std::to_string(toml::find<int>(conn, "timeout"));
         }
         
         if (data.contains("notifications")) {
