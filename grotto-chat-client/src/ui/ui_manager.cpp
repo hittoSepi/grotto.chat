@@ -459,6 +459,8 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
         // Channel switch via mouse
         auto channels = state_.channel_list();
         if (tab_idx < static_cast<int>(channels.size())) {
+            has_persistent_text_selection_ = false;
+            mouse_tracker_.end_selection();
             state_.set_active_channel(channels[tab_idx]);
             state_.mark_read(channels[tab_idx]);
         }
@@ -1006,6 +1008,12 @@ Element UIManager::build_document(int term_rows) {
     // Panels
     auto channels  = state_.channel_list();
     auto active_ch = state_.active_channel().value_or("");
+
+    if (active_ch != last_active_channel_) {
+        has_persistent_text_selection_ = false;
+        mouse_tracker_.end_selection();
+        last_active_channel_ = active_ch;
+    }
 
     // Tab bar with position tracking for mouse hit testing
     std::vector<int> unread;

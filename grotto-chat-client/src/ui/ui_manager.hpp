@@ -130,6 +130,7 @@ private:
 
     std::unordered_map<std::string, int> selected_image_indices_;
     bool has_persistent_text_selection_ = false;
+    std::string last_active_channel_;
     GraphicsCompositor graphics_compositor_;
     GraphicsFrame pending_graphics_frame_;
     std::string toast_text_;
