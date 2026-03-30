@@ -12,7 +12,11 @@ namespace grotto::ui {
 ftxui::Element render_messages(const ChannelState& state,
                                const std::string& timestamp_format,
                                int visible_rows,
-                               int width);
+                               int width,
+                               int selected_start_row = -1,
+                               int selected_start_col = -1,
+                               int selected_end_row = -1,
+                               int selected_end_col = -1);
 
 std::vector<GraphicsDrawCommand> collect_visible_draw_commands(
     const ChannelState& state,

@@ -1,7 +1,10 @@
 #include "ui/mouse_support.hpp"
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <cstdlib>
 #include <cstdio>
+#include <iostream>
 #include <regex>
 #include <vector>
 
@@ -19,6 +22,16 @@
 namespace grotto::ui {
 
 namespace {
+
+enum class LinuxClipboardBackend {
+    Unknown,
+    WlCopy,
+    Xclip,
+    Osc52,
+};
+
+LinuxClipboardBackend g_linux_clipboard_backend = LinuxClipboardBackend::Unknown;
+bool g_linux_clipboard_initialized = false;
 
 #ifdef _WIN32
 #define popen _popen
@@ -42,6 +55,139 @@ std::optional<std::string> read_pipe_output(const char* command) {
         return std::nullopt;
     }
     return output;
+}
+
+std::string base64_encode(std::string_view input) {
+    static constexpr char kBase64Alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((input.size() + 2) / 3) * 4);
+
+    size_t i = 0;
+    while (i + 3 <= input.size()) {
+        const uint32_t chunk = (static_cast<uint32_t>(static_cast<unsigned char>(input[i])) << 16) |
+                               (static_cast<uint32_t>(static_cast<unsigned char>(input[i + 1])) << 8) |
+                               static_cast<uint32_t>(static_cast<unsigned char>(input[i + 2]));
+        out.push_back(kBase64Alphabet[(chunk >> 18) & 0x3F]);
+        out.push_back(kBase64Alphabet[(chunk >> 12) & 0x3F]);
+        out.push_back(kBase64Alphabet[(chunk >> 6) & 0x3F]);
+        out.push_back(kBase64Alphabet[chunk & 0x3F]);
+        i += 3;
+    }
+
+    const size_t rem = input.size() - i;
+    if (rem == 1) {
+        const uint32_t chunk = static_cast<uint32_t>(static_cast<unsigned char>(input[i])) << 16;
+        out.push_back(kBase64Alphabet[(chunk >> 18) & 0x3F]);
+        out.push_back(kBase64Alphabet[(chunk >> 12) & 0x3F]);
+        out.push_back('=');
+        out.push_back('=');
+    } else if (rem == 2) {
+        const uint32_t chunk =
+            (static_cast<uint32_t>(static_cast<unsigned char>(input[i])) << 16) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(input[i + 1])) << 8);
+        out.push_back(kBase64Alphabet[(chunk >> 18) & 0x3F]);
+        out.push_back(kBase64Alphabet[(chunk >> 12) & 0x3F]);
+        out.push_back(kBase64Alphabet[(chunk >> 6) & 0x3F]);
+        out.push_back('=');
+    }
+
+    return out;
+}
+
+void copy_via_osc52(std::string_view text) {
+    if (text.empty()) {
+        return;
+    }
+
+    const std::string encoded = base64_encode(text);
+    // Plain OSC52 (BEL and ST terminators).
+    std::cout << "\033]52;c;" << encoded << "\a";
+    std::cout << "\033]52;c;" << encoded << "\033\\";
+
+    // tmux wrapped OSC52.
+    if (std::getenv("TMUX")) {
+        std::cout << "\033Ptmux;\033\033]52;c;" << encoded << "\a\033\\";
+    }
+
+    // GNU screen style DCS passthrough.
+    if (std::getenv("STY")) {
+        std::cout << "\033P\033]52;c;" << encoded << "\a\033\\";
+    }
+
+    std::cout << std::flush;
+}
+
+bool copy_with_command_and_verify(const std::string& text,
+                                  const char* write_cmd,
+                                  const char* read_cmd) {
+    FILE* pipe = popen(write_cmd, "w");
+    if (!pipe) {
+        return false;
+    }
+
+    const size_t written = fwrite(text.c_str(), 1, text.size(), pipe);
+    const int close_rc = pclose(pipe);
+    if (written != text.size() || close_rc != 0) {
+        return false;
+    }
+
+    auto read_back = read_pipe_output(read_cmd);
+    if (!read_back) {
+        return false;
+    }
+    return *read_back == text;
+}
+
+bool write_with_command(const std::string& text, const char* write_cmd) {
+    FILE* pipe = popen(write_cmd, "w");
+    if (!pipe) {
+        return false;
+    }
+    const size_t written = fwrite(text.c_str(), 1, text.size(), pipe);
+    const int close_rc = pclose(pipe);
+    return written == text.size() && close_rc == 0;
+}
+
+std::string make_probe_token() {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+    return "__grotto_clip_probe_" + std::to_string(now) + "__";
+}
+
+void probe_linux_clipboard_backend() {
+    if (g_linux_clipboard_initialized) {
+        return;
+    }
+    g_linux_clipboard_initialized = true;
+
+    // Best effort preserve old clipboard contents from available readers.
+    std::optional<std::string> old_wl = read_pipe_output("wl-paste -n 2>/dev/null");
+    std::optional<std::string> old_xclip = read_pipe_output("xclip -selection clipboard -o 2>/dev/null");
+    const std::string token = make_probe_token();
+
+    if (copy_with_command_and_verify(token, "wl-copy 2>/dev/null", "wl-paste -n 2>/dev/null")) {
+        g_linux_clipboard_backend = LinuxClipboardBackend::WlCopy;
+        if (old_wl) {
+            (void)write_with_command(*old_wl, "wl-copy 2>/dev/null");
+        } else if (old_xclip) {
+            (void)write_with_command(*old_xclip, "wl-copy 2>/dev/null");
+        }
+        return;
+    }
+
+    if (copy_with_command_and_verify(token,
+                                     "xclip -selection clipboard 2>/dev/null",
+                                     "xclip -selection clipboard -o 2>/dev/null")) {
+        g_linux_clipboard_backend = LinuxClipboardBackend::Xclip;
+        if (old_xclip) {
+            (void)write_with_command(*old_xclip, "xclip -selection clipboard 2>/dev/null");
+        } else if (old_wl) {
+            (void)write_with_command(*old_wl, "xclip -selection clipboard 2>/dev/null");
+        }
+        return;
+    }
+
+    g_linux_clipboard_backend = LinuxClipboardBackend::Osc52;
 }
 
 #ifdef _WIN32
@@ -84,6 +230,12 @@ std::string utf16_to_utf8(const wchar_t* text) {
 // ============================================================================
 // MouseTracker Implementation
 // ============================================================================
+
+void initialize_clipboard_backend() {
+#if !defined(_WIN32) && !defined(__APPLE__)
+    probe_linux_clipboard_backend();
+#endif
+}
 
 void MouseTracker::record_click(int x, int y) {
     auto now = std::chrono::steady_clock::now();
@@ -193,12 +345,20 @@ void copy_to_clipboard(const std::string& text) {
         pclose(pipe);
     }
 #else
-    // Linux - try xclip first, then wl-copy for Wayland
-    FILE* pipe = popen("xclip -selection clipboard 2>/dev/null || wl-copy 2>/dev/null", "w");
-    if (pipe) {
-        fwrite(text.c_str(), 1, text.size(), pipe);
-        pclose(pipe);
+    probe_linux_clipboard_backend();
+    if (g_linux_clipboard_backend == LinuxClipboardBackend::WlCopy) {
+        if (!write_with_command(text, "wl-copy 2>/dev/null")) {
+            copy_via_osc52(text);
+        }
+        return;
     }
+    if (g_linux_clipboard_backend == LinuxClipboardBackend::Xclip) {
+        if (!write_with_command(text, "xclip -selection clipboard 2>/dev/null")) {
+            copy_via_osc52(text);
+        }
+        return;
+    }
+    copy_via_osc52(text);
 #endif
 }
 

@@ -124,6 +124,10 @@ public:
     void update_selection(int x, int y);
     void end_selection();
     UIRegion selection_region() const;
+    int selection_start_x() const { return selection_start_x_; }
+    int selection_start_y() const { return selection_start_y_; }
+    int selection_end_x() const { return selection_end_x_; }
+    int selection_end_y() const { return selection_end_y_; }
     
     // Region hit testing
     void set_tab_bar_region(const UIRegion& r) { tab_bar_ = r; }
@@ -177,6 +181,7 @@ private:
 };
 
 // Clipboard utility
+void initialize_clipboard_backend();
 void copy_to_clipboard(const std::string& text);
 std::optional<std::string> read_from_clipboard();
 

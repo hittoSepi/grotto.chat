@@ -91,9 +91,12 @@ public:
 
 private:
     ftxui::Element build_document(int term_rows);
+    void show_toast(std::string text,
+                    std::chrono::milliseconds duration = std::chrono::milliseconds(1200));
     
     // Build the main content area (messages + user list panel)
     ftxui::Element build_main_content(const std::string& active_ch, int msg_rows, int term_cols);
+    void copy_message_selection_to_clipboard();
     void remember_selected_image(const std::string& channel_id, int message_index);
     std::optional<int> selected_image_index(const std::string& channel_id,
                                             const ChannelState& state) const;
@@ -128,6 +131,8 @@ private:
     std::unordered_map<std::string, int> selected_image_indices_;
     GraphicsCompositor graphics_compositor_;
     GraphicsFrame pending_graphics_frame_;
+    std::string toast_text_;
+    std::chrono::steady_clock::time_point toast_until_{};
 };
 
 } // namespace grotto::ui

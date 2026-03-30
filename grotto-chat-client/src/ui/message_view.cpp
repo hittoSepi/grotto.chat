@@ -47,6 +47,44 @@ int visible_width(std::string_view text) {
     return width;
 }
 
+size_t byte_offset_for_display_column(std::string_view text, int display_column) {
+    if (display_column <= 0) {
+        return 0;
+    }
+
+    int col = 0;
+    size_t i = 0;
+    while (i < text.size() && col < display_column) {
+        unsigned char c = static_cast<unsigned char>(text[i]);
+        size_t cp_len = 1;
+        if ((c & 0x80) == 0) cp_len = 1;
+        else if ((c & 0xE0) == 0xC0) cp_len = 2;
+        else if ((c & 0xF0) == 0xE0) cp_len = 3;
+        else if ((c & 0xF8) == 0xF0) cp_len = 4;
+        i += cp_len;
+        ++col;
+    }
+    return i;
+}
+
+std::string substring_by_display_columns(const std::string& text, int start_col, int end_col) {
+    if (end_col <= start_col) {
+        return {};
+    }
+    const int text_cols = visible_width(text);
+    const int start = std::clamp(start_col, 0, text_cols);
+    const int end = std::clamp(end_col, start, text_cols);
+    if (end <= start) {
+        return {};
+    }
+    const size_t start_byte = byte_offset_for_display_column(text, start);
+    const size_t end_byte = byte_offset_for_display_column(text, end);
+    if (end_byte <= start_byte || start_byte >= text.size()) {
+        return {};
+    }
+    return text.substr(start_byte, end_byte - start_byte);
+}
+
 std::optional<std::string> find_url_in_text(const std::string& text) {
     static const std::regex url_re(R"(((?:https?://|www\.)\S+))");
     std::smatch match;
@@ -231,7 +269,11 @@ std::pair<int, int> visible_row_window(int total, int visible_rows, int scroll_o
 Element render_messages(const ChannelState& state,
                         const std::string& timestamp_format,
                         int visible_rows,
-                        int width) {
+                        int width,
+                        int selected_start_row,
+                        int selected_start_col,
+                        int selected_end_row,
+                        int selected_end_col) {
     if (state.messages.empty()) {
         return text(i18n::tr(i18n::I18nKey::NO_MESSAGES)) | color(palette::comment()) | center;
     }
@@ -247,7 +289,42 @@ Element render_messages(const ChannelState& state,
     Elements visible;
     visible.reserve(bottom_idx - top_idx + 1);
     for (int i = top_idx; i <= bottom_idx; ++i) {
-        visible.push_back(std::move(all_rows[i].element));
+        const auto& row = all_rows[i];
+        auto row_el = std::move(all_rows[i].element);
+        const int visible_row = i - top_idx;
+        if (selected_start_row >= 0 &&
+            selected_end_row >= selected_start_row &&
+            visible_row >= selected_start_row &&
+            visible_row <= selected_end_row) {
+            const int line_cols = visible_width(row.plain_text);
+            int from_col = 0;
+            int to_col = line_cols;
+            if (selected_start_row == selected_end_row) {
+                from_col = selected_start_col;
+                to_col = selected_end_col + 1;
+            } else if (visible_row == selected_start_row) {
+                from_col = selected_start_col;
+            } else if (visible_row == selected_end_row) {
+                to_col = selected_end_col + 1;
+            }
+
+            from_col = std::clamp(from_col, 0, line_cols);
+            to_col = std::clamp(to_col, from_col, line_cols);
+
+            if (to_col > from_col && line_cols > 0) {
+                const std::string left = substring_by_display_columns(row.plain_text, 0, from_col);
+                const std::string mid = substring_by_display_columns(row.plain_text, from_col, to_col);
+                const std::string right = substring_by_display_columns(row.plain_text, to_col, line_cols);
+                row_el = hbox({
+                    text(left),
+                    text(mid) | bgcolor(palette::bg_highlight()),
+                    text(right),
+                });
+            } else {
+                row_el = std::move(row_el) | bgcolor(palette::bg_highlight());
+            }
+        }
+        visible.push_back(std::move(row_el));
     }
     return vbox(std::move(visible));
 }

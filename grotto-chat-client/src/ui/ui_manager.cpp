@@ -12,6 +12,7 @@
 #include <ftxui/dom/flexbox_config.hpp>
 #include <chrono>
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <regex>
@@ -121,6 +122,46 @@ int visible_width(std::string_view text) {
         ++width;
     }
     return width;
+}
+
+size_t byte_offset_for_display_column(std::string_view text, int display_column) {
+    if (display_column <= 0) {
+        return 0;
+    }
+
+    int col = 0;
+    size_t i = 0;
+    while (i < text.size() && col < display_column) {
+        unsigned char c = static_cast<unsigned char>(text[i]);
+        size_t cp_len = 1;
+        if ((c & 0x80) == 0) cp_len = 1;
+        else if ((c & 0xE0) == 0xC0) cp_len = 2;
+        else if ((c & 0xF0) == 0xE0) cp_len = 3;
+        else if ((c & 0xF8) == 0xF0) cp_len = 4;
+        i += cp_len;
+        ++col;
+    }
+    return i;
+}
+
+std::string substring_by_display_columns(const std::string& text, int start_col, int end_col) {
+    if (end_col <= start_col) {
+        return {};
+    }
+
+    const int text_cols = visible_width(text);
+    const int clamped_start = std::clamp(start_col, 0, text_cols);
+    const int clamped_end = std::clamp(end_col, clamped_start, text_cols);
+    if (clamped_end <= clamped_start) {
+        return {};
+    }
+
+    const size_t start_byte = byte_offset_for_display_column(text, clamped_start);
+    const size_t end_byte = byte_offset_for_display_column(text, clamped_end);
+    if (end_byte <= start_byte || start_byte >= text.size()) {
+        return {};
+    }
+    return text.substr(start_byte, end_byte - start_byte);
 }
 
 std::vector<std::string> split_nonempty_lines(const std::string& text, size_t max_lines) {
@@ -313,6 +354,7 @@ UIManager::UIManager(AppState& state, ClientConfig& cfg)
     // Initialize user list panel config from persisted settings
     user_list_config_.width = cfg.ui.user_list_width;
     user_list_config_.collapsed = cfg.ui.user_list_collapsed;
+    initialize_clipboard_backend();
     configure_terminal_graphics(parse_terminal_graphics_mode(cfg_.preview.terminal_graphics));
 }
 
@@ -400,32 +442,8 @@ bool UIManager::handle_mouse_event(const Event& event) {
             return true;
         }
         if (mouse_tracker_.is_selecting()) {
-            // Copy selected messages to clipboard on mouse release
-            auto sel = mouse_tracker_.selection_region();
-            if (sel.height > 0 && mouse_tracker_.is_over_message_area()) {
-                auto ch = state_.active_channel();
-                if (ch) {
-                    auto ch_state = state_.channel_snapshot(*ch);
-                    int visible_rows = mouse_tracker_.message_region().height;
-                    int message_width = effective_message_width(
-                        mouse_tracker_, user_list_config_, screen_.dimx());
-                    auto visible = collect_visible_layout_hits(
-                        ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
-                    if (!visible.empty()) {
-                        int start_line = std::max(0, sel.y - mouse_tracker_.message_region().y);
-                        int end_line = std::min(static_cast<int>(visible.size()) - 1,
-                                                start_line + sel.height - 1);
-                        std::string selected;
-                        for (int i = start_line; i <= end_line; ++i) {
-                            if (!selected.empty()) selected += '\n';
-                            selected += visible[i].plain_text;
-                        }
-                        if (!selected.empty()) {
-                            copy_to_clipboard(selected);
-                        }
-                    }
-                }
-            }
+            // Auto-copy text selection on mouse release (works even if Ctrl+C is unreliable).
+            copy_message_selection_to_clipboard();
             mouse_tracker_.end_selection();
             return true;
         }
@@ -652,38 +670,109 @@ void UIManager::update_text_selection(int mouse_x, int mouse_y) {
 }
 
 void UIManager::end_text_selection() {
+    copy_message_selection_to_clipboard();
     mouse_tracker_.end_selection();
-    
-    // Extract selected text from messages
-    auto region = mouse_tracker_.selection_region();
-    if (region.height <= 0) {
-        return;
-    }
+}
+
+void UIManager::copy_message_selection_to_clipboard() {
     auto ch = state_.active_channel();
     if (!ch) {
         return;
     }
+
+    const auto msg_region = mouse_tracker_.message_region();
+    const auto sel = mouse_tracker_.selection_region();
+    if (sel.height <= 0 || msg_region.height <= 0 || msg_region.width <= 0) {
+        return;
+    }
+    // Ignore plain click (no drag): avoid copying accidental empty/whitespace selection.
+    if (mouse_tracker_.selection_start_x() == mouse_tracker_.selection_end_x() &&
+        mouse_tracker_.selection_start_y() == mouse_tracker_.selection_end_y()) {
+        return;
+    }
+
     auto ch_state = state_.channel_snapshot(*ch);
-    int visible_rows = mouse_tracker_.message_region().height;
-    int message_width = effective_message_width(
+    const int visible_rows = msg_region.height;
+    const int message_width = effective_message_width(
         mouse_tracker_, user_list_config_, screen_.dimx());
     auto visible = collect_visible_layout_hits(
         ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
     if (visible.empty()) {
         return;
     }
-    int start_line = std::max(0, region.y - mouse_tracker_.message_region().y);
-    int end_line = std::min(static_cast<int>(visible.size()) - 1,
-                            start_line + region.height - 1);
-    std::string selected;
-    for (int i = start_line; i <= end_line; ++i) {
-        if (!selected.empty()) {
-            selected += '\n';
-        }
-        selected += visible[i].plain_text;
+
+    const int start_line_raw = mouse_tracker_.selection_start_y() - msg_region.y;
+    const int end_line_raw = mouse_tracker_.selection_end_y() - msg_region.y;
+    const int start_col_raw = mouse_tracker_.selection_start_x() - msg_region.x;
+    const int end_col_raw = mouse_tracker_.selection_end_x() - msg_region.x;
+
+    int top_line = start_line_raw;
+    int top_col = start_col_raw;
+    int bottom_line = end_line_raw;
+    int bottom_col = end_col_raw;
+    if (start_line_raw > end_line_raw ||
+        (start_line_raw == end_line_raw && start_col_raw > end_col_raw)) {
+        top_line = end_line_raw;
+        top_col = end_col_raw;
+        bottom_line = start_line_raw;
+        bottom_col = start_col_raw;
     }
-    if (!selected.empty()) {
+
+    top_line = std::clamp(top_line, 0, static_cast<int>(visible.size()) - 1);
+    bottom_line = std::clamp(bottom_line, top_line, static_cast<int>(visible.size()) - 1);
+    top_col = std::clamp(top_col, 0, message_width);
+    bottom_col = std::clamp(bottom_col, 0, message_width);
+
+    std::vector<std::string> selected_lines;
+    selected_lines.reserve(static_cast<size_t>(bottom_line - top_line + 1));
+    bool has_selected_characters = false;
+    for (int i = top_line; i <= bottom_line; ++i) {
+        const std::string& line = visible[static_cast<size_t>(i)].plain_text;
+        const int line_cols = visible_width(line);
+        int from = (i == top_line) ? top_col : 0;
+        int to = (i == bottom_line) ? (bottom_col + 1) : line_cols;
+        from = std::clamp(from, 0, line_cols);
+        to = std::clamp(to, from, line_cols);
+        std::string slice = substring_by_display_columns(line, from, to);
+        if (!slice.empty()) {
+            const bool has_non_space = std::any_of(slice.begin(), slice.end(), [](unsigned char c) {
+                return !std::isspace(c);
+            });
+            if (has_non_space) {
+                has_selected_characters = true;
+            }
+        }
+        selected_lines.push_back(std::move(slice));
+    }
+
+    std::string selected;
+    for (size_t i = 0; i < selected_lines.size(); ++i) {
+        if (i > 0) {
+            selected.push_back('\n');
+        }
+        selected += selected_lines[i];
+    }
+
+    auto has_non_space_text = [](const std::string& text) {
+        return std::any_of(text.begin(), text.end(), [](unsigned char c) {
+            return !std::isspace(c);
+        });
+    };
+
+    // Fallback to line-level copy if character slicing ends up empty.
+    if (!has_selected_characters || !has_non_space_text(selected)) {
+        selected.clear();
+        for (int i = top_line; i <= bottom_line; ++i) {
+            if (!selected.empty()) {
+                selected.push_back('\n');
+            }
+            selected += visible[static_cast<size_t>(i)].plain_text;
+        }
+    }
+
+    if (has_non_space_text(selected)) {
         copy_to_clipboard(selected);
+        show_toast("Copied to clipboard");
     }
 }
 
@@ -697,6 +786,14 @@ void UIManager::copy_selection_to_clipboard() {
 
 void UIManager::notify() {
     screen_.PostEvent(Event::Custom);
+}
+
+void UIManager::show_toast(std::string text, std::chrono::milliseconds duration) {
+    if (text.empty()) {
+        return;
+    }
+    toast_text_ = std::move(text);
+    toast_until_ = std::chrono::steady_clock::now() + duration;
 }
 
 void UIManager::request_exit() {
@@ -774,15 +871,26 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
 
     mouse_tracker_.set_message_region({0, mouse_tracker_.message_region().y, msg_width, msg_rows});
 
-    int selected_row_start = -1;
-    int selected_row_end = -1;
+    int selected_start_row = -1;
+    int selected_start_col = -1;
+    int selected_end_row = -1;
+    int selected_end_col = -1;
     if (mouse_tracker_.is_selecting()) {
-        const auto sel = mouse_tracker_.selection_region();
         const auto msg_region = mouse_tracker_.message_region();
-        const int sel_start = sel.y - msg_region.y;
-        const int sel_end = sel_start + sel.height - 1;
-        selected_row_start = std::clamp(sel_start, 0, std::max(0, msg_rows - 1));
-        selected_row_end = std::clamp(sel_end, selected_row_start, std::max(0, msg_rows - 1));
+        int start_row = mouse_tracker_.selection_start_y() - msg_region.y;
+        int end_row = mouse_tracker_.selection_end_y() - msg_region.y;
+        int start_col = mouse_tracker_.selection_start_x() - msg_region.x;
+        int end_col = mouse_tracker_.selection_end_x() - msg_region.x;
+
+        if (start_row > end_row || (start_row == end_row && start_col > end_col)) {
+            std::swap(start_row, end_row);
+            std::swap(start_col, end_col);
+        }
+
+        selected_start_row = std::clamp(start_row, 0, std::max(0, msg_rows - 1));
+        selected_end_row = std::clamp(end_row, selected_start_row, std::max(0, msg_rows - 1));
+        selected_start_col = std::max(0, start_col);
+        selected_end_col = std::max(selected_start_col, end_col);
     }
 
     Element msg_el = active_ch.empty()
@@ -791,8 +899,10 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
                           cfg_.ui.timestamp_format,
                           msg_rows,
                           msg_width,
-                          selected_row_start,
-                          selected_row_end);
+                          selected_start_row,
+                          selected_start_col,
+                          selected_end_row,
+                          selected_end_col);
 
     pending_graphics_frame_.viewport_x = mouse_tracker_.message_region().x;
     pending_graphics_frame_.viewport_y = mouse_tracker_.message_region().y;
@@ -1015,7 +1125,7 @@ Element UIManager::build_document(int term_rows) {
     auto input_el = vbox(std::move(line_els))
                     | bgcolor(palette::bg()) | size(HEIGHT, LESS_THAN, input_lines + 1);
 
-    return vbox({
+    auto base_document = vbox({
         tab_el,
         separator(),
         main_content | flex,
@@ -1024,6 +1134,26 @@ Element UIManager::build_document(int term_rows) {
         separator(),
         input_el,
     }) | bgcolor(palette::bg());
+
+    const auto now = std::chrono::steady_clock::now();
+    if (toast_text_.empty() || now >= toast_until_) {
+        return base_document;
+    }
+
+    auto toast_overlay = vbox({
+        hbox({
+            filler(),
+            text(" " + toast_text_ + " ")
+                | color(palette::fg())
+                | bgcolor(palette::bg_highlight()),
+        }),
+        filler(),
+    });
+
+    return dbox({
+        std::move(base_document),
+        std::move(toast_overlay),
+    });
 }
 
 void UIManager::run(SubmitFn on_submit,
