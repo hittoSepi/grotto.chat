@@ -630,6 +630,10 @@ void App::handle_command(const ParsedCommand& cmd) {
             std::string ch = cmd.args.empty()
                 ? state_.active_channel().value_or("#general")
                 : cmd.args[0];
+            if (is_server_channel(ch)) {
+                ui_->push_system_msg(i18n::tr(i18n::I18nKey::SERVER_RESERVED_TAB));
+                return;
+            }
             voice_->join_room(ch);
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::JOINING_VOICE_ROOM, ch));
         }
