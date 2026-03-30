@@ -174,8 +174,8 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
 
     // Build the UI with event handling
     auto base_renderer = Renderer(container_, [this] {
-        constexpr int kInputWidth = 32;
-        constexpr int kFormWidth = 52;
+        constexpr int kInputWidth = 42;
+        constexpr int kFormWidth = 66;
 
         // Title
         auto title = text(std::string("Grotto v. ") + std::string(grotto::VERSION)) |

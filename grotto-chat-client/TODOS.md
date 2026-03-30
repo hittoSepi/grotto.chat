@@ -6,7 +6,7 @@
     - [ ] ctrl+c sammuttaa vieläkin ohjelman. (mahdoton ongelma?)
     - [x] aliaksia slash komennoille esim /join toimisi /j ja niin edelleen
     - [x] server tabissa ei tarvi näyttää käyttäjä sidepanelia 
-    - [ ] login ruutu on liian kapea, vähän leveämmänksi
+    - [x] login ruutu on liian kapea, vähän leveämmänksi
     - [x] jos kirjoitat /help se ei mahdu koko ruutuun mutta rullausalue ei muutu
     - [x] ei koko ruudun levyistä underscorea, vain tekstin kohdalle. näyttää nyt vähä hölmöltä
     - [x] paste ei toimi ainakaan powershellillä ssh läpi clientille
