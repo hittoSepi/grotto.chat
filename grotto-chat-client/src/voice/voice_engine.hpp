@@ -10,6 +10,7 @@
 
 #include <rtc/rtc.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -80,7 +81,7 @@ public:
     // ── Controls ──────────────────────────────────────────────────────────
     void set_muted(bool muted);
     void set_deafened(bool deafened);
-    void set_ptt_active(bool active) { ptt_active_ = active; }
+    void set_ptt_active(bool active) { ptt_active_.store(active, std::memory_order_relaxed); }
     void toggle_voice_mode();
     const std::string& voice_mode() const { return voice_mode_; }
 
@@ -91,7 +92,7 @@ public:
     void on_capture(const float* pcm, uint32_t frames);
     void mix_output(float* out, uint32_t frames);
 
-    bool in_voice() const { return in_voice_; }
+    bool in_voice() const { return in_voice_.load(std::memory_order_relaxed); }
 
     // Get list of peer IDs that are currently speaking (energy above threshold)
     std::vector<std::string> get_speaking_peers() const;
@@ -122,15 +123,15 @@ private:
     std::unordered_map<std::string, std::shared_ptr<PeerConn>> peers_;
 
     AudioDevice        audio_;
-    bool               in_voice_  = false;
-    bool               muted_     = false;
-    bool               deafened_  = false;
-    bool               ptt_active_ = false;
+    std::atomic_bool   in_voice_{false};
+    std::atomic_bool   muted_{false};
+    std::atomic_bool   deafened_{false};
+    std::atomic_bool   ptt_active_{false};
     VoiceSessionKind   session_kind_ = VoiceSessionKind::None;
     std::string        active_channel_;
     std::string        voice_mode_;
     PcmSampleFifo      capture_fifo_;
-    bool               logged_first_capture_chunk_ = false;
+    std::atomic_bool   logged_first_capture_chunk_{false};
 
     uint16_t           rtp_seq_ = 0;
 };

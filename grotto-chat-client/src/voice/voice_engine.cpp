@@ -125,8 +125,8 @@ void VoiceEngine::set_voice_state_for_session(const std::string& active_channel,
     VoiceState vs = state_.voice_snapshot();
     clear_participant_voice_statuses(vs.participants);
     vs.in_voice = true;
-    vs.muted = muted_;
-    vs.deafened = deafened_;
+    vs.muted = muted_.load(std::memory_order_relaxed);
+    vs.deafened = deafened_.load(std::memory_order_relaxed);
     vs.active_channel = active_channel;
     vs.participants = participants;
     vs.speaking_peers.clear();
@@ -165,7 +165,7 @@ void VoiceEngine::push_voice_event_to_channel(const std::string& channel_id, con
 }
 
 void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::string& remote_peer) {
-    if (!in_voice_) {
+    if (!in_voice_.load(std::memory_order_relaxed)) {
         return;
     }
 
@@ -175,17 +175,17 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
 
     audio_.stop();
     capture_fifo_.clear();
-    logged_first_capture_chunk_ = false;
+    logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
 
     {
         std::lock_guard lk(mu_);
         peers_.clear();
     }
 
-    in_voice_ = false;
-    muted_ = false;
-    deafened_ = false;
-    ptt_active_ = false;
+    in_voice_.store(false, std::memory_order_relaxed);
+    muted_.store(false, std::memory_order_relaxed);
+    deafened_.store(false, std::memory_order_relaxed);
+    ptt_active_.store(false, std::memory_order_relaxed);
     session_kind_ = VoiceSessionKind::None;
     active_channel_.clear();
 
@@ -224,26 +224,26 @@ void VoiceEngine::join_room(const std::string& channel_id) {
 
 void VoiceEngine::on_room_joined(const std::string& channel_id,
                                   const std::vector<std::string>& peers) {
-    if (in_voice_) {
+    if (in_voice_.load(std::memory_order_relaxed)) {
         end_current_session(true);
     }
 
     active_channel_ = channel_id;
-    in_voice_       = true;
-    muted_          = false;
-    deafened_       = false;
-    ptt_active_     = false;
+    in_voice_.store(true, std::memory_order_relaxed);
+    muted_.store(false, std::memory_order_relaxed);
+    deafened_.store(false, std::memory_order_relaxed);
+    ptt_active_.store(false, std::memory_order_relaxed);
     session_kind_   = VoiceSessionKind::Room;
 
     if (!open_audio_or_report("voice room")) {
-        in_voice_ = false;
+        in_voice_.store(false, std::memory_order_relaxed);
         session_kind_ = VoiceSessionKind::None;
         active_channel_.clear();
         return;
     }
 
     capture_fifo_.clear();
-    logged_first_capture_chunk_ = false;
+    logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
 
     for (const auto& peer_id : peers) {
         get_or_create_peer(peer_id, should_offer_to_peer(state_.local_user_id(), peer_id));
@@ -255,13 +255,13 @@ void VoiceEngine::on_room_joined(const std::string& channel_id,
 }
 
 void VoiceEngine::on_peer_joined(const std::string& peer_id) {
-    if (!in_voice_) return;
+    if (!in_voice_.load(std::memory_order_relaxed)) return;
     get_or_create_peer(peer_id, should_offer_to_peer(state_.local_user_id(), peer_id));
     spdlog::info("Peer {} joined voice room", peer_id);
 }
 
 void VoiceEngine::on_peer_left(const std::string& peer_id) {
-    if (!in_voice_) return;
+    if (!in_voice_.load(std::memory_order_relaxed)) return;
     {
         std::lock_guard lk(mu_);
         peers_.erase(peer_id);
@@ -278,7 +278,7 @@ void VoiceEngine::on_peer_left(const std::string& peer_id) {
 }
 
 void VoiceEngine::leave_room() {
-    if (!in_voice_) {
+    if (!in_voice_.load(std::memory_order_relaxed)) {
         return;
     }
     if (session_kind_ == VoiceSessionKind::Direct) {
@@ -291,19 +291,19 @@ void VoiceEngine::leave_room() {
 // ── 1:1 call ──────────────────────────────────────────────────────────────────
 
 void VoiceEngine::call(const std::string& peer_id) {
-    if (in_voice_) {
+    if (in_voice_.load(std::memory_order_relaxed)) {
         end_current_session(true, active_channel_);
     }
 
-    in_voice_       = true;
+    in_voice_.store(true, std::memory_order_relaxed);
     active_channel_ = peer_id;
-    muted_          = false;
-    deafened_       = false;
-    ptt_active_     = false;
+    muted_.store(false, std::memory_order_relaxed);
+    deafened_.store(false, std::memory_order_relaxed);
+    ptt_active_.store(false, std::memory_order_relaxed);
     session_kind_   = VoiceSessionKind::Direct;
 
     if (!open_audio_or_report("call")) {
-        in_voice_ = false;
+        in_voice_.store(false, std::memory_order_relaxed);
         session_kind_ = VoiceSessionKind::None;
         active_channel_.clear();
         return;
@@ -321,19 +321,20 @@ void VoiceEngine::call(const std::string& peer_id) {
 }
 
 void VoiceEngine::accept_call(const std::string& caller_id) {
-    if (in_voice_ && !(session_kind_ == VoiceSessionKind::Direct && active_channel_ == caller_id)) {
+    if (in_voice_.load(std::memory_order_relaxed) &&
+        !(session_kind_ == VoiceSessionKind::Direct && active_channel_ == caller_id)) {
         end_current_session(true, active_channel_);
     }
 
-    in_voice_       = true;
+    in_voice_.store(true, std::memory_order_relaxed);
     active_channel_ = caller_id;
-    muted_          = false;
-    deafened_       = false;
-    ptt_active_     = false;
+    muted_.store(false, std::memory_order_relaxed);
+    deafened_.store(false, std::memory_order_relaxed);
+    ptt_active_.store(false, std::memory_order_relaxed);
     session_kind_   = VoiceSessionKind::Direct;
 
     if (!open_audio_or_report("accepted call")) {
-        in_voice_ = false;
+        in_voice_.store(false, std::memory_order_relaxed);
         session_kind_ = VoiceSessionKind::None;
         active_channel_.clear();
         return;
@@ -351,7 +352,7 @@ void VoiceEngine::accept_call(const std::string& caller_id) {
 }
 
 void VoiceEngine::hangup() {
-    if (!in_voice_) {
+    if (!in_voice_.load(std::memory_order_relaxed)) {
         return;
     }
     end_current_session(true, active_channel_);
@@ -360,14 +361,14 @@ void VoiceEngine::hangup() {
 // ── Controls ─────────────────────────────────────────────────────────────────
 
 void VoiceEngine::set_muted(bool muted) {
-    muted_ = muted;
+    muted_.store(muted, std::memory_order_relaxed);
     VoiceState vs = state_.voice_snapshot();
     vs.muted = muted;
     state_.set_voice_state(vs);
 }
 
 void VoiceEngine::set_deafened(bool deafened) {
-    deafened_ = deafened;
+    deafened_.store(deafened, std::memory_order_relaxed);
     VoiceState vs = state_.voice_snapshot();
     vs.deafened = deafened;
     state_.set_voice_state(vs);
@@ -622,18 +623,18 @@ void VoiceEngine::toggle_voice_mode() {
 void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
     if (!pcm || frames == 0) return;
 
-    if (!logged_first_capture_chunk_) {
+    if (!logged_first_capture_chunk_.exchange(true, std::memory_order_relaxed)) {
         spdlog::debug("Voice capture started (chunk_frames={})", frames);
-        logged_first_capture_chunk_ = true;
     }
 
-    if (muted_ || !in_voice_) {
+    if (muted_.load(std::memory_order_relaxed) ||
+        !in_voice_.load(std::memory_order_relaxed)) {
         capture_fifo_.clear();
         return;
     }
 
     // PTT/VOX gate
-    if (voice_mode_ == "ptt" && !ptt_active_) {
+    if (voice_mode_ == "ptt" && !ptt_active_.load(std::memory_order_relaxed)) {
         capture_fifo_.clear();
         return;
     }
@@ -679,7 +680,7 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
 
 void VoiceEngine::mix_output(float* out, uint32_t frames) {
     std::fill(out, out + frames, 0.0f);
-    if (deafened_) return;
+    if (deafened_.load(std::memory_order_relaxed)) return;
 
     std::lock_guard lk(mu_);
     for (auto& [pid, peer] : peers_) {
@@ -719,7 +720,7 @@ std::vector<std::string> VoiceEngine::get_speaking_peers() const {
 }
 
 void VoiceEngine::refresh_speaking_state() {
-    if (!in_voice_) return;
+    if (!in_voice_.load(std::memory_order_relaxed)) return;
     {
         std::lock_guard lk(mu_);
         const auto now = std::chrono::steady_clock::now();
