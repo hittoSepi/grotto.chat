@@ -16,7 +16,7 @@
 
 ## Ääni
 
-`F1`              vaihda paina-puhu (PTT) / ääniaktivointi (VOX)
+valittu PTT-näppäin (`F1` oletuksena)  kytke PTT-lähetys päälle/pois
 
 ## Näkymät
 
@@ -25,4 +25,4 @@
 
 ---
 
-Vihje: PTT-tilassa pidä `F1` pohjassa puhuaksesi.
+Vihje: PTT-tilassa paina samaa PTT-näppäintä uudelleen lopettaaksesi lähetyksen.

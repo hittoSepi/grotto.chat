@@ -58,4 +58,9 @@ int JitterBuffer::buffered_count() const {
     return static_cast<int>(frames_.size());
 }
 
+bool JitterBuffer::is_primed() const {
+    std::lock_guard lk(mu_);
+    return primed_;
+}
+
 } // namespace grotto::voice

@@ -9,10 +9,10 @@
 
 `/mute`              mykistä oma mikrofoni  
 `/deafen`            mykistä kaikki tulevat äänet  
-`/ptt`               vaihda paina-puhu -tilaan  
+`/vmode`             vaihda paina-puhu- ja VOX-tilan v„lill„  
 `/hangup`            lopeta puhelu  
 
-PTT-tilassa pidä `F1` pohjassa puhuaksesi. VOX-tilassa ääni lähtee automaattisesti kun puhut.
+PTT-tilassa paina valittua PTT-näppäintä (`F1` oletuksena) aloittaaksesi tai lopettaaksesi lähetyksen. VOX-tilassa ääni lähtee automaattisesti kun puhut.
 
 ## Asetukset
 

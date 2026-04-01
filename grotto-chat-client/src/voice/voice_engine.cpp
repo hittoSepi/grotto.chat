@@ -1,8 +1,11 @@
 #include "voice/voice_engine.hpp"
+#include "voice/voice_peer_role.hpp"
 #include "i18n/strings.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstring>
 #include <variant>
 
 namespace grotto::voice {
@@ -171,6 +174,8 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
     const std::string session_target = active_channel_;
 
     audio_.stop();
+    capture_fifo_.clear();
+    logged_first_capture_chunk_ = false;
 
     {
         std::lock_guard lk(mu_);
@@ -237,9 +242,11 @@ void VoiceEngine::on_room_joined(const std::string& channel_id,
         return;
     }
 
-    // We are the joiner — create PeerConnections to all existing participants as offerer
+    capture_fifo_.clear();
+    logged_first_capture_chunk_ = false;
+
     for (const auto& peer_id : peers) {
-        get_or_create_peer(peer_id, /*is_offerer=*/true);
+        get_or_create_peer(peer_id, should_offer_to_peer(state_.local_user_id(), peer_id));
     }
 
     set_voice_state_for_session(channel_id, peers);
@@ -249,9 +256,7 @@ void VoiceEngine::on_room_joined(const std::string& channel_id,
 
 void VoiceEngine::on_peer_joined(const std::string& peer_id) {
     if (!in_voice_) return;
-    // New peer joined — they will offer to us, we wait for their OFFER.
-    // No action needed here — the peer will create PeerConnection as offerer
-    // and we'll handle it in on_voice_signal(OFFER).
+    get_or_create_peer(peer_id, should_offer_to_peer(state_.local_user_id(), peer_id));
     spdlog::info("Peer {} joined voice room", peer_id);
 }
 
@@ -470,6 +475,8 @@ std::shared_ptr<PeerConn> VoiceEngine::get_or_create_peer(
     auto peer     = std::make_shared<PeerConn>();
     peer->peer_id = peer_id;
     peer->pc      = std::make_shared<rtc::PeerConnection>(make_rtc_config());
+    peer->room_offer_local = (session_kind_ == VoiceSessionKind::Room) &&
+        should_offer_to_peer(state_.local_user_id(), peer_id);
 
     peers_[peer_id] = peer;
     setup_peer_callbacks(peer);
@@ -523,12 +530,15 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
         if (state == rtc::PeerConnection::State::Connected) {
             spdlog::info("WebRTC connected to {}", peer_id);
             peer->connected = true;
+            peer->connected_since = std::chrono::steady_clock::now();
+            peer->no_media_warning_logged = false;
             if (session_kind_ == VoiceSessionKind::Direct && active_channel_ == peer_id) {
                 set_voice_state_for_session(peer_id, {peer_id});
             }
         } else if (state == rtc::PeerConnection::State::Failed) {
             spdlog::warn("WebRTC connection failed to {}", peer_id);
             peer->connected = false;
+            peer->playout_fifo.clear();
             state_.post_ui([this, peer_id]() {
                 Message msg;
                 msg.type = Message::Type::System;
@@ -547,6 +557,7 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
         } else if (state == rtc::PeerConnection::State::Disconnected) {
             spdlog::warn("WebRTC disconnected from {}", peer_id);
             peer->connected = false;
+            peer->playout_fifo.clear();
             if (session_kind_ == VoiceSessionKind::Direct && active_channel_ == peer_id) {
                 push_voice_event_to_channel(peer_id, i18n::tr(i18n::I18nKey::CALL_ENDED));
                 end_current_session(false);
@@ -556,14 +567,18 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
         }
     });
 
-    peer->pc->onTrack([peer](std::shared_ptr<rtc::Track> track) {
+    peer->pc->onTrack([this, peer_id, peer](std::shared_ptr<rtc::Track> track) {
         peer->recv_track = track;
-        track->onMessage([peer](rtc::message_variant msg) {
+        peer->recv_track_seen = true;
+        spdlog::debug("onTrack fired for {} (room_offer_local={})", peer_id, peer->room_offer_local);
+        track->onMessage([this, peer_id, peer](rtc::message_variant msg) {
             if (!std::holds_alternative<rtc::binary>(msg)) return;
             const auto& data = std::get<rtc::binary>(msg);
-            // Incoming RTP data → decode Opus → push to jitter buffer
-            // Extract RTP payload (skip 12-byte header)
             if (data.size() <= 12) return;
+            ++peer->rx_packets;
+            if (peer->rx_packets == 1) {
+                spdlog::debug("Received first RTP packet from {}", peer_id);
+            }
             uint16_t seq = static_cast<uint16_t>(
                 (static_cast<uint16_t>(std::to_integer<uint8_t>(data[2])) << 8) |
                  static_cast<uint16_t>(std::to_integer<uint8_t>(data[3])));
@@ -579,9 +594,18 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
                 for (float s : pcm) energy += s * s;
                 peer->last_energy = std::sqrt(energy / pcm.size());
                 peer->last_packet_time = std::chrono::steady_clock::now();
+                ++peer->decoded_frames;
+                if (peer->decoded_frames == 1) {
+                    spdlog::debug("Decoded first audio frame from {}", peer_id);
+                }
             }
-            
+            const bool primed_before = peer->jitter_buf.is_primed();
             peer->jitter_buf.push(seq, std::move(pcm));
+            if (!primed_before && peer->jitter_buf.is_primed()) {
+                spdlog::debug("Jitter buffer primed for {} (buffered_frames={})",
+                              peer_id,
+                              peer->jitter_buf.buffered_count());
+            }
         });
     });
 }
@@ -596,10 +620,23 @@ void VoiceEngine::toggle_voice_mode() {
 }
 
 void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
-    if (muted_ || !in_voice_) return;
+    if (!pcm || frames == 0) return;
+
+    if (!logged_first_capture_chunk_) {
+        spdlog::debug("Voice capture started (chunk_frames={})", frames);
+        logged_first_capture_chunk_ = true;
+    }
+
+    if (muted_ || !in_voice_) {
+        capture_fifo_.clear();
+        return;
+    }
 
     // PTT/VOX gate
-    if (voice_mode_ == "ptt" && !ptt_active_) return;
+    if (voice_mode_ == "ptt" && !ptt_active_) {
+        capture_fifo_.clear();
+        return;
+    }
 
     if (voice_mode_ == "vox") {
         // Simple energy-based VAD
@@ -609,29 +646,34 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
             energy += pcm[i] * pcm[i];
         }
         energy = std::sqrt(energy / n);
-        if (energy < cfg_.voice.vad_threshold) return;
+        if (energy < cfg_.voice.vad_threshold) {
+            capture_fifo_.clear();
+            return;
+        }
     }
 
-    if (frames < static_cast<uint32_t>(OpusCodec::kFrameSamples)) return;
+    capture_fifo_.push(pcm, frames);
 
-    std::vector<float> pcm_vec(pcm, pcm + OpusCodec::kFrameSamples);
+    while (auto pcm_vec = capture_fifo_.pop_exact(OpusCodec::kFrameSamples)) {
+        std::lock_guard lk(mu_);
+        for (auto& [pid, peer] : peers_) {
+            if (!peer->connected || !peer->send_track) continue;
+            auto opus = peer->codec.encode(*pcm_vec);
+            if (opus.empty()) continue;
 
-    std::lock_guard lk(mu_);
-    for (auto& [pid, peer] : peers_) {
-        if (!peer->connected || !peer->send_track) continue;
-        auto opus = peer->codec.encode(pcm_vec);
-        if (opus.empty()) continue;
-
-        // Build minimal RTP packet (12 byte header + payload)
-        std::vector<std::byte> rtp(12 + opus.size());
-        rtp[0] = std::byte{0x80};                      // V=2
-        rtp[1] = std::byte{0x6F};                      // PT=111 (Opus)
-        rtp[2] = std::byte{static_cast<uint8_t>((rtp_seq_ >> 8) & 0xFF)};
-        rtp[3] = std::byte{static_cast<uint8_t>(rtp_seq_ & 0xFF)};
-        ++rtp_seq_;
-        // Timestamp, SSRC left as zero for simplicity
-        std::memcpy(rtp.data() + 12, opus.data(), opus.size());
-        peer->send_track->send(rtp);
+            std::vector<std::byte> rtp(12 + opus.size());
+            rtp[0] = std::byte{0x80};
+            rtp[1] = std::byte{0x6F};
+            rtp[2] = std::byte{static_cast<uint8_t>((rtp_seq_ >> 8) & 0xFF)};
+            rtp[3] = std::byte{static_cast<uint8_t>(rtp_seq_ & 0xFF)};
+            ++rtp_seq_;
+            std::memcpy(rtp.data() + 12, opus.data(), opus.size());
+            peer->send_track->send(rtp);
+            ++peer->tx_packets;
+            if (peer->tx_packets == 1) {
+                spdlog::debug("Sent first RTP packet to {}", pid);
+            }
+        }
     }
 }
 
@@ -641,23 +683,17 @@ void VoiceEngine::mix_output(float* out, uint32_t frames) {
 
     std::lock_guard lk(mu_);
     for (auto& [pid, peer] : peers_) {
-        auto frame = peer->jitter_buf.pop();
-        const std::vector<float>* pcm_ptr = nullptr;
-        std::vector<float> plc_frame;
-
-        if (frame) {
-            pcm_ptr = &(*frame);
-        } else if (peer->connected) {
-            plc_frame = peer->codec.decode_plc();
-            pcm_ptr   = &plc_frame;
-        }
-
-        if (pcm_ptr) {
-            uint32_t n = std::min(frames, static_cast<uint32_t>(pcm_ptr->size()));
-            for (uint32_t i = 0; i < n; ++i) {
-                out[i] += (*pcm_ptr)[i];
+        while (peer->playout_fifo.size() < frames) {
+            if (auto frame = peer->jitter_buf.pop()) {
+                peer->playout_fifo.push(*frame);
+                continue;
             }
+            if (peer->connected && peer->rx_packets > 0) {
+                peer->playout_fifo.push(peer->codec.decode_plc());
+            }
+            break;
         }
+        peer->playout_fifo.mix_into(out, frames);
     }
 
     // Soft clip to [-1, 1]
@@ -684,6 +720,32 @@ std::vector<std::string> VoiceEngine::get_speaking_peers() const {
 
 void VoiceEngine::refresh_speaking_state() {
     if (!in_voice_) return;
+    {
+        std::lock_guard lk(mu_);
+        const auto now = std::chrono::steady_clock::now();
+        for (const auto& [peer_id, peer] : peers_) {
+            if (!peer->connected || peer->no_media_warning_logged ||
+                peer->connected_since == std::chrono::steady_clock::time_point{}) {
+                continue;
+            }
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - peer->connected_since).count();
+            if (elapsed < 2000 || peer->rx_packets > 0) {
+                continue;
+            }
+            peer->no_media_warning_logged = true;
+            spdlog::warn(
+                "WebRTC connected to {} but no media received after {} ms "
+                "(recv_track_seen={}, tx_packets={}, rx_packets={}, decoded_frames={}, queued_playout_samples={})",
+                peer_id,
+                elapsed,
+                peer->recv_track_seen,
+                peer->tx_packets,
+                peer->rx_packets,
+                peer->decoded_frames,
+                peer->playout_fifo.size());
+        }
+    }
     auto speaking = get_speaking_peers();
     VoiceState vs = state_.voice_snapshot();
     if (vs.speaking_peers != speaking) {

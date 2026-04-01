@@ -21,7 +21,7 @@
 `/voice`                   kytke äänikanava päälle/pois  
 `/mute`                    mykistä mikrofoni  
 `/deafen`                  mykistä kaikki äänet  
-`/ptt`                     vaihda paina-puhu -tilaan  
+`/vmode`                   vaihda `PTT`- ja `VOX`-tilan v„lill„  
 
 ## Turva
 

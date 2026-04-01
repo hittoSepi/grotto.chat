@@ -7,7 +7,7 @@ namespace grotto {
 static const std::vector<std::string> kKnownCommands = {
     "/join", "/part", "/msg", "/me",
     "/call", "/hangup", "/accept",
-    "/voice", "/mute", "/deafen", "/ptt",
+    "/voice", "/mute", "/deafen", "/vmode", "/ptt",
     "/trust", "/safety",
     "/set", "/clear", "/search",
     "/quit", "/disconnect", "/status", "/help", "/reload_help", "/settings", "/version",
@@ -30,6 +30,7 @@ static const std::unordered_map<std::string, std::string> kCommandAliases = {
     {"/ver", "/version"},
     {"/up", "/upload"},
     {"/dl", "/download"},
+    {"/ptt", "/vmode"},
 };
 
 const std::vector<std::string>& known_commands() {

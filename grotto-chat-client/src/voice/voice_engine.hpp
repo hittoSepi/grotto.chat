@@ -3,6 +3,7 @@
 #include "voice/opus_codec.hpp"
 #include "voice/jitter_buffer.hpp"
 #include "voice/audio_device.hpp"
+#include "voice/pcm_sample_fifo.hpp"
 #include "state/app_state.hpp"
 #include "config.hpp"
 #include "grotto.pb.h"
@@ -28,11 +29,19 @@ struct PeerConn {
     std::shared_ptr<rtc::Track>           send_track;
     std::shared_ptr<rtc::Track>           recv_track;
     JitterBuffer                          jitter_buf;
+    PcmSampleFifo                         playout_fifo;
     OpusCodec                             codec;
     std::string                           peer_id;
     bool                                  connected = false;
+    bool                                  room_offer_local = false;
+    bool                                  recv_track_seen = false;
+    bool                                  no_media_warning_logged = false;
+    uint64_t                              tx_packets = 0;
+    uint64_t                              rx_packets = 0;
+    uint64_t                              decoded_frames = 0;
     float                                 last_energy = 0.0f;  // for speaking indicator
     std::chrono::steady_clock::time_point last_packet_time;
+    std::chrono::steady_clock::time_point connected_since;
 };
 
 enum class VoiceSessionKind {
@@ -120,6 +129,8 @@ private:
     VoiceSessionKind   session_kind_ = VoiceSessionKind::None;
     std::string        active_channel_;
     std::string        voice_mode_;
+    PcmSampleFifo      capture_fifo_;
+    bool               logged_first_capture_chunk_ = false;
 
     uint16_t           rtp_seq_ = 0;
 };

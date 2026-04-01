@@ -21,7 +21,7 @@
 `/voice`                   toggle voice channel on/off  
 `/mute`                    toggle microphone mute  
 `/deafen`                  mute all incoming audio  
-`/ptt`                     switch to push-to-talk mode  
+`/vmode`                   toggle voice mode (`PTT` / `VOX`)  
 
 ## Security
 

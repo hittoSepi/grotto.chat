@@ -15,6 +15,7 @@ struct StatusInfo {
     bool        deafened       = false;
     std::string voice_channel;
     std::string voice_mode     = "ptt";  // "ptt" or "vox"
+    std::string ptt_key        = "F1";
     std::vector<std::string> voice_participants;
     std::vector<std::string> speaking_peers;  // subset of participants currently speaking
     std::vector<std::string> online_users;

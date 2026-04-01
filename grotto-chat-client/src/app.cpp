@@ -375,7 +375,7 @@ int App::run() {
         [this]()                         { ioc_.stop(); },
         [this](int idx)                  { switch_to_channel_by_index(idx); },
         [this](int delta)                { switch_channel(delta); },
-        [this]()                         { voice_->toggle_voice_mode(); },
+        [this](bool active)              { voice_->set_ptt_active(active); },
         [this]()                         { open_settings(); }
     );
 
@@ -645,7 +645,7 @@ void App::handle_command(const ParsedCommand& cmd) {
         bool d = !state_.voice_snapshot().deafened;
         voice_->set_deafened(d);
         ui_->push_system_msg(i18n::tr(d ? i18n::I18nKey::DEAFENED : i18n::I18nKey::UNDEAFENED));
-    } else if (cmd.name == "/ptt") {
+    } else if (cmd.name == "/vmode" || cmd.name == "/ptt") {
         voice_->toggle_voice_mode();
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::VOICE_MODE, voice_->voice_mode()));
     } else if (cmd.name == "/upload" && !cmd.args.empty()) {

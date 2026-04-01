@@ -326,6 +326,15 @@ target_link_libraries(test-config PRIVATE
 )
 add_test(NAME config-tests COMMAND test-config)
 
+add_executable(test-voice-helpers
+    tests/test_voice_helpers.cpp
+)
+target_include_directories(test-voice-helpers PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(test-voice-helpers PRIVATE Catch2::Catch2WithMain)
+add_test(NAME voice-helper-tests COMMAND test-voice-helpers)
+
 add_executable(test-signal-prekey-roundtrip
     tests/test_signal_prekey_roundtrip.cpp
     src/crypto/crypto_engine.cpp

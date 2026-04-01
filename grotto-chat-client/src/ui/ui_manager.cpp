@@ -1068,6 +1068,7 @@ Element UIManager::build_document(int term_rows) {
     si.deafened       = vs.deafened;
     si.voice_channel  = vs.active_channel;
     si.voice_mode     = vs.voice_mode;
+    si.ptt_key        = cfg_.voice.ptt_key;
     si.voice_participants = vs.participants;
     si.speaking_peers = vs.speaking_peers;
     si.online_users   = state_.online_users();
@@ -1335,10 +1336,11 @@ void UIManager::run(SubmitFn on_submit,
         if (event.input() == "\x04") {
             return true;
         }
-        // F1 — PTT toggle (since FTXUI doesn't support key-release, use toggle)
-        if (event == Event::F1) {
+        if (const auto key_name = key_name_from_event(event);
+            key_name && *key_name == cfg_.voice.ptt_key) {
             ptt_toggled_ = !ptt_toggled_;
-            if (on_ptt_toggle) on_ptt_toggle();
+            ptt_active_ = ptt_toggled_;
+            if (on_ptt_toggle) on_ptt_toggle(ptt_toggled_);
             return true;
         }
         // F12 — Open settings

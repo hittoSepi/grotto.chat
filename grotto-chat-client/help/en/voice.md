@@ -9,10 +9,10 @@
 
 `/mute`              toggle your microphone  
 `/deafen`            mute all incoming audio  
-`/ptt`               switch to push-to-talk mode  
+`/vmode`             switch between push-to-talk and VOX  
 `/hangup`            end the call  
 
-In PTT mode, hold `F1` to talk. In VOX mode, audio goes out automatically when you speak.
+In PTT mode, press your configured PTT key (`F1` by default) to start or stop transmitting. In VOX mode, audio goes out automatically when you speak.
 
 ## Settings
 

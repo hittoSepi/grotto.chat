@@ -16,7 +16,7 @@
 
 ## Voice
 
-`F1`              toggle push-to-talk (PTT) / voice activation (VOX)
+configured PTT key (`F1` by default)  toggle PTT transmit on/off
 
 ## Views
 
@@ -25,4 +25,4 @@
 
 ---
 
-Tip: In PTT mode, hold `F1` down to talk.
+Tip: In PTT mode, press your configured PTT key again to stop transmitting.

@@ -110,12 +110,13 @@ verify_peer = true             # Verify server TLS certificate (keep true in pro
 | `Ctrl+V` | Paste clipboard text into the input line |
 | `Tab` | Autocomplete username / channel |
 | `PgUp` / `PgDn` | Scroll message history |
-| `F1` | Toggle voice mode (`PTT` / `VOX`) |
+| Configured PTT key (`F1` by default) | Toggle PTT transmit on/off |
 | `F2` | Toggle the right-side user list |
 | `F12` | Open settings |
 | `Alt+1..9` | Switch to channel by number |
 | `Alt+Left` / `Alt+Right` | Cycle channels |
 | `/join #channel` | Join a channel |
+| `/vmode` | Toggle voice mode (`PTT` / `VOX`) |
 | `/part` | Leave current channel |
 | `/msg <user> <text>` | Send a private message |
 | `/call <user>` | Start a voice call |
@@ -157,39 +158,63 @@ Options:
 
 ## Building from Source
 
-### Prerequisites
+If you want the full clean-machine setup for Arch Linux, Ubuntu, or Windows, use the detailed guide:
+
+- [HOW-TO-BUILD.md](./HOW-TO-BUILD.md)
+
+### Quick Start
+
+Requirements:
 
 - **CMake** 3.20+
-- **C++20 compiler**: MSVC 2022+ (Windows) or GCC 11+ / Clang 13+ (Linux)
-- **vcpkg** — dependencies are fetched automatically via vcpkg manifest
+- **Git**
+- **C++20 compiler**: MSVC 2022+ on Windows, GCC 11+ or Clang 13+ on Linux
+- **vcpkg** with `VCPKG_ROOT` pointing to your local vcpkg checkout
+
+The project uses:
+
+- `vcpkg.json` for packaged dependencies
+- `FetchContent` for some upstream libraries during configure/build
 
 ### Windows
 
-```bat
+Run these in `Developer PowerShell for VS 2022` or another shell where MSVC is available:
+
+```powershell
 git clone https://github.com/hittoSepi/grotto.chat.git
 cd grotto.chat\grotto-chat-client
-mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
-cmake --build . --config Release
+cmake -S . -B build `
+  -G "Visual Studio 17 2022" `
+  -A x64 `
+  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+cmake --build build --config Release --target grotto-client
 ```
 
-The executable is at `build\Release\grotto-client.exe`.
-Copy `client.toml` from the same directory and edit it before running.
+Output:
 
-> **Note:** If `VCPKG_ROOT` is not set, vcpkg will bootstrap itself automatically from the repo's `vcpkg` submodule if present, or you can pass the toolchain file path explicitly.
+- `build\Release\grotto-client.exe`
+- `build\Release\client.toml`
+- `build\Release\help\`
+- `build\Release\resources\`
 
 ### Linux
 
 ```bash
 git clone https://github.com/hittoSepi/grotto.chat.git
 cd grotto.chat/grotto-chat-client
-mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
-         -DCMAKE_BUILD_TYPE=Release
-cmake --build .
+cmake -S . -B build \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+cmake --build build
 ```
 
-The executable is at `build/grotto-client`.
+Output:
+
+- `build/grotto-client`
+- `build/client.toml`
+- `build/help/`
+- `build/resources/`
 
 ### Running multiple instances on the same machine
 
@@ -218,21 +243,6 @@ turn_password = "replace-with-your-turn-password"
 ```
 
 When `ice_servers` is defined, the client uses only that list and does not append the built-in Google STUN fallback. If `turn_username` is set, the same TURN credentials are applied to all configured ICE servers.
-
-### Prerequisites
-
-- CMake 3.20+
-- C++20 compiler (MSVC 2022+, GCC 11+, Clang 13+)
-- vcpkg
-
-### Build
-
-```bash
-cd grotto-client
-mkdir build && cd build
-cmake ..
-cmake --build . --config Release
-```
 
 ## Troubleshooting
 

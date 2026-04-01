@@ -28,6 +28,7 @@ public:
     void reset();
 
     int buffered_count() const;
+    bool is_primed() const;
 
 private:
     mutable std::mutex   mu_;

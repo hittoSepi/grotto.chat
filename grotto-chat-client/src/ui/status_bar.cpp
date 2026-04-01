@@ -28,11 +28,12 @@ Element render_status_bar(const StatusInfo& info) {
         left.push_back(text(" | " + info.active_channel) | color(palette::fg_dark()));
     }
     if (info.in_voice) {
+        const std::string ptt_text = "PTT: " + (info.ptt_key.empty() ? std::string("F1") : info.ptt_key);
         std::string voice_text = "\U0001F3A4 " + info.voice_channel +
             " " + i18n::tr(i18n::I18nKey::USERS_COUNT, std::to_string(info.voice_participants.size()));
         if (info.muted) voice_text += " " + i18n::tr(i18n::I18nKey::MUTED_INDICATOR);
         if (info.deafened) voice_text += " " + i18n::tr(i18n::I18nKey::DEAFENED_INDICATOR);
-        voice_text += " [" + std::string(info.voice_mode == "ptt" ? i18n::tr(i18n::I18nKey::PTT_F1) : i18n::tr(i18n::I18nKey::VOX)) + "]";
+        voice_text += " [" + std::string(info.voice_mode == "ptt" ? ptt_text : i18n::tr(i18n::I18nKey::VOX)) + "]";
 
         left.push_back(text(" | ") | color(palette::fg_dark()));
         left.push_back(text(voice_text) | color(Color::Green));

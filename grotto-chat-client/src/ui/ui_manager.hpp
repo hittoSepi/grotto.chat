@@ -7,6 +7,7 @@
 #include "ui/mouse_support.hpp"
 #include "ui/graphics_compositor.hpp"
 #include "ui/graphics_layout.hpp"
+#include "ui/key_name.hpp"
 #include "input/tab_complete.hpp"
 #include "input/command_parser.hpp"
 #include "config.hpp"
@@ -26,7 +27,7 @@ namespace grotto::ui {
 
 // Callback type for a submitted input line
 using SubmitFn = std::function<void(const std::string&)>;
-using PttToggleFn = std::function<void()>;
+using PttToggleFn = std::function<void(bool)>;
 using OpenSettingsFn = std::function<void()>;
 using ChannelCycleFn = std::function<void(int)>;
 
@@ -62,7 +63,7 @@ public:
 
     InputLine& input_line() { return input_line_; }
 
-    // Set PTT active state for hold-to-talk (call with false on key release)
+    // Set PTT active state tracked by the UI layer.
     void set_ptt_active(bool active) { ptt_active_ = active; }
 
     // Toggle user list panel collapsed state
