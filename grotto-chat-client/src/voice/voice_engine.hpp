@@ -120,6 +120,7 @@ private:
     SendRoomMsgFn      send_room_msg_;
 
     mutable std::mutex mu_;
+    mutable std::mutex capture_mu_;
     std::unordered_map<std::string, std::shared_ptr<PeerConn>> peers_;
 
     AudioDevice        audio_;

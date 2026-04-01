@@ -174,8 +174,11 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
     const std::string session_target = active_channel_;
 
     audio_.stop();
-    capture_fifo_.clear();
-    logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
+    {
+        std::lock_guard capture_lk(capture_mu_);
+        capture_fifo_.clear();
+        logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
+    }
 
     {
         std::lock_guard lk(mu_);
@@ -235,15 +238,18 @@ void VoiceEngine::on_room_joined(const std::string& channel_id,
     ptt_active_.store(false, std::memory_order_relaxed);
     session_kind_   = VoiceSessionKind::Room;
 
+    {
+        std::lock_guard capture_lk(capture_mu_);
+        capture_fifo_.clear();
+        logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
+    }
+
     if (!open_audio_or_report("voice room")) {
         in_voice_.store(false, std::memory_order_relaxed);
         session_kind_ = VoiceSessionKind::None;
         active_channel_.clear();
         return;
     }
-
-    capture_fifo_.clear();
-    logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
 
     for (const auto& peer_id : peers) {
         get_or_create_peer(peer_id, should_offer_to_peer(state_.local_user_id(), peer_id));
@@ -622,6 +628,8 @@ void VoiceEngine::toggle_voice_mode() {
 
 void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
     if (!pcm || frames == 0) return;
+
+    std::lock_guard capture_lk(capture_mu_);
 
     if (!logged_first_capture_chunk_.exchange(true, std::memory_order_relaxed)) {
         spdlog::debug("Voice capture started (chunk_frames={})", frames);
