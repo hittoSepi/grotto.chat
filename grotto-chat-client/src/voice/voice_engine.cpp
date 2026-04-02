@@ -734,6 +734,16 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
                               peer->send_track->isOpen());
                 continue;
             }
+            if (!peer->send_track->isOpen()) {
+                if (!peer->send_blocked_logged) {
+                    peer->send_blocked_logged = true;
+                    spdlog::debug("Deferring RTP send to {} until track opens (rms={:.5f}, opus_bytes={})",
+                                  pid,
+                                  rms,
+                                  opus.size());
+                }
+                continue;
+            }
 
             std::vector<std::byte> rtp(12 + opus.size());
             rtp[0] = std::byte{0x80};
@@ -749,7 +759,14 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
                               opus.size(),
                               peer->send_track->isOpen());
             }
-            const bool sent_immediately = peer->send_track->send(rtp);
+            bool sent_immediately = false;
+            try {
+                sent_immediately = peer->send_track->send(rtp);
+            } catch (const std::exception& e) {
+                spdlog::warn("Track send failed for {}: {}", pid, e.what());
+                continue;
+            }
+            peer->send_blocked_logged = false;
             ++peer->tx_packets;
             if (peer->tx_packets == 1) {
                 spdlog::debug("Sent first RTP packet to {} (buffered={})",
