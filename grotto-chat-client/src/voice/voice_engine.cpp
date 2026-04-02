@@ -1,6 +1,8 @@
 #include "voice/voice_engine.hpp"
 #include "voice/voice_peer_role.hpp"
 #include "i18n/strings.hpp"
+#include <rtc/rtcpnackresponder.hpp>
+#include <rtc/rtcpsrreporter.hpp>
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <chrono>
@@ -569,7 +571,10 @@ void VoiceEngine::ensure_send_track(const std::shared_ptr<PeerConn>& peer) {
         111,
         OpusCodec::kSampleRate);
     rtp_config->mid = std::string("audio");
-    peer->send_track->setMediaHandler(std::make_shared<rtc::OpusRtpPacketizer>(rtp_config));
+    auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtp_config);
+    packetizer->addToChain(std::make_shared<rtc::RtcpSrReporter>(rtp_config));
+    packetizer->addToChain(std::make_shared<rtc::RtcpNackResponder>());
+    peer->send_track->setMediaHandler(packetizer);
     const auto peer_id = peer->peer_id;
     peer->send_track->onOpen([this, peer, peer_id]() {
         std::lock_guard lk(mu_);
