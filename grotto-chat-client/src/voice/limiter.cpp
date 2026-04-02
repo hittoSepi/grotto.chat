@@ -5,6 +5,24 @@
 
 namespace grotto::voice {
 
+namespace {
+
+float soft_clip(float sample, float threshold) {
+    const float abs_sample = std::abs(sample);
+    if (abs_sample <= threshold) {
+        return sample;
+    }
+
+    const float sign = (sample < 0.0f) ? -1.0f : 1.0f;
+    const float over = abs_sample - threshold;
+    const float knee = std::max(1.0f - threshold, 0.001f);
+    const float normalized = std::clamp(over / knee, 0.0f, 1.0f);
+    const float compressed = threshold + knee * std::tanh(normalized);
+    return sign * std::min(compressed, 0.999f);
+}
+
+} // namespace
+
 void Limiter::configure(bool enabled, float threshold) {
     enabled_ = enabled;
     threshold_ = std::clamp(threshold, 0.2f, 0.99f);
@@ -29,15 +47,15 @@ void Limiter::process(std::vector<float>& frame) {
     }
 
     const float target_gain = (peak > threshold_) ? (threshold_ / peak) : 1.0f;
-    const float attack = 0.35f;
-    const float release = 0.08f;
-    const float smoothing = (target_gain < current_gain_) ? attack : release;
-    current_gain_ += (target_gain - current_gain_) * smoothing;
+    const float release = 0.06f;
+    if (target_gain < current_gain_) {
+        current_gain_ = target_gain;
+    } else {
+        current_gain_ += (target_gain - current_gain_) * release;
+    }
 
     for (float& sample : frame) {
-        const float limited = sample * current_gain_;
-        const float normalized = limited / std::max(threshold_, 0.0001f);
-        sample = std::tanh(normalized) * threshold_;
+        sample = soft_clip(sample * current_gain_, threshold_);
     }
 }
 
