@@ -107,6 +107,9 @@ private:
     std::shared_ptr<PeerConn> get_or_create_peer(const std::string& peer_id,
                                                    bool is_offerer);
     void ensure_send_track(const std::shared_ptr<PeerConn>& peer);
+    void attach_receive_handler(const std::shared_ptr<PeerConn>& peer,
+                                const std::shared_ptr<rtc::Track>& track,
+                                const char* source_label);
     void setup_peer_callbacks(std::shared_ptr<PeerConn> peer);
     rtc::Configuration make_rtc_config();
     bool open_audio_or_report(const std::string& failure_context);

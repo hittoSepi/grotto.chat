@@ -589,6 +589,63 @@ void VoiceEngine::ensure_send_track(const std::shared_ptr<PeerConn>& peer) {
         spdlog::warn("Send track error for {}: {}", peer_id, error);
     });
     spdlog::debug("Created send track for {} (isOpen={})", peer_id, peer->send_track->isOpen());
+    attach_receive_handler(peer, peer->send_track, "send_track");
+}
+
+void VoiceEngine::attach_receive_handler(const std::shared_ptr<PeerConn>& peer,
+                                         const std::shared_ptr<rtc::Track>& track,
+                                         const char* source_label) {
+    if (!peer || !track) {
+        return;
+    }
+
+    const auto peer_id = peer->peer_id;
+    track->onMessage([this, peer_id, peer, source_label](rtc::message_variant msg) {
+        if (!std::holds_alternative<rtc::binary>(msg)) return;
+        const auto& data = std::get<rtc::binary>(msg);
+        if (data.size() <= 12) return;
+        uint16_t seq = static_cast<uint16_t>(
+            (static_cast<uint16_t>(std::to_integer<uint8_t>(data[2])) << 8) |
+             static_cast<uint16_t>(std::to_integer<uint8_t>(data[3])));
+        std::vector<uint8_t> opus;
+        opus.reserve(data.size() - 12);
+        for (size_t i = 12; i < data.size(); ++i) {
+            opus.push_back(std::to_integer<uint8_t>(data[i]));
+        }
+        auto pcm = peer->codec.decode(opus);
+        if (!pcm.empty()) {
+            float energy = 0.0f;
+            for (float s : pcm) energy += s * s;
+            const float rms = std::sqrt(energy / pcm.size());
+            std::lock_guard lk(mu_);
+            ++peer->rx_packets;
+            peer->recv_track_seen = true;
+            if (peer->rx_packets == 1) {
+                spdlog::debug("Received first RTP packet from {} via {}", peer_id, source_label);
+            }
+            peer->last_energy = rms;
+            peer->last_packet_time = std::chrono::steady_clock::now();
+            ++peer->decoded_frames;
+            if (peer->decoded_frames == 1) {
+                spdlog::debug("Decoded first audio frame from {} via {}", peer_id, source_label);
+            }
+        } else {
+            std::lock_guard lk(mu_);
+            ++peer->rx_packets;
+            peer->recv_track_seen = true;
+            if (peer->rx_packets == 1) {
+                spdlog::debug("Received first RTP packet from {} via {}", peer_id, source_label);
+            }
+        }
+        std::lock_guard lk(mu_);
+        const bool primed_before = peer->jitter_buf.is_primed();
+        peer->jitter_buf.push(seq, std::move(pcm));
+        if (!primed_before && peer->jitter_buf.is_primed()) {
+            spdlog::debug("Jitter buffer primed for {} (buffered_frames={})",
+                          peer_id,
+                          peer->jitter_buf.buffered_count());
+        }
+    });
 }
 
 void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
@@ -687,51 +744,7 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
             peer->recv_track_seen = true;
         }
         spdlog::debug("onTrack fired for {} (room_offer_local={})", peer_id, peer->room_offer_local);
-        track->onMessage([this, peer_id, peer](rtc::message_variant msg) {
-            if (!std::holds_alternative<rtc::binary>(msg)) return;
-            const auto& data = std::get<rtc::binary>(msg);
-            if (data.size() <= 12) return;
-            uint16_t seq = static_cast<uint16_t>(
-                (static_cast<uint16_t>(std::to_integer<uint8_t>(data[2])) << 8) |
-                 static_cast<uint16_t>(std::to_integer<uint8_t>(data[3])));
-            std::vector<uint8_t> opus;
-            opus.reserve(data.size() - 12);
-            for (size_t i = 12; i < data.size(); ++i)
-                opus.push_back(std::to_integer<uint8_t>(data[i]));
-            auto pcm = peer->codec.decode(opus);
-            
-            // Calculate energy for speaking indicator
-            if (!pcm.empty()) {
-                float energy = 0.0f;
-                for (float s : pcm) energy += s * s;
-                const float rms = std::sqrt(energy / pcm.size());
-                std::lock_guard lk(mu_);
-                ++peer->rx_packets;
-                if (peer->rx_packets == 1) {
-                    spdlog::debug("Received first RTP packet from {}", peer_id);
-                }
-                peer->last_energy = rms;
-                peer->last_packet_time = std::chrono::steady_clock::now();
-                ++peer->decoded_frames;
-                if (peer->decoded_frames == 1) {
-                    spdlog::debug("Decoded first audio frame from {}", peer_id);
-                }
-            } else {
-                std::lock_guard lk(mu_);
-                ++peer->rx_packets;
-                if (peer->rx_packets == 1) {
-                    spdlog::debug("Received first RTP packet from {}", peer_id);
-                }
-            }
-            std::lock_guard lk(mu_);
-            const bool primed_before = peer->jitter_buf.is_primed();
-            peer->jitter_buf.push(seq, std::move(pcm));
-            if (!primed_before && peer->jitter_buf.is_primed()) {
-                spdlog::debug("Jitter buffer primed for {} (buffered_frames={})",
-                              peer_id,
-                              peer->jitter_buf.buffered_count());
-            }
-        });
+        attach_receive_handler(peer, track, "onTrack");
     });
 }
 
