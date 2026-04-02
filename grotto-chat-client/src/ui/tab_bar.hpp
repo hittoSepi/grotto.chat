@@ -16,6 +16,7 @@ struct TabHitRegion {
 ftxui::Element render_tab_bar(const std::vector<std::string>& channels,
                                const std::string& active_channel,
                                const std::vector<int>& unread_counts,
+                               const std::vector<std::size_t>& voice_counts,
                                std::vector<TabHitRegion>& out_positions);
 
 // Simple version without position tracking (backward compatible)
@@ -23,7 +24,8 @@ inline ftxui::Element render_tab_bar(const std::vector<std::string>& channels,
                                       const std::string& active_channel,
                                       const std::vector<int>& unread_counts) {
     std::vector<TabHitRegion> dummy;
-    return render_tab_bar(channels, active_channel, unread_counts, dummy);
+    std::vector<std::size_t> no_voice;
+    return render_tab_bar(channels, active_channel, unread_counts, no_voice, dummy);
 }
 
 } // namespace grotto::ui

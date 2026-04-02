@@ -103,6 +103,10 @@ public:
     // ── Voice ─────────────────────────────────────────────────────────────
     VoiceState voice_snapshot() const;
     void set_voice_state(VoiceState vs);
+    void set_voice_room_users(const std::string& channel_id, const std::vector<std::string>& users);
+    void add_voice_room_user(const std::string& channel_id, const std::string& user_id);
+    void remove_voice_room_user(const std::string& channel_id, const std::string& user_id);
+    std::size_t voice_room_user_count(const std::string& channel_id) const;
     RuntimeVoiceIceConfig runtime_voice_ice_config() const;
     void set_runtime_voice_ice_config(RuntimeVoiceIceConfig cfg);
 
@@ -134,6 +138,7 @@ private:
     std::unordered_map<std::string, PresenceStatus> online_users_;
 
     VoiceState voice_state_;
+    std::unordered_map<std::string, std::unordered_set<std::string>> voice_room_users_;
     RuntimeVoiceIceConfig runtime_voice_ice_config_;
 
     // Channel membership: channel_id -> (user_id -> ChannelUserInfo)

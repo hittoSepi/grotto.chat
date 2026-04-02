@@ -398,14 +398,17 @@ void MessageHandler::handle_voice_room_state(const Envelope& env) {
     }
 
     state_.post_ui([this, state]() {
+        std::vector<std::string> participants;
         VoiceState vs = state_.voice_snapshot();
         vs.in_voice = true;
         vs.active_channel = state.channel_id();
         vs.participants.clear();
         for (const auto& p : state.participants()) {
             vs.participants.push_back(p);
+            participants.push_back(p);
         }
         state_.set_voice_state(vs);
+        state_.set_voice_room_users(state.channel_id(), participants);
     });
 }
 
@@ -423,6 +426,7 @@ void MessageHandler::handle_voice_room_join(const Envelope& env) {
         VoiceState vs = state_.voice_snapshot();
         vs.participants.push_back(join.user_id());
         state_.set_voice_state(vs);
+        state_.add_voice_room_user(join.channel_id(), join.user_id());
 
         Message msg;
         msg.type = Message::Type::System;
@@ -449,6 +453,7 @@ void MessageHandler::handle_voice_room_leave(const Envelope& env) {
         auto& p = vs.participants;
         p.erase(std::remove(p.begin(), p.end(), leave.user_id()), p.end());
         state_.set_voice_state(vs);
+        state_.remove_voice_room_user(leave.channel_id(), leave.user_id());
 
         Message msg;
         msg.type = Message::Type::System;

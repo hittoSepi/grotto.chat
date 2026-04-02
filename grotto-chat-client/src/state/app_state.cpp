@@ -78,6 +78,7 @@ ChannelState AppState::channel_snapshot(const std::string& channel_id) const {
 void AppState::remove_channel(const std::string& channel_id) {
     std::unique_lock lk(mu_);
     channels_.erase(channel_id);
+    voice_room_users_.erase(channel_id);
     if (active_channel_ == channel_id) {
         // Fall back to "server" if present, else first available, else empty
         if (channels_.count("server"))          active_channel_ = "server";
@@ -282,6 +283,41 @@ VoiceState AppState::voice_snapshot() const {
 void AppState::set_voice_state(VoiceState vs) {
     std::unique_lock lk(mu_);
     voice_state_ = std::move(vs);
+}
+
+void AppState::set_voice_room_users(const std::string& channel_id, const std::vector<std::string>& users) {
+    std::unique_lock lk(mu_);
+    auto& room_users = voice_room_users_[channel_id];
+    room_users.clear();
+    for (const auto& user_id : users) {
+        room_users.insert(user_id);
+    }
+}
+
+void AppState::add_voice_room_user(const std::string& channel_id, const std::string& user_id) {
+    std::unique_lock lk(mu_);
+    voice_room_users_[channel_id].insert(user_id);
+}
+
+void AppState::remove_voice_room_user(const std::string& channel_id, const std::string& user_id) {
+    std::unique_lock lk(mu_);
+    auto it = voice_room_users_.find(channel_id);
+    if (it == voice_room_users_.end()) {
+        return;
+    }
+    it->second.erase(user_id);
+    if (it->second.empty()) {
+        voice_room_users_.erase(it);
+    }
+}
+
+std::size_t AppState::voice_room_user_count(const std::string& channel_id) const {
+    std::shared_lock lk(mu_);
+    auto it = voice_room_users_.find(channel_id);
+    if (it == voice_room_users_.end()) {
+        return 0;
+    }
+    return it->second.size();
 }
 
 RuntimeVoiceIceConfig AppState::runtime_voice_ice_config() const {

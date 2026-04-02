@@ -1044,9 +1044,11 @@ Element UIManager::build_document(int term_rows) {
 
     // Tab bar with position tracking for mouse hit testing
     std::vector<int> unread;
+    std::vector<std::size_t> voice_counts;
     for (auto& c : channels) unread.push_back(state_.unread_count(c));
+    for (auto& c : channels) voice_counts.push_back(state_.voice_room_user_count(c));
     tab_positions_.clear();
-    auto tab_inner = render_tab_bar(channels, active_ch, unread, tab_positions_);
+    auto tab_inner = render_tab_bar(channels, active_ch, unread, voice_counts, tab_positions_);
     // Append the user-list toggle button to the right of the tab bar
     auto tab_el = hbox({
         tab_inner | flex,

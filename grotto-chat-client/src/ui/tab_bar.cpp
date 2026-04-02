@@ -9,6 +9,7 @@ namespace grotto::ui {
 Element render_tab_bar(const std::vector<std::string>& channels,
                         const std::string& active_channel,
                         const std::vector<int>& unread_counts,
+                        const std::vector<std::size_t>& voice_counts,
                         std::vector<TabHitRegion>& out_positions) {
     out_positions.clear();
     Elements tabs;
@@ -18,9 +19,11 @@ Element render_tab_bar(const std::vector<std::string>& channels,
         const auto& ch    = channels[i];
         bool        active = (ch == active_channel);
         int         unread = (i < unread_counts.size()) ? unread_counts[i] : 0;
+        std::size_t voice_count = (i < voice_counts.size()) ? voice_counts[i] : 0;
 
         std::string label = " " + ch;
         if (unread > 0) label += " [" + std::to_string(unread) + "]";
+        if (voice_count > 0) label += " {V:" + std::to_string(voice_count) + "}";
         label += " ";
 
         // Record position for mouse hit testing
@@ -29,6 +32,8 @@ Element render_tab_bar(const std::vector<std::string>& channels,
         Element tab = text(label);
         if (active) {
             tab = tab | bold | color(palette::blue()) | bgcolor(palette::bg_highlight());
+        } else if (voice_count > 0) {
+            tab = tab | color(palette::cyan());
         } else if (unread > 0) {
             tab = tab | color(palette::unread_badge());
         } else {
