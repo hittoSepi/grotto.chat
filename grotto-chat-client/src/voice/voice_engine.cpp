@@ -380,6 +380,17 @@ void VoiceEngine::set_deafened(bool deafened) {
     state_.set_voice_state(vs);
 }
 
+void VoiceEngine::set_ptt_active(bool active) {
+    const bool previous = ptt_active_.exchange(active, std::memory_order_relaxed);
+    if (previous == active) {
+        return;
+    }
+    spdlog::debug("PTT {} (mode={}, in_voice={})",
+                  active ? "enabled" : "disabled",
+                  voice_mode_,
+                  in_voice_.load(std::memory_order_relaxed));
+}
+
 // ── Signaling ─────────────────────────────────────────────────────────────────
 
 void VoiceEngine::on_voice_signal(const VoiceSignal& vs) {
@@ -504,6 +515,26 @@ void VoiceEngine::ensure_send_track(const std::shared_ptr<PeerConn>& peer) {
     auto desc = rtc::Description::Audio("audio", rtc::Description::Direction::SendRecv);
     desc.addOpusCodec(111);
     peer->send_track = peer->pc->addTrack(std::move(desc));
+    peer->send_track_open = peer->send_track->isOpen();
+    peer->send_track_wait_logged = false;
+    const auto peer_id = peer->peer_id;
+    peer->send_track->onOpen([this, peer, peer_id]() {
+        std::lock_guard lk(mu_);
+        peer->send_track_open = true;
+        peer->send_track_wait_logged = false;
+        spdlog::debug("Send track open for {}", peer_id);
+    });
+    peer->send_track->onClosed([this, peer, peer_id]() {
+        std::lock_guard lk(mu_);
+        peer->send_track_open = false;
+        spdlog::debug("Send track closed for {}", peer_id);
+    });
+    peer->send_track->onError([this, peer, peer_id](std::string error) {
+        std::lock_guard lk(mu_);
+        peer->send_track_open = false;
+        spdlog::warn("Send track error for {}: {}", peer_id, error);
+    });
+    spdlog::debug("Created send track for {} (open={})", peer_id, peer->send_track_open);
 }
 
 void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
@@ -536,16 +567,22 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
         spdlog::info("WebRTC state for {} -> {}", peer_id, rtc_state_name(state));
         if (state == rtc::PeerConnection::State::Connected) {
             spdlog::info("WebRTC connected to {}", peer_id);
-            peer->connected = true;
-            peer->connected_since = std::chrono::steady_clock::now();
-            peer->no_media_warning_logged = false;
+            {
+                std::lock_guard lk(mu_);
+                peer->connected = true;
+                peer->connected_since = std::chrono::steady_clock::now();
+                peer->no_media_warning_logged = false;
+            }
             if (session_kind_ == VoiceSessionKind::Direct && active_channel_ == peer_id) {
                 set_voice_state_for_session(peer_id, {peer_id});
             }
         } else if (state == rtc::PeerConnection::State::Failed) {
             spdlog::warn("WebRTC connection failed to {}", peer_id);
-            peer->connected = false;
-            peer->playout_fifo.clear();
+            {
+                std::lock_guard lk(mu_);
+                peer->connected = false;
+                peer->playout_fifo.clear();
+            }
             state_.post_ui([this, peer_id]() {
                 Message msg;
                 msg.type = Message::Type::System;
@@ -563,8 +600,11 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
             }
         } else if (state == rtc::PeerConnection::State::Disconnected) {
             spdlog::warn("WebRTC disconnected from {}", peer_id);
-            peer->connected = false;
-            peer->playout_fifo.clear();
+            {
+                std::lock_guard lk(mu_);
+                peer->connected = false;
+                peer->playout_fifo.clear();
+            }
             if (session_kind_ == VoiceSessionKind::Direct && active_channel_ == peer_id) {
                 push_voice_event_to_channel(peer_id, i18n::tr(i18n::I18nKey::CALL_ENDED));
                 end_current_session(false);
@@ -575,17 +615,16 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
     });
 
     peer->pc->onTrack([this, peer_id, peer](std::shared_ptr<rtc::Track> track) {
-        peer->recv_track = track;
-        peer->recv_track_seen = true;
+        {
+            std::lock_guard lk(mu_);
+            peer->recv_track = track;
+            peer->recv_track_seen = true;
+        }
         spdlog::debug("onTrack fired for {} (room_offer_local={})", peer_id, peer->room_offer_local);
         track->onMessage([this, peer_id, peer](rtc::message_variant msg) {
             if (!std::holds_alternative<rtc::binary>(msg)) return;
             const auto& data = std::get<rtc::binary>(msg);
             if (data.size() <= 12) return;
-            ++peer->rx_packets;
-            if (peer->rx_packets == 1) {
-                spdlog::debug("Received first RTP packet from {}", peer_id);
-            }
             uint16_t seq = static_cast<uint16_t>(
                 (static_cast<uint16_t>(std::to_integer<uint8_t>(data[2])) << 8) |
                  static_cast<uint16_t>(std::to_integer<uint8_t>(data[3])));
@@ -599,13 +638,26 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
             if (!pcm.empty()) {
                 float energy = 0.0f;
                 for (float s : pcm) energy += s * s;
-                peer->last_energy = std::sqrt(energy / pcm.size());
+                const float rms = std::sqrt(energy / pcm.size());
+                std::lock_guard lk(mu_);
+                ++peer->rx_packets;
+                if (peer->rx_packets == 1) {
+                    spdlog::debug("Received first RTP packet from {}", peer_id);
+                }
+                peer->last_energy = rms;
                 peer->last_packet_time = std::chrono::steady_clock::now();
                 ++peer->decoded_frames;
                 if (peer->decoded_frames == 1) {
                     spdlog::debug("Decoded first audio frame from {}", peer_id);
                 }
+            } else {
+                std::lock_guard lk(mu_);
+                ++peer->rx_packets;
+                if (peer->rx_packets == 1) {
+                    spdlog::debug("Received first RTP packet from {}", peer_id);
+                }
             }
+            std::lock_guard lk(mu_);
             const bool primed_before = peer->jitter_buf.is_primed();
             peer->jitter_buf.push(seq, std::move(pcm));
             if (!primed_before && peer->jitter_buf.is_primed()) {
@@ -667,6 +719,16 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
         std::lock_guard lk(mu_);
         for (auto& [pid, peer] : peers_) {
             if (!peer->connected || !peer->send_track) continue;
+            if (!peer->send_track_open || !peer->send_track->isOpen()) {
+                if (!peer->send_track_wait_logged) {
+                    peer->send_track_wait_logged = true;
+                    spdlog::debug("Waiting for send track to open for {} (connected={}, track_open={})",
+                                  pid,
+                                  peer->connected,
+                                  peer->send_track->isOpen());
+                }
+                continue;
+            }
             auto opus = peer->codec.encode(*pcm_vec);
             if (opus.empty()) continue;
 
@@ -677,10 +739,12 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
             rtp[3] = std::byte{static_cast<uint8_t>(rtp_seq_ & 0xFF)};
             ++rtp_seq_;
             std::memcpy(rtp.data() + 12, opus.data(), opus.size());
-            peer->send_track->send(rtp);
+            const bool sent_immediately = peer->send_track->send(rtp);
             ++peer->tx_packets;
             if (peer->tx_packets == 1) {
-                spdlog::debug("Sent first RTP packet to {}", pid);
+                spdlog::debug("Sent first RTP packet to {} (buffered={})",
+                              pid,
+                              sent_immediately ? "no" : "yes");
             }
         }
     }
@@ -745,10 +809,11 @@ void VoiceEngine::refresh_speaking_state() {
             peer->no_media_warning_logged = true;
             spdlog::warn(
                 "WebRTC connected to {} but no media received after {} ms "
-                "(recv_track_seen={}, tx_packets={}, rx_packets={}, decoded_frames={}, queued_playout_samples={})",
+                "(recv_track_seen={}, send_track_open={}, tx_packets={}, rx_packets={}, decoded_frames={}, queued_playout_samples={})",
                 peer_id,
                 elapsed,
                 peer->recv_track_seen,
+                peer->send_track_open,
                 peer->tx_packets,
                 peer->rx_packets,
                 peer->decoded_frames,

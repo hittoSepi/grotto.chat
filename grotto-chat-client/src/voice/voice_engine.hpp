@@ -35,6 +35,8 @@ struct PeerConn {
     std::string                           peer_id;
     bool                                  connected = false;
     bool                                  room_offer_local = false;
+    bool                                  send_track_open = false;
+    bool                                  send_track_wait_logged = false;
     bool                                  recv_track_seen = false;
     bool                                  no_media_warning_logged = false;
     uint64_t                              tx_packets = 0;
@@ -81,7 +83,7 @@ public:
     // ── Controls ──────────────────────────────────────────────────────────
     void set_muted(bool muted);
     void set_deafened(bool deafened);
-    void set_ptt_active(bool active) { ptt_active_.store(active, std::memory_order_relaxed); }
+    void set_ptt_active(bool active);
     void toggle_voice_mode();
     const std::string& voice_mode() const { return voice_mode_; }
 
