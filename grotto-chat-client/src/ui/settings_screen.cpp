@@ -365,6 +365,7 @@ void SettingsScreen::build_ui() {
         voice_key_capture_visible_ = true;
     });
     voice_vad_threshold_slider_ = Slider("", &voice_vad_threshold_percent_, 0, 100, 1);
+    voice_jitter_buffer_slider_ = Slider("", &voice_jitter_buffer_frames_, 2, 10, 1);
     voice_input_volume_slider_ = Slider("", &voice_input_volume_value_, 0, 200, 1);
     voice_output_volume_slider_ = Slider("", &voice_output_volume_value_, 0, 200, 1);
     reconnect_delay_input_ = Input(&reconnect_delay_sec_text_, "5");
@@ -422,6 +423,7 @@ void SettingsScreen::build_ui() {
         voice_mode_dropdown_,
         voice_capture_key_button_,
         voice_vad_threshold_slider_,
+        voice_jitter_buffer_slider_,
         voice_input_volume_slider_,
         voice_output_volume_slider_,
         copy_selection_on_release_cb_,
@@ -571,6 +573,12 @@ Element SettingsScreen::render_voice() {
         text(" " + std::to_string(voice_vad_threshold_percent_) + "%") | color(palette::cyan()),
     });
 
+    auto jitter_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_JITTER_BUFFER_LABEL)) | color(palette::fg_dark()),
+        voice_jitter_buffer_slider_->Render() | flex,
+        text(" " + std::to_string(voice_jitter_buffer_frames_) + " fr") | color(palette::cyan()),
+    });
+
     return vbox({
         text(i18n::tr(i18n::I18nKey::VOICE_SETTINGS)) | bold | color(palette::blue()),
         separator(),
@@ -583,6 +591,7 @@ Element SettingsScreen::render_voice() {
         voice_mode_row,
         ptt_key_row,
         vad_row,
+        jitter_row,
         text(i18n::tr(i18n::I18nKey::VOICE_SETTINGS_HINT)) | color(palette::comment()) | dim,
     });
 }
@@ -740,6 +749,7 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     voice_ptt_key_ = cfg.voice.ptt_key;
     voice_vad_threshold_percent_ = std::clamp(
         static_cast<int>(cfg.voice.vad_threshold * 100.0f + 0.5f), 0, 100);
+    voice_jitter_buffer_frames_ = std::clamp(cfg.voice.jitter_buffer_frames, 2, 10);
     voice_input_volume_value_ = std::clamp(cfg.voice.input_volume, 0, 200);
     voice_output_volume_value_ = std::clamp(cfg.voice.output_volume, 0, 200);
     
@@ -810,6 +820,7 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
     cfg.voice.ptt_key = voice_ptt_key_.empty() ? "F1" : voice_ptt_key_;
     cfg.voice.vad_threshold =
         std::clamp(static_cast<float>(voice_vad_threshold_percent_) / 100.0f, 0.0f, 1.0f);
+    cfg.voice.jitter_buffer_frames = clamp_int(voice_jitter_buffer_frames_, 2, 10);
     cfg.voice.input_volume = clamp_int(voice_input_volume_value_, 0, 200);
     cfg.voice.output_volume = clamp_int(voice_output_volume_value_, 0, 200);
 
@@ -865,6 +876,7 @@ void SettingsScreen::reset_to_defaults() {
     voice_mode_selected_ = 0;
     voice_ptt_key_ = "F1";
     voice_vad_threshold_percent_ = 2;
+    voice_jitter_buffer_frames_ = 4;
     voice_input_volume_value_ = 100;
     voice_output_volume_value_ = 100;
     
@@ -911,6 +923,7 @@ void SettingsScreen::export_settings() {
         data["voice"]["mode"] = voice_mode_from_index(voice_mode_selected_);
         data["voice"]["ptt_key"] = voice_ptt_key_;
         data["voice"]["vad_threshold"] = static_cast<double>(voice_vad_threshold_percent_) / 100.0;
+        data["voice"]["jitter_buffer_frames"] = voice_jitter_buffer_frames_;
         
         data["connection"]["auto_reconnect"] = auto_reconnect_;
         data["connection"]["reconnect_delay"] = std::stoi(reconnect_delay_sec_text_);
@@ -993,6 +1006,9 @@ void SettingsScreen::import_settings() {
             if (voice.contains("vad_threshold")) {
                 voice_vad_threshold_percent_ = std::clamp(
                     static_cast<int>(toml::find<double>(voice, "vad_threshold") * 100.0 + 0.5), 0, 100);
+            }
+            if (voice.contains("jitter_buffer_frames")) {
+                voice_jitter_buffer_frames_ = std::clamp(toml::find<int>(voice, "jitter_buffer_frames"), 2, 10);
             }
         }
         

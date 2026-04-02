@@ -81,6 +81,7 @@ input_device  = ""             # Microphone (empty = system default)
 output_device = ""             # Speaker (empty = system default)
 opus_bitrate  = 64000          # Voice quality in bits/s
 frame_ms      = 20             # Audio frame size in milliseconds
+jitter_buffer_frames = 4       # Buffered 20 ms frames before playback
 ice_servers   = [              # Empty = built-in Google STUN fallback
   "stun:turn.example.com:3478",
   "turn:turn.example.com:3478?transport=udp",

@@ -26,6 +26,8 @@ using SendRoomMsgFn = std::function<void(MessageType, const google::protobuf::Me
 
 // Per-peer connection state
 struct PeerConn {
+    explicit PeerConn(int target_delay_frames = 4) : jitter_buf(target_delay_frames) {}
+
     std::shared_ptr<rtc::PeerConnection>  pc;
     std::shared_ptr<rtc::Track>           send_track;
     std::shared_ptr<rtc::Track>           recv_track;

@@ -93,6 +93,7 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (v.contains("output_volume")) cfg.voice.output_volume = toml::find<int>(v, "output_volume");
             if (v.contains("opus_bitrate"))  cfg.voice.opus_bitrate  = toml::find<int>(v, "opus_bitrate");
             if (v.contains("frame_ms"))      cfg.voice.frame_ms      = toml::find<int>(v, "frame_ms");
+            if (v.contains("jitter_buffer_frames")) cfg.voice.jitter_buffer_frames = toml::find<int>(v, "jitter_buffer_frames");
             if (v.contains("mode"))          cfg.voice.mode          = toml::find<std::string>(v, "mode");
             if (v.contains("ptt_key"))       cfg.voice.ptt_key       = toml::find<std::string>(v, "ptt_key");
             if (v.contains("vad_threshold")) cfg.voice.vad_threshold = static_cast<float>(toml::find<double>(v, "vad_threshold"));
@@ -252,6 +253,7 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["voice"]["output_volume"] = cfg.voice.output_volume;
     data["voice"]["opus_bitrate"] = cfg.voice.opus_bitrate;
     data["voice"]["frame_ms"] = cfg.voice.frame_ms;
+    data["voice"]["jitter_buffer_frames"] = cfg.voice.jitter_buffer_frames;
     data["voice"]["mode"] = cfg.voice.mode;
     data["voice"]["ptt_key"] = cfg.voice.ptt_key;
     data["voice"]["vad_threshold"] = cfg.voice.vad_threshold;
@@ -322,6 +324,7 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["voice"]["output_volume"] = cfg.voice.output_volume;
         data["voice"]["opus_bitrate"] = cfg.voice.opus_bitrate;
         data["voice"]["frame_ms"] = cfg.voice.frame_ms;
+        data["voice"]["jitter_buffer_frames"] = cfg.voice.jitter_buffer_frames;
         data["voice"]["mode"] = cfg.voice.mode;
         data["voice"]["ptt_key"] = cfg.voice.ptt_key;
         data["voice"]["vad_threshold"] = cfg.voice.vad_threshold;
@@ -400,6 +403,7 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             if (v.contains("output_volume")) cfg.voice.output_volume = toml::find<int>(v, "output_volume");
             if (v.contains("opus_bitrate")) cfg.voice.opus_bitrate = toml::find<int>(v, "opus_bitrate");
             if (v.contains("frame_ms")) cfg.voice.frame_ms = toml::find<int>(v, "frame_ms");
+            if (v.contains("jitter_buffer_frames")) cfg.voice.jitter_buffer_frames = toml::find<int>(v, "jitter_buffer_frames");
             if (v.contains("mode")) cfg.voice.mode = toml::find<std::string>(v, "mode");
             if (v.contains("ptt_key")) cfg.voice.ptt_key = toml::find<std::string>(v, "ptt_key");
             if (v.contains("vad_threshold")) cfg.voice.vad_threshold = static_cast<float>(toml::find<double>(v, "vad_threshold"));

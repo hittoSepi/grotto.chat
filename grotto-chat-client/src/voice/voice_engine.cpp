@@ -15,6 +15,10 @@ namespace grotto::voice {
 
 namespace {
 
+int clamp_jitter_buffer_frames(int frames) {
+    return std::clamp(frames, 2, 10);
+}
+
 uint32_t next_voice_ssrc() {
     static std::atomic_uint32_t counter{0x24570000u};
     return counter.fetch_add(1, std::memory_order_relaxed);
@@ -535,7 +539,7 @@ std::shared_ptr<PeerConn> VoiceEngine::get_or_create_peer(
     auto it = peers_.find(peer_id);
     if (it != peers_.end()) return it->second;
 
-    auto peer     = std::make_shared<PeerConn>();
+    auto peer = std::make_shared<PeerConn>(clamp_jitter_buffer_frames(cfg_.voice.jitter_buffer_frames));
     peer->peer_id = peer_id;
     peer->pc      = std::make_shared<rtc::PeerConnection>(make_rtc_config());
     peer->send_ssrc = next_voice_ssrc();
