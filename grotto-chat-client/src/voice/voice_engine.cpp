@@ -603,15 +603,64 @@ void VoiceEngine::attach_receive_handler(const std::shared_ptr<PeerConn>& peer,
     track->onMessage([this, peer_id, peer, source_label](rtc::message_variant msg) {
         if (!std::holds_alternative<rtc::binary>(msg)) return;
         const auto& data = std::get<rtc::binary>(msg);
-        if (data.size() <= 12) return;
+        if (data.size() < 12) return;
+
+        const uint8_t b0 = std::to_integer<uint8_t>(data[0]);
+        const uint8_t b1 = std::to_integer<uint8_t>(data[1]);
+        const uint8_t version = (b0 >> 6) & 0x03;
+        if (version != 2) {
+            return;
+        }
+
+        const uint8_t payload_type = b1 & 0x7F;
+        if (payload_type >= 64 && payload_type <= 95) {
+            return; // RTCP / reserved control payloads, not Opus media.
+        }
+
+        const size_t csrc_count = b0 & 0x0F;
+        const bool has_extension = (b0 & 0x10) != 0;
+        const bool has_padding = (b0 & 0x20) != 0;
+        size_t header_size = 12 + (csrc_count * 4);
+        if (data.size() < header_size) {
+            return;
+        }
+        if (has_extension) {
+            if (data.size() < header_size + 4) {
+                return;
+            }
+            const size_t extension_words =
+                (static_cast<size_t>(std::to_integer<uint8_t>(data[header_size + 2])) << 8) |
+                 static_cast<size_t>(std::to_integer<uint8_t>(data[header_size + 3]));
+            header_size += 4 + (extension_words * 4);
+            if (data.size() < header_size) {
+                return;
+            }
+        }
+
+        size_t payload_end = data.size();
+        if (has_padding) {
+            const uint8_t padding_size = std::to_integer<uint8_t>(data.back());
+            if (padding_size == 0 || padding_size > payload_end - header_size) {
+                return;
+            }
+            payload_end -= padding_size;
+        }
+        if (payload_end <= header_size) {
+            return;
+        }
+
         uint16_t seq = static_cast<uint16_t>(
             (static_cast<uint16_t>(std::to_integer<uint8_t>(data[2])) << 8) |
              static_cast<uint16_t>(std::to_integer<uint8_t>(data[3])));
         std::vector<uint8_t> opus;
-        opus.reserve(data.size() - 12);
-        for (size_t i = 12; i < data.size(); ++i) {
+        opus.reserve(payload_end - header_size);
+        for (size_t i = header_size; i < payload_end; ++i) {
             opus.push_back(std::to_integer<uint8_t>(data[i]));
         }
+        if (opus.empty()) {
+            return;
+        }
+
         auto pcm = peer->codec.decode(opus);
         if (!pcm.empty()) {
             float energy = 0.0f;
