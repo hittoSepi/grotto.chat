@@ -116,6 +116,7 @@ private:
     void setup_peer_callbacks(std::shared_ptr<PeerConn> peer);
     rtc::Configuration make_rtc_config();
     bool open_audio_or_report(const std::string& failure_context);
+    void reconfigure_noise_suppressor_locked();
     void set_voice_state_for_session(const std::string& active_channel,
                                      const std::vector<std::string>& participants);
     void reset_voice_state();

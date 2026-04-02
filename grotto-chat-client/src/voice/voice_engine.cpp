@@ -135,14 +135,7 @@ rtc::Configuration VoiceEngine::make_rtc_config() {
 }
 
 bool VoiceEngine::open_audio_or_report(const std::string& failure_context) {
-    const auto ns_level = normalized_noise_suppression_level(cfg_.voice.noise_suppression_level);
-    const bool ns_operational =
-        noise_suppressor_.configure(cfg_.voice.noise_suppression_enabled, ns_level);
-    spdlog::info("Noise suppression (built_in={}, enabled={}, level={}, operational={})",
-                 noise_suppressor_.build_available(),
-                 cfg_.voice.noise_suppression_enabled,
-                 ns_level,
-                 ns_operational);
+    reconfigure_noise_suppressor_locked();
 
     if (audio_.open(cfg_.voice.input_device, cfg_.voice.output_device,
             [this](const float* pcm, uint32_t frames) { on_capture(pcm, frames); },
@@ -163,6 +156,17 @@ bool VoiceEngine::open_audio_or_report(const std::string& failure_context) {
         state_.push_message(ch, std::move(msg));
     });
     return false;
+}
+
+void VoiceEngine::reconfigure_noise_suppressor_locked() {
+    const auto ns_level = normalized_noise_suppression_level(cfg_.voice.noise_suppression_level);
+    const bool ns_operational =
+        noise_suppressor_.configure(cfg_.voice.noise_suppression_enabled, ns_level);
+    spdlog::info("Noise suppression (built_in={}, enabled={}, level={}, operational={})",
+                 noise_suppressor_.build_available(),
+                 cfg_.voice.noise_suppression_enabled,
+                 ns_level,
+                 ns_operational);
 }
 
 void VoiceEngine::clear_participant_voice_statuses(const std::vector<std::string>& participants) {
@@ -452,6 +456,12 @@ void VoiceEngine::set_ptt_active(bool active) {
     const bool previous = ptt_active_.exchange(active, std::memory_order_relaxed);
     if (previous == active) {
         return;
+    }
+    if (voice_mode_ == "ptt" && in_voice_.load(std::memory_order_relaxed)) {
+        std::lock_guard capture_lk(capture_mu_);
+        noise_suppressor_.clear_pending();
+        capture_fifo_.clear();
+        reconfigure_noise_suppressor_locked();
     }
     spdlog::debug("PTT {} (mode={}, in_voice={})",
                   active ? "enabled" : "disabled",
