@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <sstream>
 #include <variant>
 
 namespace grotto::voice {
@@ -34,6 +35,36 @@ const char* ice_config_source_name(bool from_server,
         return "config";
     }
     return "builtin-stun";
+}
+
+std::string summarize_sdp(std::string_view sdp) {
+    std::istringstream in{std::string(sdp)};
+    std::string line;
+    int audio_m_lines = 0;
+    int sendrecv = 0;
+    int sendonly = 0;
+    int recvonly = 0;
+    int inactive = 0;
+    std::string mid;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.rfind("m=audio ", 0) == 0) ++audio_m_lines;
+        else if (line == "a=sendrecv") ++sendrecv;
+        else if (line == "a=sendonly") ++sendonly;
+        else if (line == "a=recvonly") ++recvonly;
+        else if (line == "a=inactive") ++inactive;
+        else if (mid.empty() && line.rfind("a=mid:", 0) == 0) mid = line.substr(6);
+    }
+    std::ostringstream out;
+    out << "audio_m_lines=" << audio_m_lines
+        << ", mid=" << (mid.empty() ? "<none>" : mid)
+        << ", sendrecv=" << sendrecv
+        << ", sendonly=" << sendonly
+        << ", recvonly=" << recvonly
+        << ", inactive=" << inactive;
+    return out.str();
 }
 
 } // namespace
@@ -429,6 +460,7 @@ void VoiceEngine::on_voice_signal(const VoiceSignal& vs) {
 
     case VoiceSignal::OFFER: {
         spdlog::debug("Received OFFER from {}", from);
+        spdlog::debug("Remote OFFER SDP from {}: {}", from, summarize_sdp(sdp));
         auto peer = get_or_create_peer(from, false);
         if (peer && peer->pc) {
             try {
@@ -445,6 +477,7 @@ void VoiceEngine::on_voice_signal(const VoiceSignal& vs) {
 
     case VoiceSignal::ANSWER: {
         spdlog::debug("Received ANSWER from {}", from);
+        spdlog::debug("Remote ANSWER SDP from {}: {}", from, summarize_sdp(sdp));
         std::shared_ptr<PeerConn> peer;
         {
             std::lock_guard lk(mu_);
@@ -549,6 +582,10 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
         spdlog::debug("Sending {} to {}",
                       desc.type() == rtc::Description::Type::Offer ? "OFFER" : "ANSWER",
                       peer_id);
+        spdlog::debug("Local {} SDP for {}: {}",
+                      desc.type() == rtc::Description::Type::Offer ? "OFFER" : "ANSWER",
+                      peer_id,
+                      summarize_sdp(std::string(desc)));
         if (send_signal_) send_signal_(sig);
     });
 
@@ -565,7 +602,11 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
     peer->pc->onStateChange([this, peer_id, peer](rtc::PeerConnection::State state) {
         spdlog::info("WebRTC state for {} -> {}", peer_id, rtc_state_name(state));
         if (state == rtc::PeerConnection::State::Connected) {
-            spdlog::info("WebRTC connected to {}", peer_id);
+            spdlog::info("WebRTC connected to {} (has_media={}, bytes_sent={}, bytes_received={})",
+                         peer_id,
+                         peer->pc->hasMedia(),
+                         peer->pc->bytesSent(),
+                         peer->pc->bytesReceived());
             {
                 std::lock_guard lk(mu_);
                 peer->connected = true;
@@ -851,7 +892,7 @@ void VoiceEngine::refresh_speaking_state() {
             peer->no_media_warning_logged = true;
             spdlog::warn(
                 "WebRTC connected to {} but no media received after {} ms "
-                "(recv_track_seen={}, send_attempted={}, last_capture_rms={:.5f}, tx_packets={}, rx_packets={}, decoded_frames={}, queued_playout_samples={})",
+                "(recv_track_seen={}, send_attempted={}, last_capture_rms={:.5f}, tx_packets={}, rx_packets={}, decoded_frames={}, queued_playout_samples={}, has_media={}, bytes_sent={}, bytes_received={}, signaling_state={})",
                 peer_id,
                 elapsed,
                 peer->recv_track_seen,
@@ -860,7 +901,11 @@ void VoiceEngine::refresh_speaking_state() {
                 peer->tx_packets,
                 peer->rx_packets,
                 peer->decoded_frames,
-                peer->playout_fifo.size());
+                peer->playout_fifo.size(),
+                peer->pc ? peer->pc->hasMedia() : false,
+                peer->pc ? peer->pc->bytesSent() : 0,
+                peer->pc ? peer->pc->bytesReceived() : 0,
+                peer->pc ? static_cast<int>(peer->pc->signalingState()) : -1);
         }
     }
     auto speaking = get_speaking_peers();
