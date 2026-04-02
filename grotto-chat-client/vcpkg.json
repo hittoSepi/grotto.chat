@@ -12,7 +12,10 @@
     },
     "sqlitecpp",
     "libsodium",
-    "libdatachannel",
+    {
+      "name": "libdatachannel",
+      "features": ["srtp"]
+    },
     "opus",
     "curl",
     "toml11",

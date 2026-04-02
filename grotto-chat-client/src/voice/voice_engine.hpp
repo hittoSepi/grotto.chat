@@ -33,6 +33,7 @@ struct PeerConn {
     PcmSampleFifo                         playout_fifo;
     OpusCodec                             codec;
     std::string                           peer_id;
+    uint32_t                              send_ssrc = 0;
     bool                                  connected = false;
     bool                                  room_offer_local = false;
     bool                                  send_blocked_logged = false;

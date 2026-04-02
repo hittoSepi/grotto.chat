@@ -13,6 +13,11 @@ namespace grotto::voice {
 
 namespace {
 
+uint32_t next_voice_ssrc() {
+    static std::atomic_uint32_t counter{0x24570000u};
+    return counter.fetch_add(1, std::memory_order_relaxed);
+}
+
 const char* rtc_state_name(rtc::PeerConnection::State state) {
     switch (state) {
     case rtc::PeerConnection::State::New: return "new";
@@ -531,6 +536,7 @@ std::shared_ptr<PeerConn> VoiceEngine::get_or_create_peer(
     auto peer     = std::make_shared<PeerConn>();
     peer->peer_id = peer_id;
     peer->pc      = std::make_shared<rtc::PeerConnection>(make_rtc_config());
+    peer->send_ssrc = next_voice_ssrc();
     peer->room_offer_local = (session_kind_ == VoiceSessionKind::Room) &&
         should_offer_to_peer(state_.local_user_id(), peer_id);
 
@@ -552,7 +558,18 @@ void VoiceEngine::ensure_send_track(const std::shared_ptr<PeerConn>& peer) {
 
     auto desc = rtc::Description::Audio("audio", rtc::Description::Direction::SendRecv);
     desc.addOpusCodec(111);
+    desc.addSSRC(peer->send_ssrc,
+                 "grotto-" + state_.local_user_id(),
+                 state_.local_user_id(),
+                 "audio");
     peer->send_track = peer->pc->addTrack(std::move(desc));
+    auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(
+        peer->send_ssrc,
+        "grotto-" + state_.local_user_id(),
+        111,
+        OpusCodec::kSampleRate);
+    rtp_config->mid = std::string("audio");
+    peer->send_track->setMediaHandler(std::make_shared<rtc::OpusRtpPacketizer>(rtp_config));
     const auto peer_id = peer->peer_id;
     peer->send_track->onOpen([this, peer, peer_id]() {
         std::lock_guard lk(mu_);
@@ -781,41 +798,33 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
             if (!peer->send_track->isOpen()) {
                 if (!peer->send_blocked_logged) {
                     peer->send_blocked_logged = true;
-                    spdlog::debug("Deferring RTP send to {} until track opens (rms={:.5f}, opus_bytes={})",
+                    spdlog::debug("Deferring audio frame to {} until track opens (rms={:.5f}, opus_bytes={})",
                                   pid,
                                   rms,
                                   opus.size());
                 }
                 continue;
             }
-
-            std::vector<std::byte> rtp(12 + opus.size());
-            rtp[0] = std::byte{0x80};
-            rtp[1] = std::byte{0x6F};
-            rtp[2] = std::byte{static_cast<uint8_t>((rtp_seq_ >> 8) & 0xFF)};
-            rtp[3] = std::byte{static_cast<uint8_t>(rtp_seq_ & 0xFF)};
-            ++rtp_seq_;
-            std::memcpy(rtp.data() + 12, opus.data(), opus.size());
             if (peer->tx_packets == 0) {
-                spdlog::debug("Attempting first RTP packet to {} (rms={:.5f}, opus_bytes={}, track_is_open={})",
+                spdlog::debug("Attempting first audio frame to {} (rms={:.5f}, opus_bytes={}, track_is_open={})",
                               pid,
                               rms,
                               opus.size(),
                               peer->send_track->isOpen());
             }
-            bool sent_immediately = false;
             try {
-                sent_immediately = peer->send_track->send(rtp);
+                peer->send_track->sendFrame(
+                    reinterpret_cast<const rtc::byte*>(opus.data()),
+                    opus.size(),
+                    rtc::FrameInfo{static_cast<uint32_t>(peer->tx_packets * OpusCodec::kFrameSamples)});
             } catch (const std::exception& e) {
-                spdlog::warn("Track send failed for {}: {}", pid, e.what());
+                spdlog::warn("Track sendFrame failed for {}: {}", pid, e.what());
                 continue;
             }
             peer->send_blocked_logged = false;
             ++peer->tx_packets;
             if (peer->tx_packets == 1) {
-                spdlog::debug("Sent first RTP packet to {} (buffered={})",
-                              pid,
-                              sent_immediately ? "no" : "yes");
+                spdlog::debug("Sent first audio frame to {}", pid);
             }
         }
     }
