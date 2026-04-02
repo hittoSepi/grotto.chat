@@ -13,6 +13,12 @@ extern "C" {
 
 namespace grotto::voice {
 
+namespace {
+
+constexpr float kSuppressionBypassRms = 0.45f;
+
+}
+
 NoiseSuppressor::NoiseSuppressor() = default;
 
 NoiseSuppressor::~NoiseSuppressor() {
@@ -111,6 +117,10 @@ std::vector<float> NoiseSuppressor::process_frame_10ms(const std::vector<float>&
         return frame_48k;
     }
 
+    if (compute_rms(frame_48k) >= kSuppressionBypassRms) {
+        return frame_48k;
+    }
+
 #if defined(GROTTO_HAS_WEBRTC_NS) && GROTTO_HAS_WEBRTC_NS
     auto frame_16k = downsample_48k_to_16k(frame_48k);
     std::vector<int16_t> output_16k(kProcessingFrameSamples);
@@ -134,12 +144,37 @@ int NoiseSuppressor::policy_for_level(const std::string& level) {
     return 1;
 }
 
+float NoiseSuppressor::compute_rms(const std::vector<float>& samples) {
+    if (samples.empty()) {
+        return 0.0f;
+    }
+
+    float energy = 0.0f;
+    for (float sample : samples) {
+        energy += sample * sample;
+    }
+    return std::sqrt(energy / static_cast<float>(samples.size()));
+}
+
 std::vector<int16_t> NoiseSuppressor::downsample_48k_to_16k(const std::vector<float>& frame_48k) {
     std::vector<int16_t> out(kProcessingFrameSamples, 0);
+    auto at = [&frame_48k](int index) {
+        const int clamped = std::clamp(index, 0, static_cast<int>(frame_48k.size()) - 1);
+        return frame_48k[static_cast<size_t>(clamped)];
+    };
     for (size_t i = 0; i < out.size(); ++i) {
-        const size_t base = i * 3;
-        const float avg = (frame_48k[base] + frame_48k[base + 1] + frame_48k[base + 2]) / 3.0f;
-        out[i] = float_to_s16(avg);
+        const int center = static_cast<int>(i * 3);
+        const float filtered =
+            (1.0f * at(center - 4) +
+             2.0f * at(center - 3) +
+             3.0f * at(center - 2) +
+             4.0f * at(center - 1) +
+             5.0f * at(center + 0) +
+             4.0f * at(center + 1) +
+             3.0f * at(center + 2) +
+             2.0f * at(center + 3) +
+             1.0f * at(center + 4)) / 25.0f;
+        out[i] = float_to_s16(filtered);
     }
     return out;
 }

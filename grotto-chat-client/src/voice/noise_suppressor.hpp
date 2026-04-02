@@ -33,6 +33,7 @@ public:
 private:
     std::vector<float> process_frame_10ms(const std::vector<float>& frame_48k);
     static int policy_for_level(const std::string& level);
+    static float compute_rms(const std::vector<float>& samples);
     static std::vector<int16_t> downsample_48k_to_16k(const std::vector<float>& frame_48k);
     static std::vector<float> upsample_16k_to_48k(const std::vector<int16_t>& frame_16k);
     static int16_t float_to_s16(float sample);
