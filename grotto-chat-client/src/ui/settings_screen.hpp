@@ -111,6 +111,8 @@ private:
     std::string voice_ptt_key_;
     int voice_vad_threshold_percent_ = 2;
     int voice_jitter_buffer_frames_ = 4;
+    bool voice_limiter_enabled_ = true;
+    int voice_limiter_threshold_percent_ = 85;
     int voice_input_volume_value_ = 100;
     int voice_output_volume_value_ = 100;
     bool voice_key_capture_visible_ = false;
@@ -162,6 +164,8 @@ private:
     ftxui::Component voice_noise_suppression_level_dropdown_;
     ftxui::Component voice_vad_threshold_slider_;
     ftxui::Component voice_jitter_buffer_slider_;
+    ftxui::Component voice_limiter_cb_;
+    ftxui::Component voice_limiter_threshold_slider_;
     ftxui::Component voice_input_volume_slider_;
     ftxui::Component voice_output_volume_slider_;
     ftxui::Component reconnect_delay_input_;

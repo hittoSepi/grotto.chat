@@ -96,6 +96,8 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (v.contains("jitter_buffer_frames")) cfg.voice.jitter_buffer_frames = toml::find<int>(v, "jitter_buffer_frames");
             if (v.contains("noise_suppression_enabled")) cfg.voice.noise_suppression_enabled = toml::find<bool>(v, "noise_suppression_enabled");
             if (v.contains("noise_suppression_level")) cfg.voice.noise_suppression_level = toml::find<std::string>(v, "noise_suppression_level");
+            if (v.contains("limiter_enabled")) cfg.voice.limiter_enabled = toml::find<bool>(v, "limiter_enabled");
+            if (v.contains("limiter_threshold")) cfg.voice.limiter_threshold = static_cast<float>(toml::find<double>(v, "limiter_threshold"));
             if (v.contains("mode"))          cfg.voice.mode          = toml::find<std::string>(v, "mode");
             if (v.contains("ptt_key"))       cfg.voice.ptt_key       = toml::find<std::string>(v, "ptt_key");
             if (v.contains("vad_threshold")) cfg.voice.vad_threshold = static_cast<float>(toml::find<double>(v, "vad_threshold"));
@@ -258,6 +260,8 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["voice"]["jitter_buffer_frames"] = cfg.voice.jitter_buffer_frames;
     data["voice"]["noise_suppression_enabled"] = cfg.voice.noise_suppression_enabled;
     data["voice"]["noise_suppression_level"] = cfg.voice.noise_suppression_level;
+    data["voice"]["limiter_enabled"] = cfg.voice.limiter_enabled;
+    data["voice"]["limiter_threshold"] = cfg.voice.limiter_threshold;
     data["voice"]["mode"] = cfg.voice.mode;
     data["voice"]["ptt_key"] = cfg.voice.ptt_key;
     data["voice"]["vad_threshold"] = cfg.voice.vad_threshold;
@@ -331,6 +335,8 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["voice"]["jitter_buffer_frames"] = cfg.voice.jitter_buffer_frames;
         data["voice"]["noise_suppression_enabled"] = cfg.voice.noise_suppression_enabled;
         data["voice"]["noise_suppression_level"] = cfg.voice.noise_suppression_level;
+        data["voice"]["limiter_enabled"] = cfg.voice.limiter_enabled;
+        data["voice"]["limiter_threshold"] = cfg.voice.limiter_threshold;
         data["voice"]["mode"] = cfg.voice.mode;
         data["voice"]["ptt_key"] = cfg.voice.ptt_key;
         data["voice"]["vad_threshold"] = cfg.voice.vad_threshold;
@@ -412,6 +418,8 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             if (v.contains("jitter_buffer_frames")) cfg.voice.jitter_buffer_frames = toml::find<int>(v, "jitter_buffer_frames");
             if (v.contains("noise_suppression_enabled")) cfg.voice.noise_suppression_enabled = toml::find<bool>(v, "noise_suppression_enabled");
             if (v.contains("noise_suppression_level")) cfg.voice.noise_suppression_level = toml::find<std::string>(v, "noise_suppression_level");
+            if (v.contains("limiter_enabled")) cfg.voice.limiter_enabled = toml::find<bool>(v, "limiter_enabled");
+            if (v.contains("limiter_threshold")) cfg.voice.limiter_threshold = static_cast<float>(toml::find<double>(v, "limiter_threshold"));
             if (v.contains("mode")) cfg.voice.mode = toml::find<std::string>(v, "mode");
             if (v.contains("ptt_key")) cfg.voice.ptt_key = toml::find<std::string>(v, "ptt_key");
             if (v.contains("vad_threshold")) cfg.voice.vad_threshold = static_cast<float>(toml::find<double>(v, "vad_threshold"));

@@ -1,5 +1,6 @@
 #include "config.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
@@ -37,6 +38,8 @@ TEST_CASE("voice ICE settings survive save/load", "[config]") {
     cfg.voice.turn_password = "secret";
     cfg.voice.noise_suppression_enabled = false;
     cfg.voice.noise_suppression_level = "very_high";
+    cfg.voice.limiter_enabled = true;
+    cfg.voice.limiter_threshold = 0.73f;
     cfg.preview.terminal_graphics = "viewer-only";
 
     grotto::save_config(cfg, path);
@@ -47,6 +50,8 @@ TEST_CASE("voice ICE settings survive save/load", "[config]") {
     REQUIRE(loaded.voice.turn_password == cfg.voice.turn_password);
     REQUIRE(loaded.voice.noise_suppression_enabled == cfg.voice.noise_suppression_enabled);
     REQUIRE(loaded.voice.noise_suppression_level == cfg.voice.noise_suppression_level);
+    REQUIRE(loaded.voice.limiter_enabled == cfg.voice.limiter_enabled);
+    REQUIRE(loaded.voice.limiter_threshold == Catch::Approx(cfg.voice.limiter_threshold));
     REQUIRE(loaded.preview.terminal_graphics == cfg.preview.terminal_graphics);
 
     cleanup(dir);
@@ -65,6 +70,8 @@ TEST_CASE("voice ICE settings survive export/import", "[config]") {
     original.voice.turn_password = "relay-secret";
     original.voice.noise_suppression_enabled = true;
     original.voice.noise_suppression_level = "high";
+    original.voice.limiter_enabled = true;
+    original.voice.limiter_threshold = 0.81f;
     original.preview.terminal_graphics = "off";
 
     grotto::export_settings(original, path);
@@ -76,6 +83,8 @@ TEST_CASE("voice ICE settings survive export/import", "[config]") {
     REQUIRE(imported.voice.turn_password == original.voice.turn_password);
     REQUIRE(imported.voice.noise_suppression_enabled == original.voice.noise_suppression_enabled);
     REQUIRE(imported.voice.noise_suppression_level == original.voice.noise_suppression_level);
+    REQUIRE(imported.voice.limiter_enabled == original.voice.limiter_enabled);
+    REQUIRE(imported.voice.limiter_threshold == Catch::Approx(original.voice.limiter_threshold));
     REQUIRE(imported.preview.terminal_graphics == original.preview.terminal_graphics);
 
     cleanup(dir);

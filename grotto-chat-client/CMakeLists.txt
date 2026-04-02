@@ -232,6 +232,7 @@ set(CLIENT_SOURCES
     src/voice/audio_device.cpp
     src/voice/opus_codec.cpp
     src/voice/jitter_buffer.cpp
+    src/voice/limiter.cpp
     src/voice/noise_suppressor.cpp
     src/preview/link_previewer.cpp
     src/db/local_store.cpp

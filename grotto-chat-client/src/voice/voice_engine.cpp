@@ -136,6 +136,10 @@ rtc::Configuration VoiceEngine::make_rtc_config() {
 
 bool VoiceEngine::open_audio_or_report(const std::string& failure_context) {
     reconfigure_noise_suppressor_locked();
+    limiter_.configure(cfg_.voice.limiter_enabled, cfg_.voice.limiter_threshold);
+    spdlog::info("Voice limiter (enabled={}, threshold={:.2f})",
+                 cfg_.voice.limiter_enabled,
+                 cfg_.voice.limiter_threshold);
 
     if (audio_.open(cfg_.voice.input_device, cfg_.voice.output_device,
             [this](const float* pcm, uint32_t frames) { on_capture(pcm, frames); },
@@ -247,6 +251,7 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
     {
         std::lock_guard capture_lk(capture_mu_);
         capture_fifo_.clear();
+        limiter_.reset();
         noise_suppressor_.reset();
         logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
     }
@@ -312,6 +317,7 @@ void VoiceEngine::on_room_joined(const std::string& channel_id,
     {
         std::lock_guard capture_lk(capture_mu_);
         capture_fifo_.clear();
+        limiter_.reset();
         noise_suppressor_.reset();
         logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
     }
@@ -881,6 +887,7 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
     }
 
     while (auto pcm_vec = capture_fifo_.pop_exact(OpusCodec::kFrameSamples)) {
+        limiter_.process(*pcm_vec);
         float rms = 0.0f;
         for (float sample : *pcm_vec) {
             rms += sample * sample;

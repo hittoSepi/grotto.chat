@@ -398,6 +398,8 @@ void SettingsScreen::build_ui() {
     });
     voice_vad_threshold_slider_ = Slider("", &voice_vad_threshold_percent_, 0, 100, 1);
     voice_jitter_buffer_slider_ = Slider("", &voice_jitter_buffer_frames_, 2, 10, 1);
+    voice_limiter_cb_ = Checkbox(i18n::tr(i18n::I18nKey::VOICE_LIMITER_LABEL), &voice_limiter_enabled_);
+    voice_limiter_threshold_slider_ = Slider("", &voice_limiter_threshold_percent_, 20, 99, 1);
     voice_input_volume_slider_ = Slider("", &voice_input_volume_value_, 0, 200, 1);
     voice_output_volume_slider_ = Slider("", &voice_output_volume_value_, 0, 200, 1);
     reconnect_delay_input_ = Input(&reconnect_delay_sec_text_, "5");
@@ -458,6 +460,8 @@ void SettingsScreen::build_ui() {
         voice_capture_key_button_,
         voice_vad_threshold_slider_,
         voice_jitter_buffer_slider_,
+        voice_limiter_cb_,
+        voice_limiter_threshold_slider_,
         voice_input_volume_slider_,
         voice_output_volume_slider_,
         copy_selection_on_release_cb_,
@@ -618,6 +622,12 @@ Element SettingsScreen::render_voice() {
         text(" " + std::to_string(voice_jitter_buffer_frames_) + " fr") | color(palette::cyan()),
     });
 
+    auto limiter_threshold_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_LIMITER_THRESHOLD_LABEL)) | color(palette::fg_dark()),
+        voice_limiter_threshold_slider_->Render() | flex,
+        text(" " + std::to_string(voice_limiter_threshold_percent_) + "%") | color(palette::cyan()),
+    });
+
     return vbox({
         text(i18n::tr(i18n::I18nKey::VOICE_SETTINGS)) | bold | color(palette::blue()),
         separator(),
@@ -630,6 +640,8 @@ Element SettingsScreen::render_voice() {
         voice_mode_row,
         voice_noise_suppression_cb_->Render(),
         noise_suppression_level_row,
+        voice_limiter_cb_->Render(),
+        limiter_threshold_row,
         ptt_key_row,
         vad_row,
         jitter_row,
@@ -789,6 +801,8 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     voice_mode_selected_ = voice_mode_to_index(cfg.voice.mode);
     voice_noise_suppression_enabled_ = cfg.voice.noise_suppression_enabled;
     voice_noise_suppression_level_selected_ = noise_suppression_level_to_index(cfg.voice.noise_suppression_level);
+    voice_limiter_enabled_ = cfg.voice.limiter_enabled;
+    voice_limiter_threshold_percent_ = std::clamp(static_cast<int>(cfg.voice.limiter_threshold * 100.0f + 0.5f), 20, 99);
     voice_ptt_key_ = cfg.voice.ptt_key;
     voice_vad_threshold_percent_ = std::clamp(
         static_cast<int>(cfg.voice.vad_threshold * 100.0f + 0.5f), 0, 100);
@@ -862,6 +876,9 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
     cfg.voice.mode = voice_mode_from_index(voice_mode_selected_);
     cfg.voice.noise_suppression_enabled = voice_noise_suppression_enabled_;
     cfg.voice.noise_suppression_level = noise_suppression_level_from_index(voice_noise_suppression_level_selected_);
+    cfg.voice.limiter_enabled = voice_limiter_enabled_;
+    cfg.voice.limiter_threshold =
+        std::clamp(static_cast<float>(voice_limiter_threshold_percent_) / 100.0f, 0.20f, 0.99f);
     cfg.voice.ptt_key = voice_ptt_key_.empty() ? "F1" : voice_ptt_key_;
     cfg.voice.vad_threshold =
         std::clamp(static_cast<float>(voice_vad_threshold_percent_) / 100.0f, 0.0f, 1.0f);
@@ -921,6 +938,8 @@ void SettingsScreen::reset_to_defaults() {
     voice_mode_selected_ = 0;
     voice_noise_suppression_enabled_ = true;
     voice_noise_suppression_level_selected_ = 1;
+    voice_limiter_enabled_ = true;
+    voice_limiter_threshold_percent_ = 85;
     voice_ptt_key_ = "F1";
     voice_vad_threshold_percent_ = 2;
     voice_jitter_buffer_frames_ = 4;
@@ -970,6 +989,9 @@ void SettingsScreen::export_settings() {
         data["voice"]["mode"] = voice_mode_from_index(voice_mode_selected_);
         data["voice"]["noise_suppression_enabled"] = voice_noise_suppression_enabled_;
         data["voice"]["noise_suppression_level"] = noise_suppression_level_from_index(voice_noise_suppression_level_selected_);
+        data["voice"]["jitter_buffer_frames"] = voice_jitter_buffer_frames_;
+        data["voice"]["limiter_enabled"] = voice_limiter_enabled_;
+        data["voice"]["limiter_threshold"] = static_cast<double>(voice_limiter_threshold_percent_) / 100.0;
         data["voice"]["ptt_key"] = voice_ptt_key_;
         data["voice"]["vad_threshold"] = static_cast<double>(voice_vad_threshold_percent_) / 100.0;
         data["voice"]["jitter_buffer_frames"] = voice_jitter_buffer_frames_;
@@ -1055,6 +1077,13 @@ void SettingsScreen::import_settings() {
             if (voice.contains("noise_suppression_level")) {
                 voice_noise_suppression_level_selected_ =
                     noise_suppression_level_to_index(toml::find<std::string>(voice, "noise_suppression_level"));
+            }
+            if (voice.contains("limiter_enabled")) {
+                voice_limiter_enabled_ = toml::find<bool>(voice, "limiter_enabled");
+            }
+            if (voice.contains("limiter_threshold")) {
+                voice_limiter_threshold_percent_ = std::clamp(
+                    static_cast<int>(toml::find<double>(voice, "limiter_threshold") * 100.0 + 0.5), 20, 99);
             }
             if (voice.contains("ptt_key")) {
                 voice_ptt_key_ = toml::find<std::string>(voice, "ptt_key");

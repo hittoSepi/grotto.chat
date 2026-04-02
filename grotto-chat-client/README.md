@@ -84,6 +84,8 @@ frame_ms      = 20             # Audio frame size in milliseconds
 jitter_buffer_frames = 4       # Buffered 20 ms frames before playback
 noise_suppression_enabled = true
 noise_suppression_level = "moderate" # "low", "moderate", "high", "very_high"
+limiter_enabled = true
+limiter_threshold = 0.85
 ice_servers   = [              # Empty = built-in Google STUN fallback
   "stun:turn.example.com:3478",
   "turn:turn.example.com:3478?transport=udp",
