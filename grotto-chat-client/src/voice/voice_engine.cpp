@@ -521,26 +521,20 @@ void VoiceEngine::ensure_send_track(const std::shared_ptr<PeerConn>& peer) {
     auto desc = rtc::Description::Audio("audio", rtc::Description::Direction::SendRecv);
     desc.addOpusCodec(111);
     peer->send_track = peer->pc->addTrack(std::move(desc));
-    peer->send_track_open = peer->send_track->isOpen();
-    peer->send_track_wait_logged = false;
     const auto peer_id = peer->peer_id;
     peer->send_track->onOpen([this, peer, peer_id]() {
         std::lock_guard lk(mu_);
-        peer->send_track_open = true;
-        peer->send_track_wait_logged = false;
         spdlog::debug("Send track open for {}", peer_id);
     });
     peer->send_track->onClosed([this, peer, peer_id]() {
         std::lock_guard lk(mu_);
-        peer->send_track_open = false;
         spdlog::debug("Send track closed for {}", peer_id);
     });
     peer->send_track->onError([this, peer, peer_id](std::string error) {
         std::lock_guard lk(mu_);
-        peer->send_track_open = false;
         spdlog::warn("Send track error for {}: {}", peer_id, error);
     });
-    spdlog::debug("Created send track for {} (open={})", peer_id, peer->send_track_open);
+    spdlog::debug("Created send track for {} (isOpen={})", peer_id, peer->send_track->isOpen());
 }
 
 void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
@@ -722,21 +716,24 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
     capture_fifo_.push(pcm, frames);
 
     while (auto pcm_vec = capture_fifo_.pop_exact(OpusCodec::kFrameSamples)) {
+        float rms = 0.0f;
+        for (float sample : *pcm_vec) {
+            rms += sample * sample;
+        }
+        rms = std::sqrt(rms / static_cast<float>(pcm_vec->size()));
+
         std::lock_guard lk(mu_);
         for (auto& [pid, peer] : peers_) {
             if (!peer->connected || !peer->send_track) continue;
-            if (!peer->send_track_open || !peer->send_track->isOpen()) {
-                if (!peer->send_track_wait_logged) {
-                    peer->send_track_wait_logged = true;
-                    spdlog::debug("Waiting for send track to open for {} (connected={}, track_open={})",
-                                  pid,
-                                  peer->connected,
-                                  peer->send_track->isOpen());
-                }
+            peer->local_capture_rms = rms;
+            auto opus = peer->codec.encode(*pcm_vec);
+            if (opus.empty()) {
+                spdlog::debug("Dropped encoded frame for {} (rms={:.5f}, track_is_open={})",
+                              pid,
+                              rms,
+                              peer->send_track->isOpen());
                 continue;
             }
-            auto opus = peer->codec.encode(*pcm_vec);
-            if (opus.empty()) continue;
 
             std::vector<std::byte> rtp(12 + opus.size());
             rtp[0] = std::byte{0x80};
@@ -745,6 +742,13 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
             rtp[3] = std::byte{static_cast<uint8_t>(rtp_seq_ & 0xFF)};
             ++rtp_seq_;
             std::memcpy(rtp.data() + 12, opus.data(), opus.size());
+            if (peer->tx_packets == 0) {
+                spdlog::debug("Attempting first RTP packet to {} (rms={:.5f}, opus_bytes={}, track_is_open={})",
+                              pid,
+                              rms,
+                              opus.size(),
+                              peer->send_track->isOpen());
+            }
             const bool sent_immediately = peer->send_track->send(rtp);
             ++peer->tx_packets;
             if (peer->tx_packets == 1) {
@@ -809,7 +813,7 @@ void VoiceEngine::refresh_speaking_state() {
             if (peer->connected) {
                 ++rtc_connected_peers;
             }
-            if (peer->send_track_open) {
+            if (peer->send_track && peer->tx_packets > 0) {
                 ++send_ready_peers;
             }
             if (peer->recv_track_seen || peer->rx_packets > 0) {
@@ -827,11 +831,12 @@ void VoiceEngine::refresh_speaking_state() {
             peer->no_media_warning_logged = true;
             spdlog::warn(
                 "WebRTC connected to {} but no media received after {} ms "
-                "(recv_track_seen={}, send_track_open={}, tx_packets={}, rx_packets={}, decoded_frames={}, queued_playout_samples={})",
+                "(recv_track_seen={}, send_attempted={}, last_capture_rms={:.5f}, tx_packets={}, rx_packets={}, decoded_frames={}, queued_playout_samples={})",
                 peer_id,
                 elapsed,
                 peer->recv_track_seen,
-                peer->send_track_open,
+                peer->tx_packets > 0,
+                peer->local_capture_rms,
                 peer->tx_packets,
                 peer->rx_packets,
                 peer->decoded_frames,

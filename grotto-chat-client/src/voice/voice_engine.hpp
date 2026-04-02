@@ -35,14 +35,13 @@ struct PeerConn {
     std::string                           peer_id;
     bool                                  connected = false;
     bool                                  room_offer_local = false;
-    bool                                  send_track_open = false;
-    bool                                  send_track_wait_logged = false;
     bool                                  recv_track_seen = false;
     bool                                  no_media_warning_logged = false;
     uint64_t                              tx_packets = 0;
     uint64_t                              rx_packets = 0;
     uint64_t                              decoded_frames = 0;
     float                                 last_energy = 0.0f;  // for speaking indicator
+    float                                 local_capture_rms = 0.0f;
     std::chrono::steady_clock::time_point last_packet_time;
     std::chrono::steady_clock::time_point connected_since;
 };
