@@ -904,10 +904,15 @@ void VoiceEngine::mix_output(float* out, uint32_t frames) {
 
     std::lock_guard lk(mu_);
     for (auto& [pid, peer] : peers_) {
-        while (peer->playout_fifo.size() < frames) {
+        const size_t target_buffered_samples =
+            std::max<size_t>(frames, static_cast<size_t>(OpusCodec::kFrameSamples * 2));
+        while (peer->playout_fifo.size() < target_buffered_samples) {
             if (auto frame = peer->jitter_buf.pop()) {
                 peer->playout_fifo.push(*frame);
                 continue;
+            }
+            if (peer->playout_fifo.size() >= frames) {
+                break;
             }
             if (peer->connected && peer->rx_packets > 0) {
                 peer->playout_fifo.push(peer->codec.decode_plc());

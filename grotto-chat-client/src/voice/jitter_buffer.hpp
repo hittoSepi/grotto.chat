@@ -16,7 +16,7 @@ struct AudioFrame {
 // Holds up to kWindowSize frames; pops in-order with PLC on gap.
 class JitterBuffer {
 public:
-    explicit JitterBuffer(int target_delay_frames = 2);
+    explicit JitterBuffer(int target_delay_frames = 4);
 
     // Push a received (possibly out-of-order) audio frame.
     void push(uint16_t seq, std::vector<float> pcm);
