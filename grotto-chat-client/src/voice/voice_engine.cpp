@@ -821,7 +821,8 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
                 peer->send_track->sendFrame(
                     reinterpret_cast<const rtc::byte*>(opus.data()),
                     opus.size(),
-                    rtc::FrameInfo{static_cast<uint32_t>(peer->tx_packets * OpusCodec::kFrameSamples)});
+                    rtc::FrameInfo{std::chrono::duration<double, std::milli>(
+                        static_cast<double>(peer->tx_packets * OpusCodec::kFrameMs))});
             } catch (const std::exception& e) {
                 spdlog::warn("Track sendFrame failed for {}: {}", pid, e.what());
                 continue;
