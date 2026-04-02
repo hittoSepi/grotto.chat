@@ -131,6 +131,9 @@ void VoiceEngine::set_voice_state_for_session(const std::string& active_channel,
     vs.participants = participants;
     vs.speaking_peers.clear();
     vs.voice_mode = voice_mode_;
+    vs.rtc_connected_peers = 0;
+    vs.send_ready_peers = 0;
+    vs.recv_ready_peers = 0;
     state_.set_voice_state(std::move(vs));
 
     for (const auto& participant : participants) {
@@ -148,6 +151,9 @@ void VoiceEngine::reset_voice_state() {
     vs.participants.clear();
     vs.speaking_peers.clear();
     vs.voice_mode = voice_mode_;
+    vs.rtc_connected_peers = 0;
+    vs.send_ready_peers = 0;
+    vs.recv_ready_peers = 0;
     state_.set_voice_state(std::move(vs));
 }
 
@@ -793,10 +799,22 @@ std::vector<std::string> VoiceEngine::get_speaking_peers() const {
 
 void VoiceEngine::refresh_speaking_state() {
     if (!in_voice_.load(std::memory_order_relaxed)) return;
+    std::size_t rtc_connected_peers = 0;
+    std::size_t send_ready_peers = 0;
+    std::size_t recv_ready_peers = 0;
     {
         std::lock_guard lk(mu_);
         const auto now = std::chrono::steady_clock::now();
         for (const auto& [peer_id, peer] : peers_) {
+            if (peer->connected) {
+                ++rtc_connected_peers;
+            }
+            if (peer->send_track_open) {
+                ++send_ready_peers;
+            }
+            if (peer->recv_track_seen || peer->rx_packets > 0) {
+                ++recv_ready_peers;
+            }
             if (!peer->connected || peer->no_media_warning_logged ||
                 peer->connected_since == std::chrono::steady_clock::time_point{}) {
                 continue;
@@ -822,8 +840,14 @@ void VoiceEngine::refresh_speaking_state() {
     }
     auto speaking = get_speaking_peers();
     VoiceState vs = state_.voice_snapshot();
-    if (vs.speaking_peers != speaking) {
+    if (vs.speaking_peers != speaking ||
+        vs.rtc_connected_peers != rtc_connected_peers ||
+        vs.send_ready_peers != send_ready_peers ||
+        vs.recv_ready_peers != recv_ready_peers) {
         vs.speaking_peers = std::move(speaking);
+        vs.rtc_connected_peers = rtc_connected_peers;
+        vs.send_ready_peers = send_ready_peers;
+        vs.recv_ready_peers = recv_ready_peers;
         state_.set_voice_state(vs);
     }
     

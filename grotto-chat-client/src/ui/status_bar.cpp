@@ -34,6 +34,9 @@ Element render_status_bar(const StatusInfo& info) {
         if (info.muted) voice_text += " " + i18n::tr(i18n::I18nKey::MUTED_INDICATOR);
         if (info.deafened) voice_text += " " + i18n::tr(i18n::I18nKey::DEAFENED_INDICATOR);
         voice_text += " [" + std::string(info.voice_mode == "ptt" ? ptt_text : i18n::tr(i18n::I18nKey::VOX)) + "]";
+        voice_text += " RTC " + std::to_string(info.voice_rtc_connected) + "/" + std::to_string(info.voice_participants.size());
+        voice_text += " TX " + std::to_string(info.voice_send_ready) + "/" + std::to_string(info.voice_participants.size());
+        voice_text += " RX " + std::to_string(info.voice_recv_ready) + "/" + std::to_string(info.voice_participants.size());
 
         left.push_back(text(" | ") | color(palette::fg_dark()));
         left.push_back(text(voice_text) | color(Color::Green));

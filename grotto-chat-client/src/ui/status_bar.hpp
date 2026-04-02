@@ -16,6 +16,9 @@ struct StatusInfo {
     std::string voice_channel;
     std::string voice_mode     = "ptt";  // "ptt" or "vox"
     std::string ptt_key        = "F1";
+    std::size_t voice_rtc_connected = 0;
+    std::size_t voice_send_ready = 0;
+    std::size_t voice_recv_ready = 0;
     std::vector<std::string> voice_participants;
     std::vector<std::string> speaking_peers;  // subset of participants currently speaking
     std::vector<std::string> online_users;

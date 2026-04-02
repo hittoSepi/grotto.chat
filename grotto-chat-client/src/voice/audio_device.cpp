@@ -9,6 +9,30 @@
 
 namespace grotto::voice {
 
+namespace {
+
+const char* backend_name(ma_backend backend) {
+    switch (backend) {
+    case ma_backend_wasapi: return "wasapi";
+    case ma_backend_dsound: return "dsound";
+    case ma_backend_winmm: return "winmm";
+    case ma_backend_coreaudio: return "coreaudio";
+    case ma_backend_sndio: return "sndio";
+    case ma_backend_audio4: return "audio4";
+    case ma_backend_oss: return "oss";
+    case ma_backend_pulseaudio: return "pulseaudio";
+    case ma_backend_alsa: return "alsa";
+    case ma_backend_jack: return "jack";
+    case ma_backend_aaudio: return "aaudio";
+    case ma_backend_opensl: return "opensl";
+    case ma_backend_webaudio: return "webaudio";
+    case ma_backend_null: return "null";
+    default: return "unknown";
+    }
+}
+
+} // namespace
+
 // ── Callback ─────────────────────────────────────────────────────────────────
 
 void AudioDevice::data_callback(ma_device* dev, void* out, const void* in, uint32_t frames) {
@@ -52,9 +76,16 @@ bool AudioDevice::open(const std::string& input_device,
     config.dataCallback       = data_callback;
     config.pUserData          = this;
 
+    spdlog::info("Opening audio device (requested_input='{}', requested_output='{}', sample_rate=48000, channels=1, period_ms=5)",
+                 input_device.empty() ? "<system-default>" : input_device,
+                 output_device.empty() ? "<system-default>" : output_device);
+
     // Device selection (empty = default)
     // For named device selection, miniaudio requires enumeration first.
     // For now, always use system default; named device support can be added.
+    if (!input_device.empty() || !output_device.empty()) {
+        spdlog::warn("Named audio device selection is not implemented yet; using system defaults instead");
+    }
     (void)input_device;
     (void)output_device;
 
@@ -65,7 +96,11 @@ bool AudioDevice::open(const std::string& input_device,
     }
 
     open_ = true;
-    spdlog::info("Audio device opened (48kHz, mono, duplex)");
+    spdlog::info("Audio device opened (capture='{}', playback='{}', 48kHz, mono, duplex)",
+                 device_->capture.name[0] != '\0' ? device_->capture.name : "<unknown>",
+                 device_->playback.name[0] != '\0' ? device_->playback.name : "<unknown>");
+    spdlog::info("Audio backend: {}",
+                 (device_->pContext != nullptr) ? backend_name(device_->pContext->backend) : "unknown");
     return true;
 }
 

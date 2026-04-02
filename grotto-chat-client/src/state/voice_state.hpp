@@ -12,6 +12,9 @@ struct VoiceState {
     std::vector<std::string> participants;   // user_ids in room
     std::vector<std::string> speaking_peers; // peers currently speaking (energy above threshold)
     std::string voice_mode = "ptt";          // "ptt" or "vox"
+    std::size_t rtc_connected_peers = 0;
+    std::size_t send_ready_peers = 0;
+    std::size_t recv_ready_peers = 0;
 };
 
 struct RuntimeVoiceIceConfig {

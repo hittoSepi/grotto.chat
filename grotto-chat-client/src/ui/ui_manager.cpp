@@ -1069,6 +1069,9 @@ Element UIManager::build_document(int term_rows) {
     si.voice_channel  = vs.active_channel;
     si.voice_mode     = vs.voice_mode;
     si.ptt_key        = cfg_.voice.ptt_key;
+    si.voice_rtc_connected = vs.rtc_connected_peers;
+    si.voice_send_ready = vs.send_ready_peers;
+    si.voice_recv_ready = vs.recv_ready_peers;
     si.voice_participants = vs.participants;
     si.speaking_peers = vs.speaking_peers;
     si.online_users   = state_.online_users();
