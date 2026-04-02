@@ -3,6 +3,7 @@
 #include "voice/opus_codec.hpp"
 #include "voice/jitter_buffer.hpp"
 #include "voice/audio_device.hpp"
+#include "voice/noise_suppressor.hpp"
 #include "voice/pcm_sample_fifo.hpp"
 #include "state/app_state.hpp"
 #include "config.hpp"
@@ -132,6 +133,7 @@ private:
     std::unordered_map<std::string, std::shared_ptr<PeerConn>> peers_;
 
     AudioDevice        audio_;
+    NoiseSuppressor    noise_suppressor_;
     std::atomic_bool   in_voice_{false};
     std::atomic_bool   muted_{false};
     std::atomic_bool   deafened_{false};

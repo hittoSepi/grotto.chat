@@ -104,6 +104,10 @@ private:
     int voice_output_device_selected_ = 0;
     std::vector<std::string> voice_mode_options_ = {"PTT", "Voice Activation"};
     int voice_mode_selected_ = 0;
+    bool voice_noise_suppression_enabled_ = true;
+    std::vector<std::string> voice_noise_suppression_level_values_ = {"low", "moderate", "high", "very_high"};
+    std::vector<std::string> voice_noise_suppression_level_options_;
+    int voice_noise_suppression_level_selected_ = 1;
     std::string voice_ptt_key_;
     int voice_vad_threshold_percent_ = 2;
     int voice_jitter_buffer_frames_ = 4;
@@ -154,6 +158,8 @@ private:
     ftxui::Component voice_output_device_dropdown_;
     ftxui::Component voice_mode_dropdown_;
     ftxui::Component voice_capture_key_button_;
+    ftxui::Component voice_noise_suppression_cb_;
+    ftxui::Component voice_noise_suppression_level_dropdown_;
     ftxui::Component voice_vad_threshold_slider_;
     ftxui::Component voice_jitter_buffer_slider_;
     ftxui::Component voice_input_volume_slider_;

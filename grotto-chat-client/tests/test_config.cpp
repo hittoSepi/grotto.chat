@@ -35,6 +35,8 @@ TEST_CASE("voice ICE settings survive save/load", "[config]") {
     };
     cfg.voice.turn_username = "grotto";
     cfg.voice.turn_password = "secret";
+    cfg.voice.noise_suppression_enabled = false;
+    cfg.voice.noise_suppression_level = "very_high";
     cfg.preview.terminal_graphics = "viewer-only";
 
     grotto::save_config(cfg, path);
@@ -43,6 +45,8 @@ TEST_CASE("voice ICE settings survive save/load", "[config]") {
     REQUIRE(loaded.voice.ice_servers == cfg.voice.ice_servers);
     REQUIRE(loaded.voice.turn_username == cfg.voice.turn_username);
     REQUIRE(loaded.voice.turn_password == cfg.voice.turn_password);
+    REQUIRE(loaded.voice.noise_suppression_enabled == cfg.voice.noise_suppression_enabled);
+    REQUIRE(loaded.voice.noise_suppression_level == cfg.voice.noise_suppression_level);
     REQUIRE(loaded.preview.terminal_graphics == cfg.preview.terminal_graphics);
 
     cleanup(dir);
@@ -59,6 +63,8 @@ TEST_CASE("voice ICE settings survive export/import", "[config]") {
     };
     original.voice.turn_username = "relay";
     original.voice.turn_password = "relay-secret";
+    original.voice.noise_suppression_enabled = true;
+    original.voice.noise_suppression_level = "high";
     original.preview.terminal_graphics = "off";
 
     grotto::export_settings(original, path);
@@ -68,6 +74,8 @@ TEST_CASE("voice ICE settings survive export/import", "[config]") {
     REQUIRE(imported.voice.ice_servers == original.voice.ice_servers);
     REQUIRE(imported.voice.turn_username == original.voice.turn_username);
     REQUIRE(imported.voice.turn_password == original.voice.turn_password);
+    REQUIRE(imported.voice.noise_suppression_enabled == original.voice.noise_suppression_enabled);
+    REQUIRE(imported.voice.noise_suppression_level == original.voice.noise_suppression_level);
     REQUIRE(imported.preview.terminal_graphics == original.preview.terminal_graphics);
 
     cleanup(dir);

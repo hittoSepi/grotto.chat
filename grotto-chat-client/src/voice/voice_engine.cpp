@@ -78,6 +78,15 @@ std::string summarize_sdp(std::string_view sdp) {
     return out.str();
 }
 
+std::string normalized_noise_suppression_level(std::string level) {
+    std::transform(level.begin(), level.end(), level.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (level == "low" || level == "moderate" || level == "high" || level == "very_high") {
+        return level;
+    }
+    return "moderate";
+}
+
 } // namespace
 
 VoiceEngine::VoiceEngine(AppState& state, const ClientConfig& cfg)
@@ -126,6 +135,15 @@ rtc::Configuration VoiceEngine::make_rtc_config() {
 }
 
 bool VoiceEngine::open_audio_or_report(const std::string& failure_context) {
+    const auto ns_level = normalized_noise_suppression_level(cfg_.voice.noise_suppression_level);
+    const bool ns_operational =
+        noise_suppressor_.configure(cfg_.voice.noise_suppression_enabled, ns_level);
+    spdlog::info("Noise suppression (built_in={}, enabled={}, level={}, operational={})",
+                 noise_suppressor_.build_available(),
+                 cfg_.voice.noise_suppression_enabled,
+                 ns_level,
+                 ns_operational);
+
     if (audio_.open(cfg_.voice.input_device, cfg_.voice.output_device,
             [this](const float* pcm, uint32_t frames) { on_capture(pcm, frames); },
             [this](float* out, uint32_t frames) { mix_output(out, frames); })) {
@@ -225,6 +243,7 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
     {
         std::lock_guard capture_lk(capture_mu_);
         capture_fifo_.clear();
+        noise_suppressor_.reset();
         logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
     }
 
@@ -289,6 +308,7 @@ void VoiceEngine::on_room_joined(const std::string& channel_id,
     {
         std::lock_guard capture_lk(capture_mu_);
         capture_fifo_.clear();
+        noise_suppressor_.reset();
         logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
     }
 
@@ -821,31 +841,34 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
 
     if (muted_.load(std::memory_order_relaxed) ||
         !in_voice_.load(std::memory_order_relaxed)) {
+        noise_suppressor_.clear_pending();
         capture_fifo_.clear();
         return;
     }
 
     // PTT/VOX gate
     if (voice_mode_ == "ptt" && !ptt_active_.load(std::memory_order_relaxed)) {
+        noise_suppressor_.clear_pending();
         capture_fifo_.clear();
         return;
     }
 
-    if (voice_mode_ == "vox") {
-        // Simple energy-based VAD
-        float energy = 0.0f;
-        uint32_t n = std::min(frames, static_cast<uint32_t>(OpusCodec::kFrameSamples));
-        for (uint32_t i = 0; i < n; ++i) {
-            energy += pcm[i] * pcm[i];
+    for (auto& processed_chunk : noise_suppressor_.process_capture_chunk(pcm, frames)) {
+        if (voice_mode_ == "vox") {
+            float energy = 0.0f;
+            for (float sample : processed_chunk) {
+                energy += sample * sample;
+            }
+            energy = std::sqrt(energy / static_cast<float>(processed_chunk.size()));
+            if (energy < cfg_.voice.vad_threshold) {
+                capture_fifo_.clear();
+                noise_suppressor_.clear_pending();
+                continue;
+            }
         }
-        energy = std::sqrt(energy / n);
-        if (energy < cfg_.voice.vad_threshold) {
-            capture_fifo_.clear();
-            return;
-        }
-    }
 
-    capture_fifo_.push(pcm, frames);
+        capture_fifo_.push(processed_chunk);
+    }
 
     while (auto pcm_vec = capture_fifo_.pop_exact(OpusCodec::kFrameSamples)) {
         float rms = 0.0f;

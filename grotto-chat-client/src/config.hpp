@@ -40,6 +40,8 @@ struct VoiceConfig {
     int         opus_bitrate  = 64000;
     int         frame_ms      = 20;
     int         jitter_buffer_frames = 4;  // 20 ms Opus frames buffered before playout
+    bool        noise_suppression_enabled = true;
+    std::string noise_suppression_level = "moderate"; // "low" | "moderate" | "high" | "very_high"
     std::string mode          = "ptt";     // "ptt" or "vox"
     std::string ptt_key       = "F1";
     float       vad_threshold = 0.02f;

@@ -145,6 +145,25 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(miniaudio)
 
 FetchContent_Declare(
+    webrtc_ns
+    GIT_REPOSITORY https://github.com/cpuimage/WebRTC_NS.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_GetProperties(webrtc_ns)
+if(NOT webrtc_ns_POPULATED)
+    FetchContent_Populate(webrtc_ns)
+endif()
+
+add_library(grotto_webrtc_ns STATIC
+    ${webrtc_ns_SOURCE_DIR}/noise_suppression.c
+)
+target_include_directories(grotto_webrtc_ns PUBLIC ${webrtc_ns_SOURCE_DIR})
+if(NOT MSVC)
+    target_link_libraries(grotto_webrtc_ns PUBLIC m)
+endif()
+
+FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
     GIT_TAG        master
@@ -215,6 +234,7 @@ set(CLIENT_SOURCES
     src/voice/audio_device.cpp
     src/voice/opus_codec.cpp
     src/voice/jitter_buffer.cpp
+    src/voice/noise_suppressor.cpp
     src/preview/link_previewer.cpp
     src/db/local_store.cpp
     src/db/migrations.cpp
@@ -250,11 +270,13 @@ target_link_libraries(grotto-client PRIVATE
     spdlog::spdlog
     signal-protocol-c
     miniaudio::miniaudio
+    grotto_webrtc_ns
     ftxui::screen
     ftxui::dom
     ftxui::component
   
 )
+target_compile_definitions(grotto-client PRIVATE GROTTO_HAS_WEBRTC_NS=1)
 
 if(MSVC)
     target_compile_options(grotto-client PRIVATE /W3 /wd4996)
@@ -334,6 +356,21 @@ target_include_directories(test-voice-helpers PRIVATE
 )
 target_link_libraries(test-voice-helpers PRIVATE Catch2::Catch2WithMain)
 add_test(NAME voice-helper-tests COMMAND test-voice-helpers)
+
+add_executable(test-noise-suppressor
+    tests/test_noise_suppressor.cpp
+    src/voice/noise_suppressor.cpp
+)
+target_include_directories(test-noise-suppressor PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_compile_definitions(test-noise-suppressor PRIVATE GROTTO_HAS_WEBRTC_NS=1)
+target_link_libraries(test-noise-suppressor PRIVATE
+    Catch2::Catch2WithMain
+    spdlog::spdlog
+    grotto_webrtc_ns
+)
+add_test(NAME noise-suppressor-tests COMMAND test-noise-suppressor)
 
 add_executable(test-signal-prekey-roundtrip
     tests/test_signal_prekey_roundtrip.cpp

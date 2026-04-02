@@ -140,6 +140,30 @@ std::string voice_mode_from_index(int index) {
     return index == 1 ? "vox" : "ptt";
 }
 
+int noise_suppression_level_to_index(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (value == "low") {
+        return 0;
+    }
+    if (value == "high") {
+        return 2;
+    }
+    if (value == "very_high") {
+        return 3;
+    }
+    return 1;
+}
+
+std::string noise_suppression_level_from_index(int index) {
+    switch (index) {
+        case 0: return "low";
+        case 2: return "high";
+        case 3: return "very_high";
+        default: return "moderate";
+    }
+}
+
 int find_device_index(const std::vector<std::string>& values,
                       const std::string& selected_value) {
     for (size_t i = 0; i < values.size(); ++i) {
@@ -358,9 +382,17 @@ void SettingsScreen::build_ui() {
         i18n::tr(i18n::I18nKey::VOICE_MODE_PTT),
         i18n::tr(i18n::I18nKey::VOICE_MODE_VOX),
     };
+    voice_noise_suppression_level_options_ = {
+        i18n::tr(i18n::I18nKey::VOICE_NS_LEVEL_LOW),
+        i18n::tr(i18n::I18nKey::VOICE_NS_LEVEL_MODERATE),
+        i18n::tr(i18n::I18nKey::VOICE_NS_LEVEL_HIGH),
+        i18n::tr(i18n::I18nKey::VOICE_NS_LEVEL_VERY_HIGH),
+    };
     voice_input_device_dropdown_ = Dropdown(&voice_input_device_options_, &voice_input_device_selected_);
     voice_output_device_dropdown_ = Dropdown(&voice_output_device_options_, &voice_output_device_selected_);
     voice_mode_dropdown_ = Dropdown(&voice_mode_options_, &voice_mode_selected_);
+    voice_noise_suppression_cb_ = Checkbox(i18n::tr(i18n::I18nKey::VOICE_NOISE_SUPPRESSION_LABEL), &voice_noise_suppression_enabled_);
+    voice_noise_suppression_level_dropdown_ = Dropdown(&voice_noise_suppression_level_options_, &voice_noise_suppression_level_selected_);
     voice_capture_key_button_ = Button(i18n::tr(i18n::I18nKey::VOICE_SET_HOTKEY_BUTTON), [this] {
         voice_key_capture_visible_ = true;
     });
@@ -421,6 +453,8 @@ void SettingsScreen::build_ui() {
         voice_input_device_dropdown_,
         voice_output_device_dropdown_,
         voice_mode_dropdown_,
+        voice_noise_suppression_cb_,
+        voice_noise_suppression_level_dropdown_,
         voice_capture_key_button_,
         voice_vad_threshold_slider_,
         voice_jitter_buffer_slider_,
@@ -567,6 +601,11 @@ Element SettingsScreen::render_voice() {
         voice_capture_key_button_->Render(),
     });
 
+    auto noise_suppression_level_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_NOISE_SUPPRESSION_LEVEL_LABEL)) | color(palette::fg_dark()),
+        voice_noise_suppression_level_dropdown_->Render() | border,
+    });
+
     auto vad_row = hbox({
         text(i18n::tr(i18n::I18nKey::VOICE_VAD_THRESHOLD_LABEL)) | color(palette::fg_dark()),
         voice_vad_threshold_slider_->Render() | flex,
@@ -589,6 +628,8 @@ Element SettingsScreen::render_voice() {
         output_volume_row,
         text(""),
         voice_mode_row,
+        voice_noise_suppression_cb_->Render(),
+        noise_suppression_level_row,
         ptt_key_row,
         vad_row,
         jitter_row,
@@ -746,6 +787,8 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     voice_input_device_selected_ = find_device_index(voice_input_device_values_, cfg.voice.input_device);
     voice_output_device_selected_ = find_device_index(voice_output_device_values_, cfg.voice.output_device);
     voice_mode_selected_ = voice_mode_to_index(cfg.voice.mode);
+    voice_noise_suppression_enabled_ = cfg.voice.noise_suppression_enabled;
+    voice_noise_suppression_level_selected_ = noise_suppression_level_to_index(cfg.voice.noise_suppression_level);
     voice_ptt_key_ = cfg.voice.ptt_key;
     voice_vad_threshold_percent_ = std::clamp(
         static_cast<int>(cfg.voice.vad_threshold * 100.0f + 0.5f), 0, 100);
@@ -817,6 +860,8 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
         cfg.voice.output_device = voice_output_device_values_[static_cast<size_t>(voice_output_device_selected_)];
     }
     cfg.voice.mode = voice_mode_from_index(voice_mode_selected_);
+    cfg.voice.noise_suppression_enabled = voice_noise_suppression_enabled_;
+    cfg.voice.noise_suppression_level = noise_suppression_level_from_index(voice_noise_suppression_level_selected_);
     cfg.voice.ptt_key = voice_ptt_key_.empty() ? "F1" : voice_ptt_key_;
     cfg.voice.vad_threshold =
         std::clamp(static_cast<float>(voice_vad_threshold_percent_) / 100.0f, 0.0f, 1.0f);
@@ -874,6 +919,8 @@ void SettingsScreen::reset_to_defaults() {
     voice_input_device_selected_ = 0;
     voice_output_device_selected_ = 0;
     voice_mode_selected_ = 0;
+    voice_noise_suppression_enabled_ = true;
+    voice_noise_suppression_level_selected_ = 1;
     voice_ptt_key_ = "F1";
     voice_vad_threshold_percent_ = 2;
     voice_jitter_buffer_frames_ = 4;
@@ -921,6 +968,8 @@ void SettingsScreen::export_settings() {
         data["voice"]["input_volume"] = voice_input_volume_value_;
         data["voice"]["output_volume"] = voice_output_volume_value_;
         data["voice"]["mode"] = voice_mode_from_index(voice_mode_selected_);
+        data["voice"]["noise_suppression_enabled"] = voice_noise_suppression_enabled_;
+        data["voice"]["noise_suppression_level"] = noise_suppression_level_from_index(voice_noise_suppression_level_selected_);
         data["voice"]["ptt_key"] = voice_ptt_key_;
         data["voice"]["vad_threshold"] = static_cast<double>(voice_vad_threshold_percent_) / 100.0;
         data["voice"]["jitter_buffer_frames"] = voice_jitter_buffer_frames_;
@@ -999,6 +1048,13 @@ void SettingsScreen::import_settings() {
             }
             if (voice.contains("mode")) {
                 voice_mode_selected_ = voice_mode_to_index(toml::find<std::string>(voice, "mode"));
+            }
+            if (voice.contains("noise_suppression_enabled")) {
+                voice_noise_suppression_enabled_ = toml::find<bool>(voice, "noise_suppression_enabled");
+            }
+            if (voice.contains("noise_suppression_level")) {
+                voice_noise_suppression_level_selected_ =
+                    noise_suppression_level_to_index(toml::find<std::string>(voice, "noise_suppression_level"));
             }
             if (voice.contains("ptt_key")) {
                 voice_ptt_key_ = toml::find<std::string>(voice, "ptt_key");
