@@ -435,7 +435,6 @@ void VoiceEngine::on_voice_signal(const VoiceSignal& vs) {
                 ensure_send_track(peer);
                 peer->pc->setRemoteDescription(
                     rtc::Description(sdp, rtc::Description::Type::Offer));
-                peer->pc->setLocalDescription(rtc::Description::Type::Answer);
             } catch (const std::exception& e) {
                 spdlog::debug("Ignoring OFFER from {} in current signaling state: {}",
                               from, e.what());
@@ -612,6 +611,10 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
                 state_.set_user_voice_status(peer_id, ChannelUserInfo::VoiceStatus::Off);
             }
         }
+    });
+
+    peer->pc->onSignalingStateChange([peer_id](rtc::PeerConnection::SignalingState state) {
+        spdlog::debug("WebRTC signaling state for {} -> {}", peer_id, static_cast<int>(state));
     });
 
     peer->pc->onTrack([this, peer_id, peer](std::shared_ptr<rtc::Track> track) {
