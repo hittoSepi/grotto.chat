@@ -49,6 +49,7 @@ void MessageHandler::dispatch(const Envelope& env) {
     case MT_FILE_COMPLETE:   handle_file_complete(env);   break;
     case MT_FILE_ERROR:      handle_file_error(env);      break;
     case MT_FILE_POLICY:     handle_file_policy(env);     break;
+    case MT_FILE_LIST_RESPONSE: handle_file_list_response(env); break;
     default:
         spdlog::debug("Unhandled message type: {}", static_cast<int>(env.type()));
         break;
@@ -413,6 +414,16 @@ void MessageHandler::handle_voice_room_state(const Envelope& env) {
     });
 }
 
+void MessageHandler::request_file_list(const std::string& recipient_id,
+                                       const std::string& channel_id,
+                                       uint32_t limit) {
+    FileListRequest req;
+    req.set_recipient_id(recipient_id);
+    req.set_channel_id(channel_id);
+    req.set_limit(limit);
+    send_envelope(MT_FILE_LIST_REQUEST, req);
+}
+
 void MessageHandler::handle_voice_room_join(const Envelope& env) {
     VoiceRoomJoin join;
     if (!join.ParseFromArray(env.payload().data(),
@@ -651,6 +662,17 @@ void MessageHandler::handle_file_policy(const Envelope& env) {
     }
     if (file_policy_fn_) {
         file_policy_fn_(policy);
+    }
+}
+
+void MessageHandler::handle_file_list_response(const Envelope& env) {
+    FileListResponse response;
+    if (!response.ParseFromString(env.payload())) {
+        spdlog::warn("Failed to parse FileListResponse");
+        return;
+    }
+    if (file_list_fn_) {
+        file_list_fn_(response);
     }
 }
 

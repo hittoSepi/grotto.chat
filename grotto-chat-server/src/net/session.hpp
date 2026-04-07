@@ -91,6 +91,7 @@ private:
     void handle_file_request(const FileUploadRequest& req, const Envelope& raw);
     void handle_file_upload(const FileUploadChunk& chunk, const Envelope& raw);
     void handle_file_download(const FileDownloadRequest& req);
+    void handle_file_list_request(const FileListRequest& req);
 
     // Send helpers
     void send_envelope(MessageType type, const google::protobuf::Message& msg);

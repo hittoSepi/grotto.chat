@@ -379,4 +379,24 @@ void AppState::clear_search_results() {
     search_results_.clear();
 }
 
+void AppState::set_channel_files(const std::string& channel_id,
+                                 const std::vector<RemoteFileEntry>& files) {
+    std::unique_lock lk(mu_);
+    channel_files_[channel_id] = files;
+}
+
+std::vector<RemoteFileEntry> AppState::channel_files(const std::string& channel_id) const {
+    std::shared_lock lk(mu_);
+    auto it = channel_files_.find(channel_id);
+    if (it == channel_files_.end()) {
+        return {};
+    }
+    return it->second;
+}
+
+void AppState::clear_channel_files(const std::string& channel_id) {
+    std::unique_lock lk(mu_);
+    channel_files_.erase(channel_id);
+}
+
 } // namespace grotto

@@ -125,6 +125,26 @@ bool can_download_file(const db::FileMetadata& metadata,
     return requester_user_id == metadata.sender_id;
 }
 
+void populate_proto_file_metadata(const db::FileMetadata& source, ::FileMetadata* target) {
+    if (target == nullptr) {
+        return;
+    }
+    target->set_file_id(source.file_id);
+    target->set_filename(source.filename);
+    target->set_file_size(source.file_size);
+    target->set_mime_type(source.mime_type);
+    target->set_sender_id(source.sender_id);
+    target->set_recipient_id(source.recipient_id);
+    target->set_channel_id(source.channel_id);
+    target->set_uploaded_at(source.uploaded_at);
+    target->set_expires_at(source.expires_at);
+    if (!source.file_checksum.empty()) {
+        target->set_file_checksum(source.file_checksum.data(),
+                                  static_cast<int>(source.file_checksum.size()));
+    }
+    target->set_storage_path(source.storage_path);
+}
+
 // Get current timestamp in milliseconds
 uint64_t now_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -470,6 +490,20 @@ void Session::handle_envelope(const Envelope& env) {
             }
         } else {
             send_error(4087, "Not authenticated");
+        }
+        break;
+
+    case MT_FILE_LIST_REQUEST:
+        if (state_ == SessionState::Established) {
+            FileListRequest req;
+            if (!env.payload().empty() && req.ParseFromArray(
+                    env.payload().data(), static_cast<int>(env.payload().size()))) {
+                handle_file_list_request(req);
+            } else {
+                send_error(4089, "Invalid FILE_LIST_REQUEST");
+            }
+        } else {
+            send_error(4092, "Not authenticated");
         }
         break;
 
@@ -1272,6 +1306,47 @@ void Session::handle_file_download(const FileDownloadRequest& req) {
     
     spdlog::info("[{}] File download started: {} ({} chunks)",
         remote_endpoint_, req.file_id(), total_chunks);
+}
+
+void Session::handle_file_list_request(const FileListRequest& req) {
+    const bool has_recipient = !req.recipient_id().empty();
+    const bool has_channel = !req.channel_id().empty();
+    if (has_recipient == has_channel) {
+        FileError err;
+        err.set_error_code(4089);
+        err.set_error_message("File list request must target exactly one DM or channel");
+        send_envelope(MT_FILE_ERROR, err);
+        return;
+    }
+
+    const int limit = std::clamp<int>(req.limit() > 0 ? static_cast<int>(req.limit()) : 50, 1, 200);
+    std::vector<db::FileMetadata> files;
+
+    if (has_channel) {
+        auto* command_handler = server_ctx_.command_handler();
+        if (command_handler == nullptr ||
+            !command_handler->is_in_channel(req.channel_id(), user_id_)) {
+            FileError err;
+            err.set_error_code(4087);
+            err.set_error_message("Access denied");
+            send_envelope(MT_FILE_ERROR, err);
+            return;
+        }
+        files = server_ctx_.file_store().listFiles("", req.channel_id(), limit);
+    } else {
+        files = server_ctx_.file_store().listConversationFiles(user_id_, req.recipient_id(), limit);
+    }
+
+    FileListResponse response;
+    response.set_recipient_id(req.recipient_id());
+    response.set_channel_id(req.channel_id());
+    for (const auto& file : files) {
+        populate_proto_file_metadata(file, response.add_files());
+    }
+
+    send_envelope(MT_FILE_LIST_RESPONSE, response);
+    spdlog::debug("[{}] Sent {} file list entries for target channel='{}' recipient='{}'",
+                  remote_endpoint_, response.files_size(), req.channel_id(), req.recipient_id());
 }
 
 void Session::send(const Envelope& env) {

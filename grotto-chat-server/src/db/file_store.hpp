@@ -95,6 +95,14 @@ public:
         const std::string& channel_id = "",
         int limit = 100);
 
+    /**
+     * List complete files exchanged between two DM participants.
+     */
+    std::vector<FileMetadata> listConversationFiles(
+        const std::string& user_a,
+        const std::string& user_b,
+        int limit = 100);
+
     // ============================================================================
     // Chunk Management
     // ============================================================================

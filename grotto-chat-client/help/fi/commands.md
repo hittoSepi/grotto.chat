@@ -48,6 +48,7 @@
 `/upload <polku>`          lähetä tiedosto (alias: `/up`)  
 `/download <id> [polku]`   lataa tiedosto (alias: `/dl`)  
 `/transfers [määrä]`       näytä viimeisimmät tiedostosiirrot (alias: `/xfers`)  
+`/files`                   päivitä aktiivisen kanavan/DM:n tiedostot ja avaa files-paneli (alias: `/ls`)  
 
 ---
 

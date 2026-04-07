@@ -219,6 +219,7 @@ set(CLIENT_SOURCES
     src/ui/graphics_layout.cpp
     src/ui/link_preview.cpp
     src/ui/terminal_image.cpp
+    src/ui/files_panel.cpp
     src/ui/user_list_panel.cpp
     src/ui/markdown_renderer.cpp
     src/ui/mouse_support.cpp

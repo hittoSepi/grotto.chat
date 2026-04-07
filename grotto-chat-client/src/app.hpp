@@ -23,6 +23,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 namespace grotto {
@@ -77,6 +78,9 @@ private:
     std::string build_transfer_summary() const;
     std::vector<std::string> format_transfer_lines(std::size_t limit) const;
     void update_file_transfer_policy(const FileTransferPolicy& policy);
+    void handle_file_list_response(const FileListResponse& response);
+    void request_remote_files_for_target(const std::string& target, bool echo_to_chat = false);
+    void download_remote_file(const RemoteFileEntry& file);
 
     struct FileTransferPolicyState {
         bool received = false;
@@ -113,7 +117,9 @@ private:
     std::chrono::steady_clock::time_point connection_attempt_started_{};
     bool has_connection_attempt_ = false;
     FileTransferPolicyState file_transfer_policy_;
-    
+    mutable std::mutex remote_file_mu_;
+    std::unordered_set<std::string> pending_file_list_echo_targets_;
+
     // Flag to indicate if app should exit (for settings logout)
     bool should_exit_ = false;
 };

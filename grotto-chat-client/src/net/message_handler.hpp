@@ -50,6 +50,8 @@ public:
     void set_command_response_callback(CommandResponseFn fn) { command_response_fn_ = std::move(fn); }
     using FilePolicyFn = std::function<void(const FileTransferPolicy&)>;
     void set_file_policy_callback(FilePolicyFn fn) { file_policy_fn_ = std::move(fn); }
+    using FileListFn = std::function<void(const FileListResponse&)>;
+    void set_file_list_callback(FileListFn fn) { file_list_fn_ = std::move(fn); }
 
     // File transfer manager (optional)
     void set_file_transfer_manager(client::file::FileTransferManager* ftm) { file_mgr_ = ftm; }
@@ -64,6 +66,9 @@ public:
     // Send KEY_REQUEST for a DM recipient and track the pending plaintext
     // so it can be sent once the KEY_BUNDLE arrives.
     void request_key(const std::string& recipient_id, const std::string& plaintext);
+    void request_file_list(const std::string& recipient_id,
+                           const std::string& channel_id,
+                           uint32_t limit = 50);
     
     // Send IRC command to server
     void send_command(const std::string& cmd, const std::vector<std::string>& args);
@@ -88,6 +93,7 @@ private:
     void handle_file_complete(const Envelope& env);
     void handle_file_error(const Envelope& env);
     void handle_file_policy(const Envelope& env);
+    void handle_file_list_response(const Envelope& env);
 
     // Helpers
     void send_envelope(MessageType type, const google::protobuf::Message& msg);
@@ -106,6 +112,7 @@ private:
     TraceFn              trace_fn_;
     CommandResponseFn    command_response_fn_;
     FilePolicyFn         file_policy_fn_;
+    FileListFn           file_list_fn_;
 
     bool   authenticated_ = false;
     bool   onboarding_shown_ = false;

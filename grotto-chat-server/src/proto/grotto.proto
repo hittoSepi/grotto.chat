@@ -61,6 +61,8 @@ enum MessageType {
   MT_FILE_COMPLETE    = 84;   // Server → Client: Transfer complete
   MT_FILE_ERROR       = 85;   // Server → Client: Transfer error
   MT_FILE_POLICY      = 86;   // Server → Client: File transfer policy bootstrap
+  MT_FILE_LIST_REQUEST = 87;  // Client → Server: List files for a DM/channel
+  MT_FILE_LIST_RESPONSE = 88; // Server → Client: File list for a DM/channel
 
   // Server messages
   MT_MOTD             = 75;   // Server → Client: Message of the Day
@@ -288,6 +290,18 @@ message FileTransferPolicy {
   uint64 max_upload_bytes = 1;           // 0 = server did not advertise a limit
   repeated string allowed_mime_types = 2; // Empty = allow all unless blocked
   repeated string blocked_mime_types = 3; // Always denied when matched
+}
+
+message FileListRequest {
+  string recipient_id = 1;   // DM peer (empty for channel file list)
+  string channel_id = 2;     // Channel target (empty for DM file list)
+  uint32 limit = 3;          // Max number of files to return
+}
+
+message FileListResponse {
+  string recipient_id = 1;   // Echo DM peer for this list
+  string channel_id = 2;     // Echo channel for this list
+  repeated FileMetadata files = 3;
 }
 
 // File metadata (stored in database)

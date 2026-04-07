@@ -114,26 +114,37 @@ bool is_server_channel(std::string_view channel_id) {
     return channel_id == "server";
 }
 
+int effective_side_panel_width(bool show_panel, int preferred_width, int term_cols) {
+    if (!show_panel) {
+        return 0;
+    }
+    return std::clamp(preferred_width, 24, std::max(24, term_cols / 2));
+}
+
 int effective_message_width(const MouseTracker& mouse_tracker,
                             const UserListConfig& user_list_config,
-                            int term_cols) {
+                            int term_cols,
+                            int side_panel_width) {
     if (mouse_tracker.message_region().width > 0) {
         return mouse_tracker.message_region().width;
     }
 
-    if (user_list_config.collapsed) {
-        return term_cols;
+    int width = term_cols;
+    if (!user_list_config.collapsed) {
+        width -= get_panel_width(user_list_config, term_cols) + 1;
     }
-
-    int panel_width = get_panel_width(user_list_config, term_cols);
-    return std::max(1, term_cols - panel_width - 1);
+    if (side_panel_width > 0) {
+        width -= side_panel_width + 1;
+    }
+    return std::max(1, width);
 }
 
 std::vector<VisibleLayoutHit> current_visible_hits(AppState& state,
                                                    const MouseTracker& mouse_tracker,
                                                    const UserListConfig& user_list_config,
                                                    const ClientConfig& cfg,
-                                                   int term_cols) {
+                                                   int term_cols,
+                                                   int side_panel_width) {
     auto ch = state.active_channel();
     if (!ch) {
         return {};
@@ -141,7 +152,7 @@ std::vector<VisibleLayoutHit> current_visible_hits(AppState& state,
 
     auto ch_state = state.channel_snapshot(*ch);
     int visible_rows = mouse_tracker.message_region().height;
-    int message_width = effective_message_width(mouse_tracker, user_list_config, term_cols);
+    int message_width = effective_message_width(mouse_tracker, user_list_config, term_cols, side_panel_width);
     return collect_visible_layout_hits(
         ch_state, cfg.ui.timestamp_format, visible_rows, message_width);
 }
@@ -370,6 +381,26 @@ void UIManager::toggle_user_list() {
     cfg_.ui.user_list_collapsed = user_list_config_.collapsed;
 }
 
+void UIManager::toggle_files_panel() {
+    if (side_panel_mode_ == SidePanelMode::Files) {
+        side_panel_mode_ = SidePanelMode::None;
+        return;
+    }
+    side_panel_mode_ = SidePanelMode::Files;
+    last_files_refresh_channel_.clear();
+    if (auto active = state_.active_channel()) {
+        refresh_files_for_channel_if_needed(*active);
+    }
+}
+
+void UIManager::show_files_panel() {
+    side_panel_mode_ = SidePanelMode::Files;
+    last_files_refresh_channel_.clear();
+    if (auto active = state_.active_channel()) {
+        refresh_files_for_channel_if_needed(*active);
+    }
+}
+
 // ============================================================================
 // MOUSE HANDLING IMPLEMENTATION
 // ============================================================================
@@ -490,6 +521,7 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
             mouse_tracker_.end_selection();
             state_.set_active_channel(channels[tab_idx]);
             state_.mark_read(channels[tab_idx]);
+            refresh_files_for_channel_if_needed(channels[tab_idx]);
         }
         return;
     }
@@ -510,13 +542,37 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
         }
         return;
     }
+
+    // Check files panel clicks
+    if (side_panel_mode_ == SidePanelMode::Files) {
+        if (auto file_id = get_file_at_position(mouse_x, mouse_y)) {
+            if (auto channel_id = state_.active_channel()) {
+                const auto files = state_.channel_files(*channel_id);
+                auto it = std::find_if(files.begin(), files.end(), [&](const RemoteFileEntry& file) {
+                    return file.file_id == *file_id;
+                });
+                if (it != files.end()) {
+                    set_selected_file_id(*channel_id, *file_id);
+                    if (is_right_click) {
+                        activate_selected_file_download();
+                    }
+                }
+            }
+            return;
+        }
+    }
     
     // Check message area clicks (start text selection / open URL)
     if (mouse_tracker_.is_over_message_area()) {
         if (is_right_click) {
             int line_y = mouse_y - mouse_tracker_.message_region().y;
+            const auto active_channel = state_.active_channel().value_or("");
+            const int side_width = effective_side_panel_width(
+                side_panel_mode_ == SidePanelMode::Files && !is_server_channel(active_channel),
+                side_panel_width_,
+                screen_.dimx());
             auto visible = current_visible_hits(
-                state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
+                state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx(), side_width);
             if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
                 if (visible[line_y].url) {
                     if (display_inline_image_from_url(screen_, *visible[line_y].url)) {
@@ -550,8 +606,13 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
             }
         } else {
             int line_y = mouse_y - mouse_tracker_.message_region().y;
+            const auto active_channel = state_.active_channel().value_or("");
+            const int side_width = effective_side_panel_width(
+                side_panel_mode_ == SidePanelMode::Files && !is_server_channel(active_channel),
+                side_panel_width_,
+                screen_.dimx());
             auto visible = current_visible_hits(
-                state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
+                state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx(), side_width);
             auto ch = state_.active_channel();
             if (ch && line_y >= 0 && line_y < static_cast<int>(visible.size())) {
                 auto ch_state = state_.channel_snapshot(*ch);
@@ -571,6 +632,16 @@ void UIManager::handle_click(int mouse_x, int mouse_y, bool is_right_click) {
 }
 
 void UIManager::handle_double_click(int mouse_x, int mouse_y) {
+    if (side_panel_mode_ == SidePanelMode::Files) {
+        if (auto file_id = get_file_at_position(mouse_x, mouse_y)) {
+            if (auto channel_id = state_.active_channel()) {
+                set_selected_file_id(*channel_id, *file_id);
+                activate_selected_file_download();
+                return;
+            }
+        }
+    }
+
     (void)mouse_x;
     // Double-click to select word (entire message in this implementation)
     if (mouse_tracker_.is_over_message_area()) {
@@ -579,8 +650,12 @@ void UIManager::handle_double_click(int mouse_x, int mouse_y) {
         if (!ch) return;
         
         auto ch_state = state_.channel_snapshot(*ch);
+        const int side_width = effective_side_panel_width(
+            side_panel_mode_ == SidePanelMode::Files && !is_server_channel(*ch),
+            side_panel_width_,
+            screen_.dimx());
         auto visible = current_visible_hits(
-            state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
+            state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx(), side_width);
         if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
             copy_to_clipboard(visible[line_y].plain_text);
         }
@@ -596,8 +671,12 @@ void UIManager::handle_triple_click(int mouse_x, int mouse_y) {
         if (!ch) return;
         
         auto ch_state = state_.channel_snapshot(*ch);
+        const int side_width = effective_side_panel_width(
+            side_panel_mode_ == SidePanelMode::Files && !is_server_channel(*ch),
+            side_panel_width_,
+            screen_.dimx());
         auto visible = current_visible_hits(
-            state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx());
+            state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx(), side_width);
         if (line_y >= 0 && line_y < static_cast<int>(visible.size())) {
             copy_to_clipboard(visible[line_y].plain_text);
         }
@@ -714,7 +793,14 @@ void UIManager::copy_message_selection_to_clipboard() {
     auto ch_state = state_.channel_snapshot(*ch);
     const int visible_rows = msg_region.height;
     const int message_width = effective_message_width(
-        mouse_tracker_, user_list_config_, screen_.dimx());
+        mouse_tracker_,
+        user_list_config_,
+        screen_.dimx(),
+        effective_side_panel_width(
+            side_panel_mode_ == SidePanelMode::Files &&
+                !is_server_channel(state_.active_channel().value_or("")),
+            side_panel_width_,
+            screen_.dimx()));
     auto visible = collect_visible_layout_hits(
         ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
     if (visible.empty()) {
@@ -882,6 +968,95 @@ std::optional<int> UIManager::selected_image_index(const std::string& channel_id
     return std::nullopt;
 }
 
+std::optional<std::string> UIManager::get_file_at_position(int mouse_x, int mouse_y) const {
+    for (const auto& file : file_positions_) {
+        if (mouse_x >= file.x && mouse_x < file.x + file.width &&
+            mouse_y >= file.y && mouse_y < file.y + file.height) {
+            return file.file_id;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> UIManager::selected_file_id(const std::string& channel_id) const {
+    auto it = selected_file_ids_.find(channel_id);
+    if (it == selected_file_ids_.end() || it->second.empty()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+void UIManager::set_selected_file_id(const std::string& channel_id, std::string file_id) {
+    if (channel_id.empty()) {
+        return;
+    }
+    selected_file_ids_[channel_id] = std::move(file_id);
+}
+
+void UIManager::refresh_files_for_channel_if_needed(const std::string& channel_id) {
+    if (channel_id.empty() || is_server_channel(channel_id) || !files_refresh_handler_) {
+        return;
+    }
+    if (last_files_refresh_channel_ == channel_id) {
+        return;
+    }
+    last_files_refresh_channel_ = channel_id;
+    files_refresh_handler_(channel_id);
+}
+
+void UIManager::move_file_selection(int delta) {
+    if (side_panel_mode_ != SidePanelMode::Files || delta == 0) {
+        return;
+    }
+    auto channel_id = state_.active_channel().value_or("");
+    if (channel_id.empty() || is_server_channel(channel_id)) {
+        return;
+    }
+
+    const auto files = state_.channel_files(channel_id);
+    if (files.empty()) {
+        return;
+    }
+
+    int index = 0;
+    if (auto selected = selected_file_id(channel_id)) {
+        auto it = std::find_if(files.begin(), files.end(), [&](const RemoteFileEntry& file) {
+            return file.file_id == *selected;
+        });
+        if (it != files.end()) {
+            index = static_cast<int>(std::distance(files.begin(), it));
+        }
+    }
+
+    index = std::clamp(index + delta, 0, static_cast<int>(files.size()) - 1);
+    set_selected_file_id(channel_id, files[static_cast<size_t>(index)].file_id);
+}
+
+void UIManager::activate_selected_file_download() {
+    if (side_panel_mode_ != SidePanelMode::Files || !file_download_handler_) {
+        return;
+    }
+    auto channel_id = state_.active_channel().value_or("");
+    if (channel_id.empty()) {
+        return;
+    }
+
+    const auto files = state_.channel_files(channel_id);
+    if (files.empty()) {
+        return;
+    }
+
+    const auto selected = selected_file_id(channel_id).value_or(files.front().file_id);
+    auto it = std::find_if(files.begin(), files.end(), [&](const RemoteFileEntry& file) {
+        return file.file_id == selected;
+    });
+    if (it == files.end()) {
+        it = files.begin();
+    }
+    set_selected_file_id(channel_id, it->file_id);
+    file_download_handler_(*it);
+}
+
 Element UIManager::build_main_content(const std::string& active_ch, int msg_rows, int term_cols) {
     // Ensure channel users are populated (from online users if not already set)
     if (!active_ch.empty()) {
@@ -889,13 +1064,20 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     }
 
     const bool show_user_list = !user_list_config_.collapsed && !is_server_channel(active_ch);
+    const bool show_side_panel = side_panel_mode_ == SidePanelMode::Files && !is_server_channel(active_ch);
 
     int user_panel_width = 0;
+    int side_panel_width = 0;
     int msg_width = term_cols;
     if (show_user_list) {
         user_panel_width = get_panel_width(user_list_config_, term_cols);
-        msg_width = std::max(1, term_cols - user_panel_width - 1);
+        msg_width -= user_panel_width + 1;
     }
+    if (show_side_panel) {
+        side_panel_width = effective_side_panel_width(true, side_panel_width_, term_cols);
+        msg_width -= side_panel_width + 1;
+    }
+    msg_width = std::max(1, msg_width);
 
     ChannelState ch_state;
     if (!active_ch.empty()) {
@@ -963,48 +1145,74 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     }
     
     // If user list is collapsed, just return the message view
-    if (!show_user_list) {
-        mouse_tracker_.set_user_list_region({0, 0, 0, 0});  // Clear user list region
+    if (!show_user_list && !show_side_panel) {
+        mouse_tracker_.set_user_list_region({0, 0, 0, 0});
         mouse_tracker_.set_panel_divider_region({0, 0, 0, 0});
+        file_positions_.clear();
         return msg_el | flex;
     }
+
+    Elements layout;
+    layout.push_back(msg_el | flex);
+
+    int next_x = msg_width;
+    if (show_side_panel) {
+        layout.push_back(separator());
+        next_x += 1;
+        const auto files = state_.channel_files(active_ch);
+        if (files.empty()) {
+            selected_file_ids_.erase(active_ch);
+        } else if (!selected_file_id(active_ch).has_value()) {
+            set_selected_file_id(active_ch, files.front().file_id);
+        }
+        auto files_el = render_files_panel(files,
+                                           side_panel_width,
+                                           selected_file_id(active_ch),
+                                           file_positions_,
+                                           next_x,
+                                           mouse_tracker_.message_region().y);
+        layout.push_back(files_el | size(WIDTH, EQUAL, side_panel_width)
+                                  | size(HEIGHT, LESS_THAN, msg_rows + 1));
+        next_x += side_panel_width;
+    } else {
+        file_positions_.clear();
+    }
     
+    if (!show_user_list) {
+        mouse_tracker_.set_user_list_region({0, 0, 0, 0});
+        mouse_tracker_.set_panel_divider_region({0, 0, 0, 0});
+        return hbox(std::move(layout));
+    }
+
     // Get user list for the active channel
     auto users = state_.channel_users(active_ch);
-    
+
     // Build voice section from current voice state
     auto vs = state_.voice_snapshot();
     VoiceSection voice_sec;
     if (vs.in_voice && !vs.participants.empty()) {
-        // Build voice section with current speaking/muted status
         std::vector<std::string> muted_users;
         if (vs.muted) {
             muted_users.push_back(state_.local_user_id());
         }
         voice_sec = build_voice_section(users, vs.participants, vs.speaking_peers, muted_users);
     }
-    
-    // Update user list region for mouse hit testing
+
     user_positions_.clear();
-    int user_list_x = msg_width + 1;
+    const int user_list_x = next_x + 1;
     mouse_tracker_.set_user_list_region({user_list_x, mouse_tracker_.message_region().y, user_panel_width, msg_rows});
     mouse_tracker_.set_panel_divider_region({user_list_x - 1, mouse_tracker_.message_region().y, 1, msg_rows});
     panel_divider_x_ = user_list_x - 1;
-    
-    // Render user list panel with position tracking
-    auto user_list_el = render_user_list_panel(users, voice_sec, user_list_config_, 
-                                                  state_.local_user_id(), user_positions_, 
-                                                  panel_divider_x_, user_list_x,
-                                                  mouse_tracker_.message_region().y);
-    
-    // Combine message view and user list panel horizontally.
-    // HEIGHT LESS_THAN keeps a long user list from overflowing the content area.
-    return hbox({
-        msg_el | flex,
-        separator(),
-        user_list_el | size(WIDTH, EQUAL, user_panel_width)
-                     | size(HEIGHT, LESS_THAN, msg_rows + 1),
-    });
+
+    auto user_list_el = render_user_list_panel(users, voice_sec, user_list_config_,
+                                               state_.local_user_id(), user_positions_,
+                                               panel_divider_x_, user_list_x,
+                                               mouse_tracker_.message_region().y);
+
+    layout.push_back(separator());
+    layout.push_back(user_list_el | size(WIDTH, EQUAL, user_panel_width)
+                                  | size(HEIGHT, LESS_THAN, msg_rows + 1));
+    return hbox(std::move(layout));
 }
 
 Element UIManager::build_document(int term_rows) {
@@ -1049,6 +1257,10 @@ Element UIManager::build_document(int term_rows) {
         has_persistent_text_selection_ = false;
         mouse_tracker_.end_selection();
         last_active_channel_ = active_ch;
+        if (side_panel_mode_ == SidePanelMode::Files) {
+            last_files_refresh_channel_.clear();
+            refresh_files_for_channel_if_needed(active_ch);
+        }
     }
 
     // Tab bar with position tracking for mouse hit testing
@@ -1380,6 +1592,11 @@ void UIManager::run(SubmitFn on_submit,
             toggle_user_list();
             return true;
         }
+        // F3 — Toggle files panel
+        if (event == Event::F3) {
+            toggle_files_panel();
+            return true;
+        }
         // Insert newline: Alt+N (works on Windows Terminal),
         // Alt+Enter (works on terminals that don't capture it),
         // Shift+Enter / Ctrl+Enter (CSI-u / kitty protocol)
@@ -1391,6 +1608,10 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (event == Event::Return) {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+                activate_selected_file_download();
+                return true;
+            }
             tab_completer_.reset();
             std::string line = input_line_.commit();
             if (!line.empty() && on_submit) on_submit(line);
@@ -1415,12 +1636,20 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (event == Event::ArrowUp) {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+                move_file_selection(-1);
+                return true;
+            }
             if (!input_line_.move_up()) {
                 input_line_.history_prev();
             }
             return true;
         }
         if (event == Event::ArrowDown) {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+                move_file_selection(1);
+                return true;
+            }
             if (!input_line_.move_down()) {
                 input_line_.history_next();
             }

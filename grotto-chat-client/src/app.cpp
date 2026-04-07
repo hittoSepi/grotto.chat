@@ -59,6 +59,16 @@ bool is_direct_target(std::string_view channel_id) {
     return !channel_id.empty() && !is_server_channel(channel_id) && !is_channel_target(channel_id);
 }
 
+std::string canonical_file_target(std::string_view recipient_id, std::string_view channel_id) {
+    if (!channel_id.empty()) {
+        return canonical_channel_id(std::string(channel_id));
+    }
+    if (!recipient_id.empty()) {
+        return std::string(recipient_id);
+    }
+    return {};
+}
+
 std::string ascii_lower_copy_view(std::string_view text) {
     std::string lowered(text);
     for (char& c : lowered) {
@@ -178,6 +188,30 @@ std::string human_bytes(uint64_t bytes) {
         oss << std::fixed << std::setprecision(1) << value << ' ' << kUnits[unit_index];
     }
     return oss.str();
+}
+
+std::filesystem::path default_download_path_for_file(std::string_view file_id,
+                                                     std::string_view filename) {
+    std::filesystem::path base = "downloads";
+    std::string preferred = filename.empty() ? std::string(file_id) : std::string(filename);
+    if (preferred.empty()) {
+        preferred = "download.bin";
+    }
+
+    std::filesystem::path candidate = base / preferred;
+    if (!std::filesystem::exists(candidate)) {
+        return candidate;
+    }
+
+    const auto stem = candidate.stem().string();
+    const auto ext = candidate.extension().string();
+    for (int i = 2; i < 1000; ++i) {
+        auto next = base / (stem + " (" + std::to_string(i) + ")" + ext);
+        if (!std::filesystem::exists(next)) {
+            return next;
+        }
+    }
+    return base / (std::string(file_id) + ext);
 }
 
 std::string transfer_state_label(client::file::TransferState state) {
@@ -436,6 +470,9 @@ bool App::init(const std::filesystem::path& config_path,
     msg_handler_->set_file_policy_callback([this](const FileTransferPolicy& policy) {
         update_file_transfer_policy(policy);
     });
+    msg_handler_->set_file_list_callback([this](const FileListResponse& response) {
+        handle_file_list_response(response);
+    });
     msg_handler_->set_preview_callback([this](const std::string& channel_id, const std::string& text) {
         trigger_previews(channel_id, text);
     });
@@ -452,6 +489,12 @@ bool App::init(const std::filesystem::path& config_path,
     });
     ui_->set_transfer_summary_provider([this]() {
         return build_transfer_summary();
+    });
+    ui_->set_files_refresh_handler([this](const std::string& target) {
+        request_remote_files_for_target(target, false);
+    });
+    ui_->set_file_download_handler([this](const RemoteFileEntry& file) {
+        download_remote_file(file);
     });
     msg_handler_->set_file_transfer_manager(file_mgr_.get());
 
@@ -804,6 +847,16 @@ void App::handle_command(const ParsedCommand& cmd) {
         for (const auto& line : lines) {
             ui_->push_system_msg(line);
         }
+    } else if (cmd.name == "/files") {
+        const auto active = canonical_channel_id(state_.active_channel().value_or(""));
+        if (active.empty() || is_server_channel(active)) {
+            ui_->push_system_msg("Open a channel or DM before listing files.");
+            return;
+        }
+        request_remote_files_for_target(active, true);
+        if (ui_) {
+            ui_->show_files_panel();
+        }
     } else if (cmd.name == "/upload") {
         if (cmd.args.empty()) {
             ui_->push_system_msg("Usage: /upload <local-file-path>");
@@ -861,7 +914,7 @@ void App::handle_command(const ParsedCommand& cmd) {
         std::string file_id = cmd.args[0];
         std::filesystem::path save_path = cmd.args.size() > 1
             ? std::filesystem::path(cmd.args[1])
-            : std::filesystem::path("downloads") / file_id;
+            : default_download_path_for_file(file_id, file_id);
         if (!file_mgr_) {
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_TRANSFER_NOT_AVAILABLE));
         } else {
@@ -1185,6 +1238,9 @@ void App::switch_to_channel(const std::string& channel_id) {
     state_.ensure_channel(canonical_id);
     state_.set_active_channel(canonical_id);
     ui_->push_system_msg(i18n::tr(i18n::I18nKey::SWITCHED_TO, canonical_id));
+    if (ui_ && ui_->is_files_panel_visible() && !is_server_channel(canonical_id)) {
+        request_remote_files_for_target(canonical_id, false);
+    }
 }
 
 void App::open_settings() {
@@ -1301,6 +1357,109 @@ void App::update_file_transfer_policy(const FileTransferPolicy& policy) {
                  file_transfer_policy_.max_upload_bytes,
                  file_transfer_policy_.allowed_mime_types.size(),
                  file_transfer_policy_.blocked_mime_types.size());
+}
+
+void App::handle_file_list_response(const FileListResponse& response) {
+    const std::string target = canonical_file_target(response.recipient_id(), response.channel_id());
+    if (target.empty()) {
+        return;
+    }
+
+    std::vector<RemoteFileEntry> files;
+    files.reserve(static_cast<std::size_t>(response.files_size()));
+    for (const auto& file : response.files()) {
+        RemoteFileEntry entry;
+        entry.file_id = file.file_id();
+        entry.filename = file.filename();
+        entry.file_size = file.file_size();
+        entry.mime_type = file.mime_type();
+        entry.sender_id = file.sender_id();
+        entry.recipient_id = file.recipient_id();
+        entry.channel_id = file.channel_id();
+        entry.uploaded_at = file.uploaded_at();
+        entry.expires_at = file.expires_at();
+        files.push_back(std::move(entry));
+    }
+
+    state_.post_ui([this, target, files]() {
+        state_.set_channel_files(target, files);
+    });
+
+    bool echo = false;
+    {
+        std::lock_guard lk(remote_file_mu_);
+        echo = pending_file_list_echo_targets_.erase(target) > 0;
+    }
+
+    if (echo && ui_) {
+        if (files.empty()) {
+            ui_->push_system_msg("No files available for " + target + ".");
+        } else {
+            ui_->push_system_msg("Files for " + target + ":");
+            const std::size_t count = std::min<std::size_t>(files.size(), 12);
+            for (std::size_t i = 0; i < count; ++i) {
+                const auto& file = files[i];
+                ui_->push_system_msg(
+                    "  " + file.filename + " | " + human_bytes(file.file_size) +
+                    " | " + file.file_id);
+            }
+            if (files.size() > count) {
+                ui_->push_system_msg("  ... +" + std::to_string(files.size() - count) + " more (F3 panel)");
+            }
+        }
+        ui_->notify();
+    } else if (ui_) {
+        ui_->notify();
+    }
+}
+
+void App::request_remote_files_for_target(const std::string& target, bool echo_to_chat) {
+    if (!msg_handler_ || !msg_handler_->is_authenticated()) {
+        if (echo_to_chat && ui_) {
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::NOT_CONNECTED_CHECK_STATUS));
+        }
+        return;
+    }
+
+    const auto canonical_target = canonical_channel_id(target);
+    if (canonical_target.empty() || is_server_channel(canonical_target)) {
+        if (echo_to_chat && ui_) {
+            ui_->push_system_msg("Open a channel or DM before listing files.");
+        }
+        return;
+    }
+
+    if (echo_to_chat) {
+        std::lock_guard lk(remote_file_mu_);
+        pending_file_list_echo_targets_.insert(canonical_target);
+    }
+
+    const std::string recipient = is_direct_target(canonical_target) ? canonical_target : "";
+    const std::string channel = is_channel_target(canonical_target) ? canonical_target : "";
+    msg_handler_->request_file_list(recipient, channel, 100);
+}
+
+void App::download_remote_file(const RemoteFileEntry& file) {
+    if (!file_mgr_ || !ui_) {
+        return;
+    }
+
+    std::filesystem::path save_path = default_download_path_for_file(file.file_id, file.filename);
+    const auto parent = save_path.parent_path();
+    if (!parent.empty()) {
+        std::filesystem::create_directories(parent);
+    }
+
+    auto tid = file_mgr_->download(file.file_id, save_path);
+    if (tid.empty()) {
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOAD_FAILED));
+    } else {
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOADING,
+                                      file.filename.empty() ? file.file_id : file.filename,
+                                      save_path.string()));
+        ui_->push_system_msg("Download queued as transfer " + tid + " (see /transfers)");
+    }
+    ui_->notify();
 }
 
 std::string App::get_public_key_hex() const {

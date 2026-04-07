@@ -169,7 +169,7 @@ std::vector<FileMetadata> FileStore::listFiles(
     std::vector<FileMetadata> results;
     
     try {
-        std::string sql = "SELECT * FROM files WHERE 1=1";
+        std::string sql = "SELECT * FROM files WHERE is_complete = 1";
         if (!recipient_id.empty()) sql += " AND recipient_id = ?";
         if (!channel_id.empty()) sql += " AND channel_id = ?";
         sql += " AND expires_at > ? ORDER BY uploaded_at DESC LIMIT ?";
@@ -193,6 +193,12 @@ std::vector<FileMetadata> FileStore::listFiles(
             meta.channel_id = query.getColumn(6).getString();
             meta.uploaded_at = query.getColumn(7).getInt64();
             meta.expires_at = query.getColumn(8).getInt64();
+            auto checksum = query.getColumn(9);
+            if (!checksum.isNull()) {
+                const uint8_t* data = reinterpret_cast<const uint8_t*>(checksum.getBlob());
+                meta.file_checksum.assign(data, data + checksum.getBytes());
+            }
+            meta.storage_path = query.getColumn(10).getString();
             meta.is_complete = query.getColumn(11).getInt() != 0;
             results.push_back(std::move(meta));
         }
@@ -200,6 +206,61 @@ std::vector<FileMetadata> FileStore::listFiles(
         spdlog::error("FileStore::listFiles failed: {}", e.what());
     }
     
+    return results;
+}
+
+std::vector<FileMetadata> FileStore::listConversationFiles(
+    const std::string& user_a,
+    const std::string& user_b,
+    int limit)
+{
+    std::lock_guard<std::mutex> lock(db_.mutex());
+    std::vector<FileMetadata> results;
+
+    try {
+        SQLite::Statement query(db_.get(), R"(
+            SELECT * FROM files
+            WHERE is_complete = 1
+              AND expires_at > ?
+              AND (
+                    (sender_id = ? AND recipient_id = ?)
+                 OR (sender_id = ? AND recipient_id = ?)
+              )
+            ORDER BY uploaded_at DESC
+            LIMIT ?
+        )");
+
+        query.bind(1, nowUnix());
+        query.bind(2, user_a);
+        query.bind(3, user_b);
+        query.bind(4, user_b);
+        query.bind(5, user_a);
+        query.bind(6, limit);
+
+        while (query.executeStep()) {
+            FileMetadata meta;
+            meta.file_id = query.getColumn(0).getString();
+            meta.filename = query.getColumn(1).getString();
+            meta.file_size = static_cast<uint64_t>(query.getColumn(2).getInt64());
+            meta.mime_type = query.getColumn(3).getString();
+            meta.sender_id = query.getColumn(4).getString();
+            meta.recipient_id = query.getColumn(5).getString();
+            meta.channel_id = query.getColumn(6).getString();
+            meta.uploaded_at = query.getColumn(7).getInt64();
+            meta.expires_at = query.getColumn(8).getInt64();
+            auto checksum = query.getColumn(9);
+            if (!checksum.isNull()) {
+                const uint8_t* data = reinterpret_cast<const uint8_t*>(checksum.getBlob());
+                meta.file_checksum.assign(data, data + checksum.getBytes());
+            }
+            meta.storage_path = query.getColumn(10).getString();
+            meta.is_complete = query.getColumn(11).getInt() != 0;
+            results.push_back(std::move(meta));
+        }
+    } catch (const SQLite::Exception& e) {
+        spdlog::error("FileStore::listConversationFiles failed: {}", e.what());
+    }
+
     return results;
 }
 

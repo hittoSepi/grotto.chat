@@ -46,6 +46,18 @@ struct ChannelUserInfo {
     }
 };
 
+struct RemoteFileEntry {
+    std::string file_id;
+    std::string filename;
+    uint64_t file_size = 0;
+    std::string mime_type;
+    std::string sender_id;
+    std::string recipient_id;
+    std::string channel_id;
+    int64_t uploaded_at = 0;
+    int64_t expires_at = 0;
+};
+
 class AppState {
 public:
     // ── UI queue (for cross-thread UI updates) ───────────────────────────
@@ -129,6 +141,12 @@ public:
     std::vector<SearchResult> search_results() const;
     void clear_search_results();
 
+    // ── Remote files ──────────────────────────────────────────────────────
+    void set_channel_files(const std::string& channel_id,
+                           const std::vector<RemoteFileEntry>& files);
+    std::vector<RemoteFileEntry> channel_files(const std::string& channel_id) const;
+    void clear_channel_files(const std::string& channel_id);
+
 private:
     mutable std::shared_mutex mu_;
 
@@ -152,6 +170,7 @@ private:
     std::string local_user_id_;
 
     std::vector<SearchResult> search_results_;
+    std::unordered_map<std::string, std::vector<RemoteFileEntry>> channel_files_;
 
     // UI queue
     std::mutex                       ui_queue_mu_;

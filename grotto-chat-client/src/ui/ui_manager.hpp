@@ -3,6 +3,7 @@
 #include "state/app_state.hpp"
 #include "ui/input_line.hpp"
 #include "ui/tab_bar.hpp"
+#include "ui/files_panel.hpp"
 #include "ui/user_list_panel.hpp"
 #include "ui/mouse_support.hpp"
 #include "ui/graphics_compositor.hpp"
@@ -57,6 +58,12 @@ public:
     void set_transfer_summary_provider(std::function<std::string()> provider) {
         transfer_summary_provider_ = std::move(provider);
     }
+    void set_files_refresh_handler(std::function<void(const std::string&)> handler) {
+        files_refresh_handler_ = std::move(handler);
+    }
+    void set_file_download_handler(std::function<void(const RemoteFileEntry&)> handler) {
+        file_download_handler_ = std::move(handler);
+    }
 
     // Wake the FTXUI event loop after AppState changes.
     // Called internally by AppState::post_ui() wiring.
@@ -73,6 +80,9 @@ public:
     // Toggle user list panel collapsed state
     void toggle_user_list();
     bool is_user_list_collapsed() const { return user_list_config_.collapsed; }
+    void toggle_files_panel();
+    void show_files_panel();
+    bool is_files_panel_visible() const { return side_panel_mode_ == SidePanelMode::Files; }
     
     // Mouse handling
     bool handle_mouse_event(const ftxui::Event& event);
@@ -82,6 +92,7 @@ public:
     bool is_mouse_on_user_entry(const std::string& user_id, int mouse_x, int mouse_y) const;
     int get_tab_index_at_position(int mouse_x, int mouse_y) const;
     std::optional<std::string> get_user_at_position(int mouse_x, int mouse_y) const;
+    std::optional<std::string> get_file_at_position(int mouse_x, int mouse_y) const;
     void update_hover_state(int mouse_x, int mouse_y);
     void handle_click(int mouse_x, int mouse_y, bool is_right_click);
     void handle_double_click(int mouse_x, int mouse_y);
@@ -95,6 +106,11 @@ public:
     void copy_selection_to_clipboard();
 
 private:
+    enum class SidePanelMode {
+        None,
+        Files,
+    };
+
     ftxui::Element build_document(int term_rows);
     void show_toast(std::string text,
                     std::chrono::milliseconds duration = std::chrono::milliseconds(1200));
@@ -105,6 +121,11 @@ private:
     void remember_selected_image(const std::string& channel_id, int message_index);
     std::optional<int> selected_image_index(const std::string& channel_id,
                                             const ChannelState& state) const;
+    std::optional<std::string> selected_file_id(const std::string& channel_id) const;
+    void set_selected_file_id(const std::string& channel_id, std::string file_id);
+    void move_file_selection(int delta);
+    void activate_selected_file_download();
+    void refresh_files_for_channel_if_needed(const std::string& channel_id);
 
     AppState&           state_;
     ClientConfig&       cfg_;
@@ -125,6 +146,7 @@ private:
     // Layout info for hit testing (updated during render)
     mutable std::vector<TabHitRegion> tab_positions_;
     mutable std::vector<UserHitRegion> user_positions_;
+    mutable std::vector<FileHitRegion> file_positions_;
     mutable int panel_divider_x_ = -1;
     mutable int user_list_y_start_ = 1;  // After header
     
@@ -140,11 +162,17 @@ private:
     GraphicsFrame pending_graphics_frame_;
     std::thread::id ui_thread_id_{};
     std::function<std::string()> transfer_summary_provider_;
+    std::function<void(const std::string&)> files_refresh_handler_;
+    std::function<void(const RemoteFileEntry&)> file_download_handler_;
     std::string toast_text_;
     std::chrono::steady_clock::time_point toast_until_{};
     bool quit_confirm_visible_ = false;
     UIRegion quit_confirm_yes_button_{};
     UIRegion quit_confirm_no_button_{};
+    SidePanelMode side_panel_mode_ = SidePanelMode::None;
+    int side_panel_width_ = 34;
+    std::unordered_map<std::string, std::string> selected_file_ids_;
+    std::string last_files_refresh_channel_;
 };
 
 } // namespace grotto::ui

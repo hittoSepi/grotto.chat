@@ -4,6 +4,7 @@
 
 `/upload <polku>` lähettää tiedoston aktiiviselle kanavalle tai käyttäjälle.
 `/transfers [määrä]` näyttää aktiiviset ja viimeisimmät siirrot.
+`/files` päivittää aktiivisen kanavan tai DM:n tiedostolistan ja avaa files-panelin.
 
 Esimerkki:
 ```
@@ -14,6 +15,12 @@ Esimerkki:
 ## Vastaanottaminen
 
 Kun joku lähettää tiedoston, Grotto näyttää ilmoituksen. Käytä `/download` tallentaaksesi tiedoston.
+
+Paina `F3` avataksesi nykyisen kanavan tai DM:n files-panelin. Siellä voit:
+- selata tiedostoja
+- liikkua nuolinäppäimillä kun input-rivi on tyhjä
+- ladata valitun tiedoston `Enter`-näppäimellä
+- ladata tiedoston hiirellä tuplaklikkaamalla
 
 ## Turva
 

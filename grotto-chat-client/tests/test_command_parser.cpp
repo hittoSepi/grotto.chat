@@ -50,6 +50,13 @@ TEST_CASE("parse_command recognizes transfers alias", "[command-parser]") {
     CHECK(parsed->args[0] == "5");
 }
 
+TEST_CASE("parse_command recognizes files alias", "[command-parser]") {
+    const auto parsed = grotto::parse_command("/ls");
+    REQUIRE(parsed.has_value());
+    REQUIRE(parsed->name == "/files");
+    CHECK(parsed->args.empty());
+}
+
 TEST_CASE("detect_local_file_from_paste accepts quoted existing file path", "[command-parser]") {
     const auto dir = make_temp_dir("quoted");
     const auto path = dir / "my file.txt";
