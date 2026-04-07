@@ -477,6 +477,9 @@ bool App::init(const std::filesystem::path& config_path,
     msg_handler_->set_file_list_callback([this](const FileListResponse& response) {
         handle_file_list_response(response);
     });
+    msg_handler_->set_file_changed_callback([this](const FileChanged& changed) {
+        handle_file_changed(changed);
+    });
     msg_handler_->set_preview_callback([this](const std::string& channel_id, const std::string& text) {
         trigger_previews(channel_id, text);
     });
@@ -1420,6 +1423,24 @@ void App::handle_file_list_response(const FileListResponse& response) {
     } else if (ui_) {
         ui_->notify();
     }
+}
+
+void App::handle_file_changed(const FileChanged& changed) {
+    const std::string target = canonical_file_target(changed.recipient_id(), changed.channel_id());
+    if (target.empty()) {
+        return;
+    }
+
+    const std::string active = canonical_channel_id(state_.active_channel().value_or(""));
+    if (active != target) {
+        return;
+    }
+
+    if (is_server_channel(target)) {
+        return;
+    }
+
+    request_remote_files_for_target(target, false);
 }
 
 void App::request_remote_files_for_target(const std::string& target, bool echo_to_chat) {

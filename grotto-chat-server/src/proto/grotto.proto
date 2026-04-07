@@ -63,6 +63,7 @@ enum MessageType {
   MT_FILE_POLICY      = 86;   // Server → Client: File transfer policy bootstrap
   MT_FILE_LIST_REQUEST = 87;  // Client → Server: List files for a DM/channel
   MT_FILE_LIST_RESPONSE = 88; // Server → Client: File list for a DM/channel
+  MT_FILE_CHANGED    = 89;    // Server → Client: File list changed for a DM/channel
 
   // Server messages
   MT_MOTD             = 75;   // Server → Client: Message of the Day
@@ -302,6 +303,12 @@ message FileListResponse {
   string recipient_id = 1;   // Echo DM peer for this list
   string channel_id = 2;     // Echo channel for this list
   repeated FileMetadata files = 3;
+}
+
+message FileChanged {
+  string file_id = 1;        // File that changed
+  string recipient_id = 2;   // DM peer target (empty for channel file)
+  string channel_id = 3;     // Channel target (empty for DM)
 }
 
 // File metadata (stored in database)

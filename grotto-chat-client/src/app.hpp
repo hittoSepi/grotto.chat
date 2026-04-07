@@ -79,6 +79,7 @@ private:
     std::vector<std::string> format_transfer_lines(std::size_t limit) const;
     void update_file_transfer_policy(const FileTransferPolicy& policy);
     void handle_file_list_response(const FileListResponse& response);
+    void handle_file_changed(const FileChanged& changed);
     void request_remote_files_for_target(const std::string& target, bool echo_to_chat = false);
     void download_remote_file(const RemoteFileEntry& file);
 

@@ -1210,6 +1210,20 @@ void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& /
         complete.set_total_bytes(upload.bytes_received);
         complete.set_file_checksum(checksum.data(), checksum.size());
         send_envelope(MT_FILE_COMPLETE, complete);
+
+        FileChanged changed;
+        changed.set_file_id(chunk.file_id());
+        auto completed_file = file_store.getFile(chunk.file_id());
+        if (completed_file) {
+            changed.set_recipient_id(completed_file->recipient_id);
+            changed.set_channel_id(completed_file->channel_id);
+        }
+        Envelope changed_env;
+        changed_env.set_seq(next_seq_++);
+        changed_env.set_timestamp_ms(now_ms());
+        changed_env.set_type(MT_FILE_CHANGED);
+        changed_env.set_payload(changed.SerializeAsString());
+        server_ctx_.broadcast(changed_env);
         
         spdlog::info("[{}] File upload complete: {} ({} bytes)",
             remote_endpoint_, chunk.file_id().c_str(), upload.bytes_received);

@@ -52,6 +52,8 @@ public:
     void set_file_policy_callback(FilePolicyFn fn) { file_policy_fn_ = std::move(fn); }
     using FileListFn = std::function<void(const FileListResponse&)>;
     void set_file_list_callback(FileListFn fn) { file_list_fn_ = std::move(fn); }
+    using FileChangedFn = std::function<void(const FileChanged&)>;
+    void set_file_changed_callback(FileChangedFn fn) { file_changed_fn_ = std::move(fn); }
 
     // File transfer manager (optional)
     void set_file_transfer_manager(client::file::FileTransferManager* ftm) { file_mgr_ = ftm; }
@@ -94,6 +96,7 @@ private:
     void handle_file_error(const Envelope& env);
     void handle_file_policy(const Envelope& env);
     void handle_file_list_response(const Envelope& env);
+    void handle_file_changed(const Envelope& env);
 
     // Helpers
     void send_envelope(MessageType type, const google::protobuf::Message& msg);
@@ -113,6 +116,7 @@ private:
     CommandResponseFn    command_response_fn_;
     FilePolicyFn         file_policy_fn_;
     FileListFn           file_list_fn_;
+    FileChangedFn        file_changed_fn_;
 
     bool   authenticated_ = false;
     bool   onboarding_shown_ = false;

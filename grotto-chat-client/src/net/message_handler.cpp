@@ -50,6 +50,7 @@ void MessageHandler::dispatch(const Envelope& env) {
     case MT_FILE_ERROR:      handle_file_error(env);      break;
     case MT_FILE_POLICY:     handle_file_policy(env);     break;
     case MT_FILE_LIST_RESPONSE: handle_file_list_response(env); break;
+    case MT_FILE_CHANGED:    handle_file_changed(env);    break;
     default:
         spdlog::debug("Unhandled message type: {}", static_cast<int>(env.type()));
         break;
@@ -673,6 +674,17 @@ void MessageHandler::handle_file_list_response(const Envelope& env) {
     }
     if (file_list_fn_) {
         file_list_fn_(response);
+    }
+}
+
+void MessageHandler::handle_file_changed(const Envelope& env) {
+    FileChanged changed;
+    if (!changed.ParseFromString(env.payload())) {
+        spdlog::warn("Failed to parse FileChanged");
+        return;
+    }
+    if (file_changed_fn_) {
+        file_changed_fn_(changed);
     }
 }
 
