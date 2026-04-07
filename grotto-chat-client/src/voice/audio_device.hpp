@@ -38,6 +38,7 @@ public:
 
 private:
     ma_device*   device_  = nullptr;
+    ma_context*  context_ = nullptr;
     bool         open_    = false;
     bool         started_ = false;
 

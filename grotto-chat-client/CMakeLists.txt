@@ -398,4 +398,22 @@ target_link_libraries(test-signal-prekey-roundtrip PRIVATE
     signal-protocol-c
     miniaudio::miniaudio
 )
+add_test(NAME signal-prekey-roundtrip-tests COMMAND test-signal-prekey-roundtrip)
+
+add_executable(test-file-transfer
+    tests/test_file_transfer.cpp
+    src/file/file_transfer.cpp
+    ${PROTO_SRCS}
+)
+target_include_directories(test-file-transfer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(test-file-transfer PRIVATE
+    Catch2::Catch2WithMain
+    protobuf::libprotobuf
+    unofficial-sodium::sodium
+    spdlog::spdlog
+)
+add_test(NAME file-transfer-tests COMMAND test-file-transfer)
 

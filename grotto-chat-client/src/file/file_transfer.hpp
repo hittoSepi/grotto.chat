@@ -165,6 +165,12 @@ private:
     SendFunction send_fn_;
     std::atomic<uint64_t> next_transfer_id_{1};
 
+    struct DownloadVerificationState {
+        bool saw_last_chunk = false;
+        bool received_complete = false;
+    };
+    std::unordered_map<std::string, DownloadVerificationState> download_verification_;
+
     // Upload workers
     std::vector<std::thread> upload_workers_;
     std::queue<std::string> pending_uploads_;

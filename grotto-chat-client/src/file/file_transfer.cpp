@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <random>
 #include <sstream>
+#include <sodium.h>
 
 namespace {
 
@@ -17,11 +18,57 @@ std::string generate_random_id() {
     return oss.str();
 }
 
+std::vector<uint8_t> sha256_bytes(const std::vector<uint8_t>& data) {
+    std::vector<uint8_t> digest(crypto_hash_sha256_BYTES);
+    crypto_hash_sha256(digest.data(), data.data(), data.size());
+    return digest;
+}
+
+std::vector<uint8_t> sha256_file(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        return {};
+    }
+
+    crypto_hash_sha256_state state;
+    crypto_hash_sha256_init(&state);
+
+    std::vector<char> buffer(64 * 1024);
+    while (file.good()) {
+        file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        const auto bytes_read = file.gcount();
+        if (bytes_read <= 0) {
+            break;
+        }
+        crypto_hash_sha256_update(
+            &state,
+            reinterpret_cast<const unsigned char*>(buffer.data()),
+            static_cast<unsigned long long>(bytes_read));
+    }
+
+    std::vector<uint8_t> digest(crypto_hash_sha256_BYTES);
+    crypto_hash_sha256_final(&state, digest.data());
+    return digest;
+}
+
+bool checksum_matches_path(const std::filesystem::path& path, const std::string& expected_bytes) {
+    if (expected_bytes.empty()) {
+        return true;
+    }
+    const auto actual = sha256_file(path);
+    const auto* expected = reinterpret_cast<const uint8_t*>(expected_bytes.data());
+    return actual.size() == expected_bytes.size() &&
+           std::equal(actual.begin(), actual.end(), expected);
+}
+
 } // namespace
 
 namespace grotto::client::file {
 
 FileTransferManager::FileTransferManager() {
+    if (sodium_init() < 0) {
+        spdlog::error("FileTransferManager failed to initialize libsodium checksum support");
+    }
     // Start upload worker threads
     for (size_t i = 0; i < MAX_CONCURRENT_UPLOADS; ++i) {
         upload_workers_.emplace_back(&FileTransferManager::process_uploads, this);
@@ -117,6 +164,7 @@ std::string FileTransferManager::download(
         std::lock_guard<std::mutex> lock(mutex_);
         transfers_[info.transfer_id] = info;
         file_id_to_transfer_[file_id] = info.transfer_id;
+        download_verification_[file_id] = DownloadVerificationState{};
     }
     
     // Send download request
@@ -181,6 +229,7 @@ void FileTransferManager::clear_completed() {
             info.state == TransferState::FAILED ||
             info.state == TransferState::CANCELLED) {
             file_id_to_transfer_.erase(info.file_id);
+            download_verification_.erase(info.file_id);
             it = transfers_.erase(it);
         } else {
             ++it;
@@ -217,12 +266,15 @@ void FileTransferManager::on_file_chunk(const FileChunk& chunk) {
     file.close();
     
     info.bytes_transferred += chunk.data.size();
-    info.progress = static_cast<float>(info.bytes_transferred) / info.file_size;
+    if (info.file_size > 0) {
+        info.progress = static_cast<float>(info.bytes_transferred) / info.file_size;
+    }
     
     if (chunk.is_last) {
-        info.state = TransferState::COMPLETED;
+        auto& verification = download_verification_[chunk.file_id];
+        verification.saw_last_chunk = true;
         info.progress = 1.0f;
-        spdlog::info("File download completed: {} -> {}", chunk.file_id, info.local_path.string());
+        spdlog::info("File download payload received: {} -> {}", chunk.file_id, info.local_path.string());
     }
 }
 
@@ -236,6 +288,7 @@ void FileTransferManager::on_file_progress(const FileProgress& progress) {
     if (transfer_it == transfers_.end()) return;
     
     auto& info = transfer_it->second;
+    info.file_size = progress.total_bytes();
     info.bytes_transferred = progress.bytes_transferred();
     info.progress = progress.percent_complete() / 100.0f;
     
@@ -256,10 +309,24 @@ void FileTransferManager::on_file_complete(const FileComplete& complete) {
     if (transfer_it == transfers_.end()) return;
     
     auto& info = transfer_it->second;
-    info.state = TransferState::COMPLETED;
     info.bytes_transferred = complete.total_bytes();
+    info.file_size = complete.total_bytes();
     info.progress = 1.0f;
-    
+
+    auto verification_it = download_verification_.find(complete.file_id());
+    if (verification_it != download_verification_.end()) {
+        verification_it->second.received_complete = true;
+    }
+
+    if (!complete.file_checksum().empty() &&
+        !checksum_matches_path(info.local_path, complete.file_checksum())) {
+        info.state = TransferState::FAILED;
+        info.error_message = "Checksum mismatch after transfer";
+        spdlog::error("File transfer checksum mismatch: {}", complete.file_id());
+        return;
+    }
+
+    info.state = TransferState::COMPLETED;
     spdlog::info("File transfer completed: {}", complete.file_id());
 }
 
@@ -275,6 +342,7 @@ void FileTransferManager::on_file_error(const FileError& error) {
     auto& info = transfer_it->second;
     info.state = TransferState::FAILED;
     info.error_message = error.error_message();
+    download_verification_.erase(error.file_id());
     
     spdlog::error("File transfer error: {} - {}", error.file_id(), error.error_message());
 }
@@ -390,6 +458,8 @@ void FileTransferManager::send_file_chunk(const std::string& transfer_id, uint32
     chunk.set_chunk_index(chunk_index);
     chunk.set_data(data.data(), data.size());
     chunk.set_is_last(is_last);
+    const auto checksum = sha256_bytes(data);
+    chunk.set_checksum(checksum.data(), checksum.size());
     
     send_fn_(MT_FILE_UPLOAD, chunk);
 }

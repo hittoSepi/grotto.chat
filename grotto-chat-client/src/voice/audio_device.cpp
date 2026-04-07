@@ -5,6 +5,8 @@
 
 #include "voice/audio_device.hpp"
 #include <spdlog/spdlog.h>
+#include <algorithm>
+#include <cctype>
 #include <new>
 
 namespace grotto::voice {
@@ -31,6 +33,63 @@ const char* backend_name(ma_backend backend) {
     }
 }
 
+std::string lower_copy(const std::string& value) {
+    std::string normalized = value;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return normalized;
+}
+
+bool resolve_named_device(
+    ma_context* context,
+    bool capture,
+    const std::string& requested_name,
+    ma_device_id& resolved_id,
+    std::string& resolved_name) {
+    if (context == nullptr || requested_name.empty()) {
+        return false;
+    }
+
+    ma_device_info* playback_infos = nullptr;
+    ma_uint32 playback_count = 0;
+    ma_device_info* capture_infos = nullptr;
+    ma_uint32 capture_count = 0;
+    if (ma_context_get_devices(
+            context,
+            &playback_infos,
+            &playback_count,
+            &capture_infos,
+            &capture_count) != MA_SUCCESS) {
+        return false;
+    }
+
+    auto* infos = capture ? capture_infos : playback_infos;
+    const auto count = capture ? capture_count : playback_count;
+    if (infos == nullptr || count == 0) {
+        return false;
+    }
+
+    for (ma_uint32 i = 0; i < count; ++i) {
+        if (requested_name == infos[i].name) {
+            resolved_id = infos[i].id;
+            resolved_name = infos[i].name;
+            return true;
+        }
+    }
+
+    const auto requested_lower = lower_copy(requested_name);
+    for (ma_uint32 i = 0; i < count; ++i) {
+        if (requested_lower == lower_copy(infos[i].name)) {
+            resolved_id = infos[i].id;
+            resolved_name = infos[i].name;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 } // namespace
 
 // ── Callback ─────────────────────────────────────────────────────────────────
@@ -50,11 +109,13 @@ void AudioDevice::data_callback(ma_device* dev, void* out, const void* in, uint3
 // ── AudioDevice ───────────────────────────────────────────────────────────────
 
 AudioDevice::AudioDevice()
-    : device_(new (std::nothrow) ma_device{}) {}
+    : device_(new (std::nothrow) ma_device{}),
+      context_(new (std::nothrow) ma_context{}) {}
 
 AudioDevice::~AudioDevice() {
     close();
     delete device_;
+    delete context_;
 }
 
 bool AudioDevice::open(const std::string& input_device,
@@ -80,18 +141,44 @@ bool AudioDevice::open(const std::string& input_device,
                  input_device.empty() ? "<system-default>" : input_device,
                  output_device.empty() ? "<system-default>" : output_device);
 
-    // Device selection (empty = default)
-    // For named device selection, miniaudio requires enumeration first.
-    // For now, always use system default; named device support can be added.
-    if (!input_device.empty() || !output_device.empty()) {
-        spdlog::warn("Named audio device selection is not implemented yet; using system defaults instead");
+    if (device_ == nullptr || context_ == nullptr) {
+        spdlog::error("Audio device allocation failed");
+        return false;
     }
-    (void)input_device;
-    (void)output_device;
 
-    ma_result result = ma_device_init(nullptr, &config, device_);
+    ma_result context_result = ma_context_init(nullptr, 0, nullptr, context_);
+    if (context_result != MA_SUCCESS) {
+        spdlog::error("ma_context_init failed: {}", static_cast<int>(context_result));
+        return false;
+    }
+
+    ma_device_id input_id{};
+    ma_device_id output_id{};
+    std::string resolved_input_name;
+    std::string resolved_output_name;
+
+    if (!input_device.empty()) {
+        if (resolve_named_device(context_, true, input_device, input_id, resolved_input_name)) {
+            config.capture.pDeviceID = &input_id;
+            spdlog::info("Resolved input device '{}' -> '{}'", input_device, resolved_input_name);
+        } else {
+            spdlog::warn("Input device '{}' was not found; using system default instead", input_device);
+        }
+    }
+
+    if (!output_device.empty()) {
+        if (resolve_named_device(context_, false, output_device, output_id, resolved_output_name)) {
+            config.playback.pDeviceID = &output_id;
+            spdlog::info("Resolved output device '{}' -> '{}'", output_device, resolved_output_name);
+        } else {
+            spdlog::warn("Output device '{}' was not found; using system default instead", output_device);
+        }
+    }
+
+    ma_result result = ma_device_init(context_, &config, device_);
     if (result != MA_SUCCESS) {
         spdlog::error("ma_device_init failed: {}", static_cast<int>(result));
+        ma_context_uninit(context_);
         return false;
     }
 
@@ -124,6 +211,7 @@ void AudioDevice::close() {
     stop();
     if (open_) {
         ma_device_uninit(device_);
+        ma_context_uninit(context_);
         open_ = false;
     }
 }

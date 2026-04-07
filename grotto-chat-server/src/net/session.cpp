@@ -8,6 +8,7 @@
 #include "voice/voice_room_manager.hpp"
 #include "version.hpp"
 #include "utils/nickname_utils.hpp"
+#include "utils/checksum_utils.hpp"
 
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/read.hpp>
@@ -42,6 +43,23 @@ bool is_valid_user_id(const std::string& id) {
         if (c < 0x20) return false;  // reject control characters
     }
     return true;
+}
+
+size_t expected_chunk_size(uint64_t file_size,
+                           uint32_t chunk_size,
+                           uint32_t total_chunks,
+                           uint32_t chunk_index) {
+    if (total_chunks == 0) {
+        return 0;
+    }
+    const uint64_t offset = static_cast<uint64_t>(chunk_index) * chunk_size;
+    if (offset >= file_size) {
+        return 0;
+    }
+    if (chunk_index + 1 == total_chunks) {
+        return static_cast<size_t>(file_size - offset);
+    }
+    return static_cast<size_t>(std::min<uint64_t>(chunk_size, file_size - offset));
 }
 
 // Get current timestamp in milliseconds
@@ -937,9 +955,40 @@ void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& /
         send_envelope(MT_FILE_ERROR, err);
         return;
     }
+
+    if (upload.received_chunks[chunk.chunk_index()]) {
+        FileError err;
+        err.set_file_id(chunk.file_id());
+        err.set_error_code(4083);
+        err.set_error_message("Duplicate chunk index");
+        send_envelope(MT_FILE_ERROR, err);
+        return;
+    }
     
     // Store the chunk
     std::vector<uint8_t> data(chunk.data().begin(), chunk.data().end());
+    const auto expected_size = expected_chunk_size(
+        upload.file_size, upload.chunk_size, upload.total_chunks, chunk.chunk_index());
+    if (expected_size == 0 || data.size() != expected_size) {
+        FileError err;
+        err.set_file_id(chunk.file_id());
+        err.set_error_code(4083);
+        err.set_error_message("Unexpected chunk size");
+        send_envelope(MT_FILE_ERROR, err);
+        return;
+    }
+
+    if (!utils::checksum_matches(data, chunk.checksum())) {
+        FileError err;
+        err.set_file_id(chunk.file_id());
+        err.set_error_code(4084);
+        err.set_error_message("Chunk checksum mismatch");
+        send_envelope(MT_FILE_ERROR, err);
+        file_store.deleteFile(chunk.file_id());
+        active_uploads_.erase(it);
+        return;
+    }
+
     if (!file_store.storeChunk(chunk.file_id(), chunk.chunk_index(), data)) {
         FileError err;
         err.set_file_id(chunk.file_id());
@@ -952,6 +1001,16 @@ void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& /
     // Update state
     upload.received_chunks[chunk.chunk_index()] = true;
     upload.bytes_received += data.size();
+    if (upload.bytes_received > upload.file_size) {
+        FileError err;
+        err.set_file_id(chunk.file_id());
+        err.set_error_code(4084);
+        err.set_error_message("Upload exceeds declared file size");
+        send_envelope(MT_FILE_ERROR, err);
+        file_store.deleteFile(chunk.file_id());
+        active_uploads_.erase(it);
+        return;
+    }
     
     // Send progress update
     FileProgress progress;
@@ -965,6 +1024,20 @@ void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& /
     
     // If last chunk, mark complete
     if (chunk.is_last()) {
+        const bool missing_chunks = std::any_of(
+            upload.received_chunks.begin(), upload.received_chunks.end(),
+            [](bool received) { return !received; });
+        if (missing_chunks || upload.bytes_received != upload.file_size) {
+            FileError err;
+            err.set_file_id(chunk.file_id());
+            err.set_error_code(4084);
+            err.set_error_message("Upload incomplete at final chunk");
+            send_envelope(MT_FILE_ERROR, err);
+            file_store.deleteFile(chunk.file_id());
+            active_uploads_.erase(it);
+            return;
+        }
+
         // Assemble all chunks for virus scanning
         std::vector<uint8_t> assembled_file;
         assembled_file.reserve(upload.file_size);
@@ -979,16 +1052,23 @@ void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& /
         
         // Virus scan
         auto& scanner_mgr = security::VirusScannerManager::instance();
-        if (scanner_mgr.is_enabled()) {
+        if (scanner_mgr.is_enabled() && scanner_mgr.is_configured()) {
             spdlog::debug("[{}] Scanning file {} for viruses ({} bytes)",
                 remote_endpoint_, chunk.file_id(), assembled_file.size());
             
             auto scan_result = scanner_mgr.scan(assembled_file);
             
             if (scan_result.error) {
-                spdlog::warn("[{}] Virus scan failed for {}: {}",
+                spdlog::error("[{}] Virus scan failed for {}: {}",
                     remote_endpoint_, chunk.file_id(), scan_result.error_message);
-                // Continue anyway - fail open for availability
+                FileError err;
+                err.set_file_id(chunk.file_id());
+                err.set_error_code(4091);
+                err.set_error_message("Virus scan failed: " + scan_result.error_message);
+                send_envelope(MT_FILE_ERROR, err);
+                file_store.deleteFile(chunk.file_id());
+                active_uploads_.erase(it);
+                return;
             } else if (!scan_result.clean) {
                 spdlog::error("[{}] THREAT DETECTED in file {}: {}",
                     remote_endpoint_, chunk.file_id(), scan_result.virus_name);
@@ -1011,14 +1091,14 @@ void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& /
             }
         }
         
-        std::vector<uint8_t> checksum(crypto_hash_sha256_BYTES);
-        crypto_hash_sha256(checksum.data(), assembled_file.data(), assembled_file.size());
+        const auto checksum = utils::sha256_bytes(assembled_file);
         file_store.markComplete(chunk.file_id(), checksum);
         
         // Notify completion
         FileComplete complete;
         complete.set_file_id(chunk.file_id());
         complete.set_total_bytes(upload.bytes_received);
+        complete.set_file_checksum(checksum.data(), checksum.size());
         send_envelope(MT_FILE_COMPLETE, complete);
         
         spdlog::info("[{}] File upload complete: {} ({} bytes)",
@@ -1070,13 +1150,38 @@ void Session::handle_file_download(const FileDownloadRequest& req) {
         // Send progress update
         FileProgress progress;
         progress.set_file_id(req.file_id());
-        progress.set_bytes_transferred((i + 1) * chunk_size);
+        progress.set_bytes_transferred(std::min<uint64_t>((i + 1) * chunk_size, metadata->file_size));
         progress.set_total_bytes(metadata->file_size);
         progress.set_percent_complete(
-            static_cast<float>((i + 1) * chunk_size) / metadata->file_size * 100.0f);
+            static_cast<float>(std::min<uint64_t>((i + 1) * chunk_size, metadata->file_size)) /
+            metadata->file_size * 100.0f);
         progress.set_status("downloading");
         send_envelope(MT_FILE_PROGRESS, progress);
     }
+
+    FileComplete complete;
+    complete.set_file_id(req.file_id());
+    complete.set_total_bytes(metadata->file_size);
+    if (!metadata->file_checksum.empty()) {
+        complete.set_file_checksum(
+            metadata->file_checksum.data(),
+            static_cast<int>(metadata->file_checksum.size()));
+    } else {
+        std::vector<uint8_t> assembled_file;
+        assembled_file.reserve(static_cast<size_t>(metadata->file_size));
+        for (size_t i = 0; i < total_chunks; ++i) {
+            auto chunk_data = file_store.getChunk(req.file_id(), static_cast<uint32_t>(i));
+            if (!chunk_data) {
+                continue;
+            }
+            assembled_file.insert(assembled_file.end(), chunk_data->begin(), chunk_data->end());
+        }
+        if (!assembled_file.empty()) {
+            const auto checksum = utils::sha256_bytes(assembled_file);
+            complete.set_file_checksum(checksum.data(), static_cast<int>(checksum.size()));
+        }
+    }
+    send_envelope(MT_FILE_COMPLETE, complete);
     
     spdlog::info("[{}] File download started: {} ({} chunks)",
         remote_endpoint_, req.file_id(), total_chunks);

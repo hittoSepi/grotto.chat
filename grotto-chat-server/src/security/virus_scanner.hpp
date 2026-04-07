@@ -8,6 +8,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <cstdint>
 
 namespace grotto::security {
 
@@ -36,6 +37,12 @@ public:
         UnixSocket,   // Unix domain socket (Linux/macOS)
         Tcp           // TCP socket (cross-platform)
     };
+
+#ifdef _WIN32
+    using SocketHandle = uintptr_t;
+#else
+    using SocketHandle = int;
+#endif
 
     // Constructor - use Unix socket
     explicit VirusScanner(const std::string& socket_path);
@@ -96,14 +103,6 @@ private:
     std::chrono::milliseconds timeout_{5000};  // 5 second default timeout
     size_t max_scan_size_ = 100 * 1024 * 1024;  // 100MB
 
-#ifdef _WIN32
-    // Windows socket handle
-    using SocketHandle = uintptr_t;
-#else
-    // Unix socket handle
-    using SocketHandle = int;
-#endif
-
     // Connect to clamd
     SocketHandle connect_to_daemon();
     void close_socket(SocketHandle sock);
@@ -137,6 +136,7 @@ public:
      * Check if scanner is initialized and available.
      */
     bool is_available() const;
+    bool is_configured() const { return configured_; }
 
     /**
      * Scan data. Returns clean result if scanner not available.
@@ -167,6 +167,7 @@ private:
     std::unique_ptr<VirusScanner> scanner_;
     std::atomic<bool> enabled_{true};
     std::atomic<bool> available_{false};
+    std::atomic<bool> configured_{false};
     
     Stats stats_;
     mutable std::mutex stats_mutex_;

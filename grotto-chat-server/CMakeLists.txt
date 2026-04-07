@@ -326,3 +326,55 @@ target_link_libraries(test-channel-utils PRIVATE
     Catch2::Catch2WithMain
 )
 add_test(NAME channel-utils-tests COMMAND test-channel-utils)
+
+add_executable(test-checksum-utils
+    tests/test_checksum_utils.cpp
+)
+target_include_directories(test-checksum-utils PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(test-checksum-utils PRIVATE
+    Catch2::Catch2WithMain
+    unofficial-sodium::sodium
+)
+add_test(NAME checksum-utils-tests COMMAND test-checksum-utils)
+
+add_executable(test-file-store
+    tests/test_file_store.cpp
+    src/db/database.cpp
+    src/db/file_store.cpp
+    src/crypto/file_encryptor.cpp
+)
+target_include_directories(test-file-store PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(test-file-store PRIVATE
+    Catch2::Catch2WithMain
+    SQLiteCpp
+    unofficial-sodium::sodium
+    OpenSSL::Crypto
+    spdlog::spdlog
+)
+add_test(NAME file-store-tests COMMAND test-file-store)
+
+add_executable(test-virus-scanner
+    tests/test_virus_scanner.cpp
+    src/security/virus_scanner.cpp
+)
+target_include_directories(test-virus-scanner PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${Boost_INCLUDE_DIRS}
+)
+target_link_libraries(test-virus-scanner PRIVATE
+    Catch2::Catch2WithMain
+    spdlog::spdlog
+)
+if(WIN32)
+    target_link_libraries(test-virus-scanner PRIVATE ws2_32)
+else()
+    target_link_libraries(test-virus-scanner PRIVATE pthread)
+endif()
+add_test(NAME virus-scanner-tests COMMAND test-virus-scanner)

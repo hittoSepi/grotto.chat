@@ -1,5 +1,16 @@
 ## TODOS & IDEAS
 
+### Desktop + Server Readiness
+- [~] **Server file-security hardening**
+  - [x] ClamAV client implementation for configured TCP / Unix-socket deployments
+  - [x] Fail closed when antivirus is configured but unavailable or scan fails
+  - [x] Validate optional upload chunk SHA-256 checksums
+  - [x] Include final file checksum in `MT_FILE_COMPLETE`
+- [~] **Desktop file-transfer integrity**
+  - [x] Send SHA-256 checksum per upload chunk
+  - [x] Verify final checksum on transfer completion
+  - [x] Resolve named audio-device binding in the miniaudio backend with default-device fallback
+
 ### Documentation
 - [ ] **Translate Finnish documents to English**
   - `grotto-android/docs/android/architecture.md`

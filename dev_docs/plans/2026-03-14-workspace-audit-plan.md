@@ -2,6 +2,8 @@
 
 > Status: Phase 1 delivered on 2026-03-14
 >
+> Update 2026-04-07: Desktop voice is now functioning in the current workspace snapshot. The active readiness focus moved to server antivirus/checksum hardening and desktop file-transfer integrity. See `2026-04-07-desktop-server-readiness.md`.
+>
 > Scope: audit the current Grotto workspace, define a realistic implementation order, and ship the highest-value slice immediately instead of leaving the repo at planning-only state.
 
 ## Audit Summary
