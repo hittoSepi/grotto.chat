@@ -1006,17 +1006,7 @@ void Session::handle_file_request(const FileUploadRequest& req, const Envelope& 
 
 void Session::handle_file_upload(const FileUploadChunk& chunk, const Envelope& /*raw*/) {
     auto& file_store = server_ctx_.file_store();
-    
-    // Check rate limit
-    if (msg_rate_limiter_ && !msg_rate_limiter_->allow()) {
-        FileError err;
-        err.set_file_id(chunk.file_id());
-        err.set_error_code(4290);
-        err.set_error_message("Rate limit exceeded");
-        send_envelope(MT_FILE_ERROR, err);
-        return;
-    }
-    
+
     std::lock_guard<std::mutex> lock(uploads_mutex_);
     
     // Find upload state

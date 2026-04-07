@@ -628,12 +628,18 @@ void MessageHandler::handle_file_error(const Envelope& env) {
     ::FileError error;
     if (!error.ParseFromString(env.payload())) return;
     if (file_mgr_) {
+        bool already_reported = false;
         std::string detail = error.error_message();
         if (auto info = file_mgr_->get_transfer_by_file_id(error.file_id())) {
+            already_reported =
+                info->state == client::file::TransferState::FAILED &&
+                info->error_message == error.error_message();
             detail = info->filename + ": " + error.error_message();
         }
         file_mgr_->on_file_error(error);
-        push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_ERROR, detail));
+        if (!already_reported) {
+            push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_ERROR, detail));
+        }
     }
 }
 

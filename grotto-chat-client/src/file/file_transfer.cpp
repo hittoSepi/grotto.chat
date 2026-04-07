@@ -362,8 +362,13 @@ void FileTransferManager::on_file_progress(const FileProgress& progress) {
     
     auto& info = transfer_it->second;
     info.file_size = progress.total_bytes();
-    info.bytes_transferred = progress.bytes_transferred();
-    info.progress = progress.percent_complete() / 100.0f;
+    if (info.direction == TransferDirection::UPLOAD) {
+        info.bytes_transferred = std::max<uint64_t>(info.bytes_transferred, progress.bytes_transferred());
+        info.progress = std::max(info.progress, progress.percent_complete() / 100.0f);
+    } else {
+        info.bytes_transferred = progress.bytes_transferred();
+        info.progress = progress.percent_complete() / 100.0f;
+    }
     info.updated_at_ms = unix_timestamp_ms_now();
     
     if (progress.status() == "uploading") {
@@ -415,6 +420,9 @@ void FileTransferManager::on_file_error(const FileError& error) {
     if (transfer_it == transfers_.end()) return;
     
     auto& info = transfer_it->second;
+    if (info.state == TransferState::FAILED && info.error_message == error.error_message()) {
+        return;
+    }
     info.state = TransferState::FAILED;
     info.error_message = error.error_message();
     info.updated_at_ms = unix_timestamp_ms_now();
@@ -499,13 +507,19 @@ void FileTransferManager::do_upload(const std::string& transfer_id, TransferInfo
     uint64_t total_sent = 0;
     
     while (file.good() && !shutdown_) {
-        // Check if cancelled
+        // Stop as soon as the transfer is no longer active.
         {
             std::lock_guard<std::mutex> lock(mutex_);
             auto it = transfers_.find(transfer_id);
-            if (it != transfers_.end() && it->second.state == TransferState::CANCELLED) {
-                spdlog::info("Upload cancelled: {}", transfer_id);
-                return;
+            if (it != transfers_.end()) {
+                if (it->second.state == TransferState::CANCELLED) {
+                    spdlog::info("Upload cancelled: {}", transfer_id);
+                    return;
+                }
+                if (it->second.state == TransferState::FAILED) {
+                    spdlog::info("Upload stopped after failure: {}", transfer_id);
+                    return;
+                }
             }
         }
         
@@ -519,21 +533,7 @@ void FileTransferManager::do_upload(const std::string& transfer_id, TransferInfo
         send_file_chunk(transfer_id, chunk_index++,
             std::vector<uint8_t>(buffer.begin(), buffer.begin() + bytes_read),
             is_last);
-        
         total_sent += bytes_read;
-        info.bytes_transferred = total_sent;
-        info.progress = static_cast<float>(total_sent) / info.file_size;
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            auto it = transfers_.find(transfer_id);
-            if (it != transfers_.end()) {
-                it->second.bytes_transferred = info.bytes_transferred;
-                it->second.progress = info.progress;
-                it->second.file_size = info.file_size;
-                it->second.state = TransferState::UPLOADING;
-                it->second.updated_at_ms = unix_timestamp_ms_now();
-            }
-        }
         
         // Small delay to avoid overwhelming the network
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
