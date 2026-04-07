@@ -106,6 +106,52 @@ url = "https://directory.grotto.dev"
 ping_interval_sec = 300
 ```
 
+### Optional: ClamAV on Ubuntu
+
+If you want server-side virus scanning for file uploads, install the ClamAV daemon on Ubuntu and point Grotto at `clamd`.
+
+Install packages:
+
+```bash
+sudo apt update
+sudo apt install -y clamav clamav-daemon clamav-freshclam
+```
+
+Enable and start the update service plus the daemon:
+
+```bash
+sudo systemctl enable --now clamav-freshclam
+sudo systemctl enable --now clamav-daemon
+```
+
+Check that the daemon is available:
+
+```bash
+sudo systemctl status clamav-freshclam
+sudo systemctl status clamav-daemon
+clamdscan --version
+```
+
+On Ubuntu, the simplest setup is usually the local Unix socket. Configure `server.toml` like this:
+
+```toml
+[antivirus]
+clamav_socket = "/run/clamav/clamd.ctl"
+clamav_host = "127.0.0.1"
+clamav_port = 0
+```
+
+If your distro uses a different socket path, locate it with:
+
+```bash
+sudo find /run /var/run -name 'clamd*.ctl' 2>/dev/null
+```
+
+Important behavior:
+
+- If ClamAV is not configured in `server.toml`, uploads continue normally without virus scanning.
+- If ClamAV is configured but `clamd` is unavailable, uploads are rejected fail-closed.
+
 ### Generate TLS Certificates
 
 For development:
