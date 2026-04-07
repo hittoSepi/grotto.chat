@@ -1244,40 +1244,55 @@ void Session::handle_file_download(const FileDownloadRequest& req) {
         return;
     }
     
-    // Keep download frames under the 64 KB envelope limit after protobuf overhead.
-    constexpr size_t chunk_size = 60 * 1024;
-    size_t total_chunks = (metadata->file_size + chunk_size - 1) / chunk_size;
-    
-    // Send chunks starting from requested index
-    for (size_t i = req.chunk_index(); i < total_chunks; ++i) {
-        auto chunk_data = file_store.getChunk(req.file_id(), static_cast<uint32_t>(i));
-        if (!chunk_data) {
+    // Re-chunk stored DB chunks into a safer wire size. Stored chunks may come from
+    // older uploads and can be larger than the network framing margin.
+    constexpr size_t wire_chunk_size = 56 * 1024;
+    uint64_t bytes_sent = 0;
+    uint32_t wire_chunk_index = 0;
+    uint32_t stored_chunk_index = 0;
+
+    while (bytes_sent < metadata->file_size) {
+        auto stored_chunk = file_store.getChunk(req.file_id(), stored_chunk_index++);
+        if (!stored_chunk) {
             FileError err;
             err.set_file_id(req.file_id());
             err.set_error_code(4084);
-            err.set_error_message("Chunk not found: " + std::to_string(i));
+            err.set_error_message("Chunk not found while streaming download");
             send_envelope(MT_FILE_ERROR, err);
             return;
         }
-        
-        FileChunk chunk;
-        chunk.set_file_id(req.file_id());
-        chunk.set_chunk_index(static_cast<uint32_t>(i));
-        chunk.set_data(chunk_data->data(), chunk_data->size());
-        chunk.set_is_last(i == total_chunks - 1);
-        
-        send_envelope(MT_FILE_CHUNK, chunk);
-        
-        // Send progress update
-        FileProgress progress;
-        progress.set_file_id(req.file_id());
-        progress.set_bytes_transferred(std::min<uint64_t>((i + 1) * chunk_size, metadata->file_size));
-        progress.set_total_bytes(metadata->file_size);
-        progress.set_percent_complete(
-            static_cast<float>(std::min<uint64_t>((i + 1) * chunk_size, metadata->file_size)) /
-            metadata->file_size * 100.0f);
-        progress.set_status("downloading");
-        send_envelope(MT_FILE_PROGRESS, progress);
+
+        size_t offset = 0;
+        while (offset < stored_chunk->size() && bytes_sent < metadata->file_size) {
+            const size_t remaining_in_chunk = stored_chunk->size() - offset;
+            const uint64_t remaining_in_file = metadata->file_size - bytes_sent;
+            const size_t slice_size = std::min<size_t>(
+                wire_chunk_size,
+                std::min<uint64_t>(remaining_in_chunk, remaining_in_file));
+
+            if (wire_chunk_index >= req.chunk_index()) {
+                FileChunk chunk;
+                chunk.set_file_id(req.file_id());
+                chunk.set_chunk_index(wire_chunk_index);
+                chunk.set_data(stored_chunk->data() + offset, static_cast<int>(slice_size));
+                chunk.set_is_last(bytes_sent + slice_size >= metadata->file_size);
+                send_envelope(MT_FILE_CHUNK, chunk);
+
+                FileProgress progress;
+                progress.set_file_id(req.file_id());
+                progress.set_bytes_transferred(bytes_sent + slice_size);
+                progress.set_total_bytes(metadata->file_size);
+                progress.set_percent_complete(
+                    static_cast<float>(bytes_sent + slice_size) /
+                    metadata->file_size * 100.0f);
+                progress.set_status("downloading");
+                send_envelope(MT_FILE_PROGRESS, progress);
+            }
+
+            bytes_sent += slice_size;
+            offset += slice_size;
+            ++wire_chunk_index;
+        }
     }
 
     FileComplete complete;
@@ -1290,12 +1305,15 @@ void Session::handle_file_download(const FileDownloadRequest& req) {
     } else {
         std::vector<uint8_t> assembled_file;
         assembled_file.reserve(static_cast<size_t>(metadata->file_size));
-        for (size_t i = 0; i < total_chunks; ++i) {
-            auto chunk_data = file_store.getChunk(req.file_id(), static_cast<uint32_t>(i));
+        for (uint32_t i = 0; ; ++i) {
+            auto chunk_data = file_store.getChunk(req.file_id(), i);
             if (!chunk_data) {
-                continue;
+                break;
             }
             assembled_file.insert(assembled_file.end(), chunk_data->begin(), chunk_data->end());
+            if (assembled_file.size() >= metadata->file_size) {
+                break;
+            }
         }
         if (!assembled_file.empty()) {
             const auto checksum = utils::sha256_bytes(assembled_file);
@@ -1304,8 +1322,8 @@ void Session::handle_file_download(const FileDownloadRequest& req) {
     }
     send_envelope(MT_FILE_COMPLETE, complete);
     
-    spdlog::info("[{}] File download started: {} ({} chunks)",
-        remote_endpoint_, req.file_id(), total_chunks);
+    spdlog::info("[{}] File download started: {} ({} wire chunks)",
+        remote_endpoint_, req.file_id(), wire_chunk_index);
 }
 
 void Session::handle_file_list_request(const FileListRequest& req) {
