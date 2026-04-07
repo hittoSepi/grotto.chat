@@ -120,6 +120,19 @@ namespace grotto {
 			config.file_encryption_key = get_optional<std::string>( security, "file_encryption_key", "" );
 		}
 
+		// [files] section - optional
+		if ( data.contains( "files" ) ) {
+			const auto &files = data.at( "files" );
+			config.max_upload_bytes = static_cast<uint64_t>(
+				get_optional<int64_t>( files, "max_upload_bytes", 100ll * 1024ll * 1024ll ) );
+			if ( files.contains( "allowed_mime_types" ) ) {
+				config.allowed_mime_types = get_optional<std::vector<std::string>>( files, "allowed_mime_types", {} );
+			}
+			if ( files.contains( "blocked_mime_types" ) ) {
+				config.blocked_mime_types = get_optional<std::vector<std::string>>( files, "blocked_mime_types", {} );
+			}
+		}
+
 		// [antivirus] section - optional
 		if ( data.contains( "antivirus" ) ) {
 			const auto &av = data.at( "antivirus" );
@@ -253,6 +266,9 @@ namespace grotto {
 		     config.max_chat_payload_bytes > config.max_message_bytes ) {
 			throw std::runtime_error(
 				"Invalid config: max_chat_payload_bytes must be between 1 and max_message_bytes" );
+		}
+		if ( config.max_upload_bytes == 0 ) {
+			throw std::runtime_error( "Invalid config: max_upload_bytes must be greater than 0" );
 		}
 
 		if ( config.ping_interval_sec <= 0 || config.ping_interval_sec > 300 ) {

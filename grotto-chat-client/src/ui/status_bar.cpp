@@ -53,6 +53,11 @@ Element render_status_bar(const StatusInfo& info) {
         }
     }
 
+    if (!info.transfer_summary.empty()) {
+        left.push_back(text(" | ") | color(palette::fg_dark()));
+        left.push_back(text(info.transfer_summary) | color(palette::cyan()));
+    }
+
     // Right side: online users
     Elements right;
     for (auto& u : info.online_users) {

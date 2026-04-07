@@ -66,7 +66,10 @@ public:
     int ping_timeout_sec() const override { return ping_timeout_sec_; }
     int msg_rate_per_sec() const override { return msg_rate_per_sec_; }
     size_t max_chat_payload_bytes() const override { return max_chat_payload_bytes_; }
+    uint64_t max_upload_bytes() const override { return max_upload_bytes_; }
     const std::string& motd() const override { return motd_; }
+    const std::vector<std::string>& allowed_mime_types() const override { return allowed_mime_types_; }
+    const std::vector<std::string>& blocked_mime_types() const override { return blocked_mime_types_; }
     const std::vector<std::string>& voice_ice_servers() const override { return voice_ice_servers_; }
     const std::string& voice_turn_username() const override { return voice_turn_username_; }
     const std::string& voice_turn_password() const override { return voice_turn_password_; }
@@ -75,6 +78,13 @@ public:
     void set_ping_intervals(int interval_sec, int timeout_sec);
     void set_rate_limits(int msg_rate_per_sec, int conn_rate_per_min);
     void set_max_chat_payload_bytes(size_t max_chat_payload_bytes) { max_chat_payload_bytes_ = max_chat_payload_bytes; }
+    void set_file_policy(uint64_t max_upload_bytes,
+                         std::vector<std::string> allowed_mime_types,
+                         std::vector<std::string> blocked_mime_types) {
+        max_upload_bytes_ = max_upload_bytes;
+        allowed_mime_types_ = std::move(allowed_mime_types);
+        blocked_mime_types_ = std::move(blocked_mime_types);
+    }
     void set_max_connections(int max_connections);
     void set_motd(const std::string& motd) { motd_ = motd; }
     void set_voice_ice_config(const std::vector<std::string>& ice_servers,
@@ -136,6 +146,9 @@ private:
     int conn_rate_per_min_ = 10;
     int max_connections_ = 100;
     size_t max_chat_payload_bytes_ = 8192;
+    uint64_t max_upload_bytes_ = 100ull * 1024ull * 1024ull;
+    std::vector<std::string> allowed_mime_types_;
+    std::vector<std::string> blocked_mime_types_;
 
     // Total active connections (pre-auth + authenticated)
     std::atomic<int> active_connections_{0};

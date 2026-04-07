@@ -20,8 +20,10 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace grotto {
 
@@ -72,6 +74,16 @@ private:
     // Save config to file
     void save_current_config();
     void refresh_runtime_capabilities();
+    std::string build_transfer_summary() const;
+    std::vector<std::string> format_transfer_lines(std::size_t limit) const;
+    void update_file_transfer_policy(const FileTransferPolicy& policy);
+
+    struct FileTransferPolicyState {
+        bool received = false;
+        uint64_t max_upload_bytes = 0;
+        std::vector<std::string> allowed_mime_types;
+        std::vector<std::string> blocked_mime_types;
+    };
 
     ClientConfig cfg_;
     RuntimeCapabilities runtime_capabilities_;
@@ -100,6 +112,7 @@ private:
     mutable std::mutex connection_trace_mu_;
     std::chrono::steady_clock::time_point connection_attempt_started_{};
     bool has_connection_attempt_ = false;
+    FileTransferPolicyState file_transfer_policy_;
     
     // Flag to indicate if app should exit (for settings logout)
     bool should_exit_ = false;

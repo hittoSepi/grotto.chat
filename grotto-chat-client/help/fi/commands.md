@@ -47,6 +47,7 @@
 
 `/upload <polku>`          lähetä tiedosto (alias: `/up`)  
 `/download <id> [polku]`   lataa tiedosto (alias: `/dl`)  
+`/transfers [määrä]`       näytä viimeisimmät tiedostosiirrot (alias: `/xfers`)  
 
 ---
 

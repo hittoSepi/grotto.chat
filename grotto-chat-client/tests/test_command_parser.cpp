@@ -42,6 +42,14 @@ TEST_CASE("parse_command supports quoted download destination", "[command-parser
     CHECK(parsed->args[1] == "downloads/my file.bin");
 }
 
+TEST_CASE("parse_command recognizes transfers alias", "[command-parser]") {
+    const auto parsed = grotto::parse_command("/xfers 5");
+    REQUIRE(parsed.has_value());
+    REQUIRE(parsed->name == "/transfers");
+    REQUIRE(parsed->args.size() == 1);
+    CHECK(parsed->args[0] == "5");
+}
+
 TEST_CASE("detect_local_file_from_paste accepts quoted existing file path", "[command-parser]") {
     const auto dir = make_temp_dir("quoted");
     const auto path = dir / "my file.txt";

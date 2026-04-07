@@ -47,6 +47,7 @@
 
 `/upload <path>`           upload a file (alias: `/up`)  
 `/download <id> [path]`    download a file (alias: `/dl`)  
+`/transfers [limit]`       show recent file transfer state (alias: `/xfers`)  
 
 ---
 

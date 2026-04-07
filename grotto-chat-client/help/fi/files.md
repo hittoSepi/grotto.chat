@@ -3,6 +3,7 @@
 ## Lähettäminen
 
 `/upload <polku>` lähettää tiedoston aktiiviselle kanavalle tai käyttäjälle.
+`/transfers [määrä]` näyttää aktiiviset ja viimeisimmät siirrot.
 
 Esimerkki:
 ```
@@ -17,3 +18,5 @@ Kun joku lähettää tiedoston, Grotto näyttää ilmoituksen. Käytä `/downloa
 ## Turva
 
 Tiedostot on salattu samalla tavalla kuin viestit. Serveri vain kuljettaa palasia eteenpäin ilman että näkee sisältöä.
+
+Jos serveri ilmoittaa tiedostopolitiikan, client estää liian isot tai kiellettyä MIME-tyyppiä käyttävät uploadit jo ennen lähetystä.

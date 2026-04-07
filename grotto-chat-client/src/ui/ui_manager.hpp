@@ -21,6 +21,7 @@
 #include <string>
 #include <optional>
 #include <chrono>
+#include <thread>
 #include <unordered_map>
 
 namespace grotto::ui {
@@ -53,6 +54,9 @@ public:
     void push_system_msg_to_channel(const std::string& channel_id,
                                     const std::string& text,
                                     bool activate_channel = false);
+    void set_transfer_summary_provider(std::function<std::string()> provider) {
+        transfer_summary_provider_ = std::move(provider);
+    }
 
     // Wake the FTXUI event loop after AppState changes.
     // Called internally by AppState::post_ui() wiring.
@@ -134,6 +138,8 @@ private:
     std::string last_active_channel_;
     GraphicsCompositor graphics_compositor_;
     GraphicsFrame pending_graphics_frame_;
+    std::thread::id ui_thread_id_{};
+    std::function<std::string()> transfer_summary_provider_;
     std::string toast_text_;
     std::chrono::steady_clock::time_point toast_until_{};
     bool quit_confirm_visible_ = false;

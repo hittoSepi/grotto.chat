@@ -47,6 +47,8 @@ struct TransferInfo {
     std::filesystem::path local_path;
     std::string recipient_id;     // For uploads
     std::string channel_id;       // For uploads
+    int64_t created_at_ms = 0;
+    int64_t updated_at_ms = 0;
 };
 
 // Progress callback
@@ -60,6 +62,8 @@ struct FileChunk {
     std::vector<uint8_t> data;
     bool is_last = false;
 };
+
+std::string detect_mime_type(const std::filesystem::path& path);
 
 /**
  * Manages file transfers (uploads and downloads).
@@ -124,6 +128,12 @@ public:
     std::vector<TransferInfo> get_active_transfers() const;
 
     /**
+     * List recent transfers ordered by most recently updated first.
+     * If limit is zero, all transfers are returned.
+     */
+    std::vector<TransferInfo> list_transfers(size_t limit = 0) const;
+
+    /**
      * Clear completed/failed transfers from history.
      */
     void clear_completed();
@@ -160,7 +170,7 @@ public:
      */
     static constexpr size_t MAX_CONCURRENT_UPLOADS = 3;
     static constexpr size_t MAX_CONCURRENT_DOWNLOADS = 5;
-    static constexpr size_t CHUNK_SIZE = 64 * 1024;  // 64 KB
+    static constexpr size_t CHUNK_SIZE = 60 * 1024;  // Keep wire frame under 64 KB after protobuf overhead
 
 private:
     mutable std::mutex mutex_;

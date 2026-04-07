@@ -74,6 +74,17 @@ ban_duration_min = 30
 # Leave empty to disable file encryption (files stored unencrypted - NOT RECOMMENDED)
 file_encryption_key = ""
 
+[files]
+# Maximum upload size in bytes
+max_upload_bytes = 104857600
+
+# MIME types allowed for upload. Empty list = allow all unless blocked.
+# Prefix matches are supported with trailing "/" or "*", for example "image/" or "audio/*".
+allowed_mime_types = []
+
+# MIME types denied for upload. These always win over allow rules.
+blocked_mime_types = []
+
 [antivirus]
 # ClamAV daemon (clamd) configuration for virus scanning
 # Install ClamAV: apt-get install clamav-daemon (Debian/Ubuntu)

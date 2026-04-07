@@ -79,7 +79,19 @@ TEST_CASE("upload emits per-chunk sha256 checksums", "[file-transfer]") {
     REQUIRE(captured_chunk.checksum().size() == expected.size());
     CHECK(matches_bytes(captured_chunk.checksum(), expected));
 
+    Envelope probe;
+    probe.set_type(MT_FILE_UPLOAD);
+    probe.set_timestamp_ms(1);
+    probe.set_payload(captured_chunk.SerializeAsString());
+    CHECK(probe.ByteSizeLong() <= 65536);
+
     cleanup(dir);
+}
+
+TEST_CASE("detect_mime_type infers common file types", "[file-transfer]") {
+    CHECK(grotto::client::file::detect_mime_type("photo.JPG") == "image/jpeg");
+    CHECK(grotto::client::file::detect_mime_type("note.txt") == "text/plain");
+    CHECK(grotto::client::file::detect_mime_type("blob.bin") == "application/octet-stream");
 }
 
 TEST_CASE("download completion verifies matching checksum", "[file-transfer]") {
@@ -148,6 +160,41 @@ TEST_CASE("download completion rejects checksum mismatch", "[file-transfer]") {
     REQUIRE(info.has_value());
     CHECK(info->state == grotto::client::file::TransferState::FAILED);
     CHECK(info->error_message == "Checksum mismatch after transfer");
+
+    cleanup(dir);
+}
+
+TEST_CASE("list_transfers returns newest updates first", "[file-transfer]") {
+    REQUIRE(sodium_init() >= 0);
+
+    const auto dir = make_temp_dir("history");
+    const auto first_path = dir / "first.bin";
+    const auto second_path = dir / "second.bin";
+    {
+        std::ofstream out(first_path, std::ios::binary);
+        out << "first";
+    }
+    {
+        std::ofstream out(second_path, std::ios::binary);
+        out << "second";
+    }
+
+    grotto::client::file::FileTransferManager manager;
+    manager.set_send_function([](uint32_t, const google::protobuf::Message&) {});
+
+    const auto first_id = manager.upload(first_path, "bob", "");
+    const auto second_id = manager.download("file-second", second_path);
+    REQUIRE_FALSE(first_id.empty());
+    REQUIRE_FALSE(second_id.empty());
+
+    FileError error;
+    error.set_file_id("file-second");
+    error.set_error_message("quota exceeded");
+    manager.on_file_error(error);
+
+    const auto transfers = manager.list_transfers();
+    REQUIRE(transfers.size() >= 2);
+    CHECK(transfers[0].updated_at_ms >= transfers[1].updated_at_ms);
 
     cleanup(dir);
 }

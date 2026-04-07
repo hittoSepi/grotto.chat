@@ -839,6 +839,15 @@ void UIManager::push_system_msg_to_channel(const std::string& channel_id,
     msg.sender_id    = "system";
     msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
+    if (ui_thread_id_ != std::thread::id{} && std::this_thread::get_id() == ui_thread_id_) {
+        state_.ensure_channel(ch);
+        if (activate_channel) {
+            state_.set_active_channel(ch);
+        }
+        state_.push_message(ch, std::move(msg));
+        return;
+    }
+
     state_.post_ui([this, ch = std::move(ch), m = std::move(msg), activate_channel]() mutable {
         state_.ensure_channel(ch);
         if (activate_channel) {
@@ -1077,6 +1086,9 @@ Element UIManager::build_document(int term_rows) {
     si.voice_participants = vs.participants;
     si.speaking_peers = vs.speaking_peers;
     si.online_users   = state_.online_users();
+    if (transfer_summary_provider_) {
+        si.transfer_summary = transfer_summary_provider_();
+    }
     auto status_el = render_status_bar(si);
 
     // Input line — render with proper wrapping and multiline support
@@ -1245,6 +1257,7 @@ void UIManager::run(SubmitFn on_submit,
                     ChannelCycleFn on_channel_cycle,
                     PttToggleFn on_ptt_toggle,
                     OpenSettingsFn on_open_settings) {
+    ui_thread_id_ = std::this_thread::get_id();
 #ifndef _WIN32
     // Re-assert swallow handlers at UI loop boundary.
     install_interrupt_handlers();

@@ -14,9 +14,9 @@ static const std::vector<std::string> kKnownCommands = {
     "/quit", "/disconnect", "/status", "/help", "/reload_help", "/settings", "/version",
     "/diag",
     "/names", "/whois",
-    "/upload", "/download",
+    "/upload", "/download", "/transfers",
     // Aliases
-    "/j", "/p", "/w", "/q", "/h", "/rh", "/st", "/ns", "/ver", "/up", "/dl",
+    "/j", "/p", "/w", "/q", "/h", "/rh", "/st", "/ns", "/ver", "/up", "/dl", "/xfers",
 };
 
 static const std::unordered_map<std::string, std::string> kCommandAliases = {
@@ -31,6 +31,7 @@ static const std::unordered_map<std::string, std::string> kCommandAliases = {
     {"/ver", "/version"},
     {"/up", "/upload"},
     {"/dl", "/download"},
+    {"/xfers", "/transfers"},
     {"/ptt", "/vmode"},
 };
 

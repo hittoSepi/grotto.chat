@@ -48,6 +48,7 @@ void MessageHandler::dispatch(const Envelope& env) {
     case MT_FILE_PROGRESS:   handle_file_progress(env);   break;
     case MT_FILE_COMPLETE:   handle_file_complete(env);   break;
     case MT_FILE_ERROR:      handle_file_error(env);      break;
+    case MT_FILE_POLICY:     handle_file_policy(env);     break;
     default:
         spdlog::debug("Unhandled message type: {}", static_cast<int>(env.type()));
         break;
@@ -633,6 +634,17 @@ void MessageHandler::handle_file_error(const Envelope& env) {
         }
         file_mgr_->on_file_error(error);
         push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_ERROR, detail));
+    }
+}
+
+void MessageHandler::handle_file_policy(const Envelope& env) {
+    FileTransferPolicy policy;
+    if (!policy.ParseFromString(env.payload())) {
+        spdlog::warn("Failed to parse FileTransferPolicy");
+        return;
+    }
+    if (file_policy_fn_) {
+        file_policy_fn_(policy);
     }
 }
 

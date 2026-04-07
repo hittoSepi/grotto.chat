@@ -17,7 +17,9 @@
 #include <regex>
 #include <thread>
 #include <functional>
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <optional>
 #include <sstream>
 
@@ -55,6 +57,14 @@ bool is_channel_target(std::string_view channel_id) {
 
 bool is_direct_target(std::string_view channel_id) {
     return !channel_id.empty() && !is_server_channel(channel_id) && !is_channel_target(channel_id);
+}
+
+std::string ascii_lower_copy_view(std::string_view text) {
+    std::string lowered(text);
+    for (char& c : lowered) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return lowered;
 }
 
 std::string trim_ascii_whitespace(std::string_view text) {
@@ -107,6 +117,111 @@ std::string ascii_lower_copy(std::string text) {
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
     return text;
+}
+
+bool mime_rule_matches(std::string_view rule, std::string_view mime_type) {
+    if (rule.empty() || mime_type.empty()) {
+        return false;
+    }
+    if (rule.back() == '*') {
+        rule.remove_suffix(1);
+        return mime_type.substr(0, rule.size()) == rule;
+    }
+    if (rule.back() == '/') {
+        return mime_type.substr(0, rule.size()) == rule;
+    }
+    return mime_type == rule;
+}
+
+bool mime_allowed_by_policy(std::string_view mime_type,
+                            const std::vector<std::string>& allowed_mime_types,
+                            const std::vector<std::string>& blocked_mime_types) {
+    if (!mime_type.empty()) {
+        for (const auto& blocked : blocked_mime_types) {
+            if (mime_rule_matches(blocked, mime_type)) {
+                return false;
+            }
+        }
+    }
+
+    if (allowed_mime_types.empty()) {
+        return true;
+    }
+
+    if (mime_type.empty()) {
+        return false;
+    }
+
+    for (const auto& allowed : allowed_mime_types) {
+        if (mime_rule_matches(allowed, mime_type)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string human_bytes(uint64_t bytes) {
+    static constexpr const char* kUnits[] = {"B", "KB", "MB", "GB", "TB"};
+    double value = static_cast<double>(bytes);
+    size_t unit_index = 0;
+    while (value >= 1024.0 && unit_index + 1 < std::size(kUnits)) {
+        value /= 1024.0;
+        ++unit_index;
+    }
+
+    std::ostringstream oss;
+    if (unit_index == 0) {
+        oss << bytes << ' ' << kUnits[unit_index];
+    } else if (value >= 10.0) {
+        oss << std::fixed << std::setprecision(0) << value << ' ' << kUnits[unit_index];
+    } else {
+        oss << std::fixed << std::setprecision(1) << value << ' ' << kUnits[unit_index];
+    }
+    return oss.str();
+}
+
+std::string transfer_state_label(client::file::TransferState state) {
+    using client::file::TransferState;
+    switch (state) {
+        case TransferState::PENDING: return "queued";
+        case TransferState::UPLOADING: return "uploading";
+        case TransferState::DOWNLOADING: return "downloading";
+        case TransferState::COMPLETED: return "completed";
+        case TransferState::FAILED: return "failed";
+        case TransferState::CANCELLED: return "cancelled";
+    }
+    return "unknown";
+}
+
+std::string transfer_direction_label(client::file::TransferDirection direction) {
+    return direction == client::file::TransferDirection::UPLOAD ? "upload" : "download";
+}
+
+std::string transfer_target_label(const client::file::TransferInfo& info) {
+    if (!info.channel_id.empty()) {
+        return info.channel_id;
+    }
+    if (!info.recipient_id.empty()) {
+        return "dm:" + info.recipient_id;
+    }
+    if (!info.local_path.empty()) {
+        return info.local_path.string();
+    }
+    return "-";
+}
+
+std::string transfer_progress_label(const client::file::TransferInfo& info) {
+    std::ostringstream oss;
+    const auto progress = std::clamp(info.progress, 0.0f, 1.0f);
+    const auto percent = static_cast<int>(std::lround(progress * 100.0f));
+    oss << percent << "%";
+    if (info.file_size > 0) {
+        oss << " (" << human_bytes(info.bytes_transferred)
+            << " / " << human_bytes(info.file_size) << ")";
+    } else if (info.bytes_transferred > 0) {
+        oss << " (" << human_bytes(info.bytes_transferred) << ")";
+    }
+    return oss.str();
 }
 
 }  // namespace
@@ -318,6 +433,9 @@ bool App::init(const std::filesystem::path& config_path,
     msg_handler_->set_command_response_callback([this](const CommandResponse& response) {
         handle_command_response(response);
     });
+    msg_handler_->set_file_policy_callback([this](const FileTransferPolicy& policy) {
+        update_file_transfer_policy(policy);
+    });
     msg_handler_->set_preview_callback([this](const std::string& channel_id, const std::string& text) {
         trigger_previews(channel_id, text);
     });
@@ -331,6 +449,9 @@ bool App::init(const std::filesystem::path& config_path,
         env.set_timestamp_ms(std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count());
         net_client_->send(env);
+    });
+    ui_->set_transfer_summary_provider([this]() {
+        return build_transfer_summary();
     });
     msg_handler_->set_file_transfer_manager(file_mgr_.get());
 
@@ -656,6 +777,33 @@ void App::handle_command(const ParsedCommand& cmd) {
     } else if (cmd.name == "/vmode" || cmd.name == "/ptt") {
         voice_->toggle_voice_mode();
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::VOICE_MODE, voice_->voice_mode()));
+    } else if (cmd.name == "/transfers") {
+        if (!file_mgr_) {
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_TRANSFER_NOT_AVAILABLE));
+            return;
+        }
+
+        std::size_t limit = 8;
+        if (!cmd.args.empty()) {
+            try {
+                limit = std::stoul(cmd.args[0]);
+                if (limit == 0) {
+                    limit = 8;
+                }
+            } catch (...) {
+                ui_->push_system_msg("Usage: /transfers [limit]");
+                return;
+            }
+        }
+
+        const auto lines = format_transfer_lines(limit);
+        if (lines.empty()) {
+            ui_->push_system_msg("No file transfers yet.");
+            return;
+        }
+        for (const auto& line : lines) {
+            ui_->push_system_msg(line);
+        }
     } else if (cmd.name == "/upload") {
         if (cmd.args.empty()) {
             ui_->push_system_msg("Usage: /upload <local-file-path>");
@@ -667,6 +815,26 @@ void App::handle_command(const ParsedCommand& cmd) {
         } else if (!file_mgr_) {
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_TRANSFER_NOT_AVAILABLE));
         } else {
+            const auto file_size = std::filesystem::file_size(file_path);
+            const auto mime_type = ascii_lower_copy_view(client::file::detect_mime_type(file_path));
+            if (file_transfer_policy_.received &&
+                file_transfer_policy_.max_upload_bytes > 0 &&
+                file_size > file_transfer_policy_.max_upload_bytes) {
+                ui_->push_system_msg(
+                    "Upload blocked by server policy: file is too large (" +
+                    human_bytes(file_size) + " > " +
+                    human_bytes(file_transfer_policy_.max_upload_bytes) + ")");
+                return;
+            }
+            if (file_transfer_policy_.received &&
+                !mime_allowed_by_policy(mime_type,
+                                        file_transfer_policy_.allowed_mime_types,
+                                        file_transfer_policy_.blocked_mime_types)) {
+                ui_->push_system_msg(
+                    "Upload blocked by server policy: MIME type not allowed (" + mime_type + ")");
+                return;
+            }
+
             const auto active = canonical_channel_id(state_.active_channel().value_or(""));
             if (active.empty() || is_server_channel(active)) {
                 ui_->push_system_msg("Open a channel or DM before uploading.");
@@ -681,8 +849,8 @@ void App::handle_command(const ParsedCommand& cmd) {
             } else {
                 ui_->push_system_msg(i18n::tr(i18n::I18nKey::UPLOADING,
                                                file_path.filename().string(),
-                                               std::to_string(std::filesystem::file_size(file_path))));
-                ui_->push_system_msg("Upload queued for " + active + " (transfer " + tid + ")");
+                                               std::to_string(file_size)));
+                ui_->push_system_msg("Upload queued for " + active + " (transfer " + tid + ", see /transfers)");
             }
         }
     } else if (cmd.name == "/download") {
@@ -706,7 +874,7 @@ void App::handle_command(const ParsedCommand& cmd) {
                 ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOAD_FAILED));
             } else {
                 ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOADING, file_id, save_path.string()));
-                ui_->push_system_msg("Download queued as transfer " + tid);
+                ui_->push_system_msg("Download queued as transfer " + tid + " (see /transfers)");
             }
         }
     } else if (cmd.name == "/trust" && !cmd.args.empty()) {
@@ -1047,6 +1215,92 @@ void App::open_settings() {
             break;
     }
     ui_->notify();
+}
+
+std::string App::build_transfer_summary() const {
+    if (!file_mgr_) {
+        return {};
+    }
+
+    const auto active = file_mgr_->get_active_transfers();
+    if (active.empty()) {
+        return {};
+    }
+
+    std::string summary = "Transfers ";
+    const std::size_t visible = std::min<std::size_t>(2, active.size());
+    for (std::size_t i = 0; i < visible; ++i) {
+        if (i > 0) {
+            summary += " | ";
+        }
+        const auto& info = active[i];
+        summary += (info.direction == client::file::TransferDirection::UPLOAD ? "U " : "D ");
+        summary += info.filename.empty() ? info.file_id : info.filename;
+        summary += " ";
+        summary += transfer_progress_label(info);
+    }
+    if (active.size() > visible) {
+        summary += " +" + std::to_string(active.size() - visible) + " more";
+    }
+    return summary;
+}
+
+std::vector<std::string> App::format_transfer_lines(std::size_t limit) const {
+    std::vector<std::string> lines;
+    if (!file_mgr_) {
+        return lines;
+    }
+
+    auto transfers = file_mgr_->list_transfers(limit);
+    if (transfers.empty()) {
+        return lines;
+    }
+
+    lines.push_back("Recent transfers:");
+    for (const auto& info : transfers) {
+        std::string line = "  [" + transfer_direction_label(info.direction) + "] " +
+                           info.transfer_id + " " +
+                           transfer_state_label(info.state) + " " +
+                           transfer_progress_label(info) + " " +
+                           (info.filename.empty() ? info.file_id : info.filename);
+
+        if (info.direction == client::file::TransferDirection::UPLOAD) {
+            line += " -> " + transfer_target_label(info);
+        } else if (!info.local_path.empty()) {
+            line += " -> " + info.local_path.string();
+        }
+
+        if (!info.error_message.empty()) {
+            line += " | " + info.error_message;
+        }
+        lines.push_back(std::move(line));
+    }
+
+    return lines;
+}
+
+void App::update_file_transfer_policy(const FileTransferPolicy& policy) {
+    file_transfer_policy_.received = true;
+    file_transfer_policy_.max_upload_bytes = policy.max_upload_bytes();
+    file_transfer_policy_.allowed_mime_types.clear();
+    file_transfer_policy_.blocked_mime_types.clear();
+
+    file_transfer_policy_.allowed_mime_types.reserve(
+        static_cast<std::size_t>(policy.allowed_mime_types_size()));
+    for (const auto& mime : policy.allowed_mime_types()) {
+        file_transfer_policy_.allowed_mime_types.push_back(ascii_lower_copy(mime));
+    }
+
+    file_transfer_policy_.blocked_mime_types.reserve(
+        static_cast<std::size_t>(policy.blocked_mime_types_size()));
+    for (const auto& mime : policy.blocked_mime_types()) {
+        file_transfer_policy_.blocked_mime_types.push_back(ascii_lower_copy(mime));
+    }
+
+    spdlog::info("Received file transfer policy: max_upload_bytes={}, allowed_mimes={}, blocked_mimes={}",
+                 file_transfer_policy_.max_upload_bytes,
+                 file_transfer_policy_.allowed_mime_types.size(),
+                 file_transfer_policy_.blocked_mime_types.size());
 }
 
 std::string App::get_public_key_hex() const {

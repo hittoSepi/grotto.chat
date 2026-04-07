@@ -152,6 +152,24 @@ Important behavior:
 - If ClamAV is not configured in `server.toml`, uploads continue normally without virus scanning.
 - If ClamAV is configured but `clamd` is unavailable, uploads are rejected fail-closed.
 
+### Optional: File Upload Policy
+
+You can enforce upload size and MIME rules from `server.toml`:
+
+```toml
+[files]
+max_upload_bytes = 104857600
+allowed_mime_types = ["image/", "text/plain", "application/pdf"]
+blocked_mime_types = ["application/x-msdownload", "application/x-dosexec"]
+```
+
+Rules:
+
+- `max_upload_bytes` is enforced by the server and advertised to clients after auth.
+- `allowed_mime_types = []` means "allow all unless blocked".
+- `blocked_mime_types` always wins over allow rules.
+- MIME prefix rules are supported with trailing `/` or `*`, for example `image/` and `audio/*`.
+
 ### Generate TLS Certificates
 
 For development:

@@ -22,6 +22,7 @@ struct StatusInfo {
     std::vector<std::string> voice_participants;
     std::vector<std::string> speaking_peers;  // subset of participants currently speaking
     std::vector<std::string> online_users;
+    std::string transfer_summary;
 };
 
 ftxui::Element render_status_bar(const StatusInfo& info);

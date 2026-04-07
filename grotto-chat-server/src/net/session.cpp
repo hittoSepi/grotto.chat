@@ -23,6 +23,7 @@
 #include <random>
 #include <sstream>
 #include <chrono>
+#include <string_view>
 
 namespace grotto::net {
 
@@ -60,6 +61,52 @@ size_t expected_chunk_size(uint64_t file_size,
         return static_cast<size_t>(file_size - offset);
     }
     return static_cast<size_t>(std::min<uint64_t>(chunk_size, file_size - offset));
+}
+
+std::string ascii_lower_copy(std::string value) {
+    for (char& ch : value) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return value;
+}
+
+bool mime_rule_matches(std::string_view rule, std::string_view mime_type) {
+    if (rule.empty() || mime_type.empty()) {
+        return false;
+    }
+    if (rule.back() == '*') {
+        rule.remove_suffix(1);
+        return mime_type.substr(0, rule.size()) == rule;
+    }
+    if (rule.back() == '/') {
+        return mime_type.substr(0, rule.size()) == rule;
+    }
+    return mime_type == rule;
+}
+
+bool mime_is_allowed(std::string_view mime_type,
+                     const std::vector<std::string>& allowed_rules,
+                     const std::vector<std::string>& blocked_rules) {
+    if (mime_type.empty()) {
+        return allowed_rules.empty();
+    }
+
+    for (const auto& blocked : blocked_rules) {
+        if (mime_rule_matches(blocked, mime_type)) {
+            return false;
+        }
+    }
+
+    if (allowed_rules.empty()) {
+        return true;
+    }
+
+    for (const auto& allowed : allowed_rules) {
+        if (mime_rule_matches(allowed, mime_type)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool can_download_file(const db::FileMetadata& metadata,
@@ -634,6 +681,18 @@ void Session::handle_auth_response(const AuthResponse& auth) {
                       remote_endpoint_, user_id_);
     }
 
+    FileTransferPolicy file_policy;
+    file_policy.set_max_upload_bytes(server_ctx_.max_upload_bytes());
+    for (const auto& mime : server_ctx_.allowed_mime_types()) {
+        file_policy.add_allowed_mime_types(mime);
+    }
+    for (const auto& mime : server_ctx_.blocked_mime_types()) {
+        file_policy.add_blocked_mime_types(mime);
+    }
+    send_envelope(MT_FILE_POLICY, file_policy);
+    spdlog::debug("[{}] Sent FileTransferPolicy bootstrap to user: {}",
+                  remote_endpoint_, user_id_);
+
     // --- Send MOTD if configured ---
     const std::string& motd = server_ctx_.motd();
     if ( !motd.empty() ) {
@@ -879,13 +938,24 @@ void Session::handle_file_request(const FileUploadRequest& req, const Envelope& 
         return;
     }
     
-    // Check max file size (100 MB)
-    constexpr uint64_t max_file_size = 100 * 1024 * 1024;
-    if (req.file_size() > max_file_size) {
+    const auto max_file_size = server_ctx_.max_upload_bytes();
+    if (max_file_size > 0 && req.file_size() > max_file_size) {
         FileError err;
         err.set_file_id(req.file_id());
         err.set_error_code(4085);
-        err.set_error_message("File too large (max 100 MB)");
+        err.set_error_message("File too large for this server");
+        send_envelope(MT_FILE_ERROR, err);
+        return;
+    }
+
+    const std::string normalized_mime = ascii_lower_copy(req.mime_type());
+    if (!mime_is_allowed(normalized_mime,
+                         server_ctx_.allowed_mime_types(),
+                         server_ctx_.blocked_mime_types())) {
+        FileError err;
+        err.set_file_id(req.file_id());
+        err.set_error_code(4088);
+        err.set_error_message("File type is not allowed on this server");
         send_envelope(MT_FILE_ERROR, err);
         return;
     }
@@ -895,7 +965,7 @@ void Session::handle_file_request(const FileUploadRequest& req, const Envelope& 
     metadata.file_id = req.file_id();
     metadata.filename = req.filename();
     metadata.file_size = req.file_size();
-    metadata.mime_type = req.mime_type();
+    metadata.mime_type = normalized_mime;
     metadata.sender_id = user_id_;
     metadata.recipient_id = req.recipient_id();
     metadata.channel_id = req.channel_id();

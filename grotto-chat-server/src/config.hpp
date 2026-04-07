@@ -7,6 +7,7 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 #include <toml.hpp>
 
 
@@ -78,6 +79,17 @@ msg_rate_per_sec = 20
 
 # Maximum connection attempts per minute per IP address
 conn_rate_per_min = 10
+
+[files]
+# Maximum upload size in bytes
+max_upload_bytes = 104857600
+
+# MIME types allowed for upload. Empty list = allow all unless blocked.
+# Prefix matches are supported with trailing "/" or "*", for example "image/" or "audio/*".
+allowed_mime_types = []
+
+# MIME types denied for upload. These always win over allow rules.
+blocked_mime_types = []
 )";
 
 
@@ -137,6 +149,11 @@ struct ServerConfig {
     
     // [security]
     std::string file_encryption_key;         // Master key for file encryption (64 hex chars)
+
+    // [files]
+    uint64_t max_upload_bytes = 100ull * 1024ull * 1024ull; // 100 MB default
+    std::vector<std::string> allowed_mime_types;
+    std::vector<std::string> blocked_mime_types;
     
     // [antivirus]
     std::string clamav_socket;               // Unix socket path for clamd

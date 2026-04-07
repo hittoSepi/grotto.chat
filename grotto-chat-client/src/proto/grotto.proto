@@ -60,6 +60,7 @@ enum MessageType {
   MT_FILE_PROGRESS    = 83;   // Server → Client: Upload/download progress
   MT_FILE_COMPLETE    = 84;   // Server → Client: Transfer complete
   MT_FILE_ERROR       = 85;   // Server → Client: Transfer error
+  MT_FILE_POLICY      = 86;   // Server → Client: File transfer policy bootstrap
 
   // Errors
   MT_ERROR            = 99;
@@ -278,6 +279,12 @@ message FileError {
   string file_id = 1;          // File that failed
   uint32 error_code = 2;       // Error code
   string error_message = 3;    // Human-readable error
+}
+
+message FileTransferPolicy {
+  uint64 max_upload_bytes = 1;            // 0 = server did not advertise a limit
+  repeated string allowed_mime_types = 2; // Empty = allow all unless blocked
+  repeated string blocked_mime_types = 3; // Always denied when matched
 }
 
 // File metadata (stored in database)

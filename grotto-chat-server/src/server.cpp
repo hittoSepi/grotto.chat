@@ -105,6 +105,10 @@ Server::Server(const ServerConfig& config)
         config_.msg_rate_per_sec,
         config_.conn_rate_per_min);
     listener_->set_max_chat_payload_bytes(config_.max_chat_payload_bytes);
+    listener_->set_file_policy(
+        config_.max_upload_bytes,
+        config_.allowed_mime_types,
+        config_.blocked_mime_types);
     listener_->set_max_connections(config_.max_connections);
     listener_->set_motd(config_.motd);
     listener_->set_voice_ice_config(
