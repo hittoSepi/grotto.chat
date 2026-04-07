@@ -114,6 +114,11 @@ public:
     std::optional<TransferInfo> get_transfer(const std::string& transfer_id) const;
 
     /**
+     * Get transfer info by server file ID.
+     */
+    std::optional<TransferInfo> get_transfer_by_file_id(const std::string& file_id) const;
+
+    /**
      * Get all active transfers.
      */
     std::vector<TransferInfo> get_active_transfers() const;

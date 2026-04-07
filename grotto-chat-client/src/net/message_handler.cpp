@@ -611,7 +611,15 @@ void MessageHandler::handle_file_complete(const Envelope& env) {
     if (!complete.ParseFromString(env.payload())) return;
     if (file_mgr_) {
         file_mgr_->on_file_complete(complete);
-        push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_COMPLETED, complete.file_id()));
+        std::string detail = complete.file_id();
+        if (auto info = file_mgr_->get_transfer_by_file_id(complete.file_id())) {
+            if (info->direction == client::file::TransferDirection::DOWNLOAD) {
+                detail = info->filename + " -> " + info->local_path.string();
+            } else {
+                detail = info->filename + " (" + complete.file_id() + ")";
+            }
+        }
+        push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_COMPLETED, detail));
     }
 }
 
@@ -619,8 +627,12 @@ void MessageHandler::handle_file_error(const Envelope& env) {
     ::FileError error;
     if (!error.ParseFromString(env.payload())) return;
     if (file_mgr_) {
+        std::string detail = error.error_message();
+        if (auto info = file_mgr_->get_transfer_by_file_id(error.file_id())) {
+            detail = info->filename + ": " + error.error_message();
+        }
         file_mgr_->on_file_error(error);
-        push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_ERROR, error.error_message()));
+        push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_ERROR, detail));
     }
 }
 

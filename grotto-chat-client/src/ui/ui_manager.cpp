@@ -1273,6 +1273,19 @@ void UIManager::run(SubmitFn on_submit,
     });
 
     auto event_handler = CatchEvent(renderer, [&](Event event) -> bool {
+        auto apply_pasted_text = [&](const std::string& pasted_text) {
+            tab_completer_.reset();
+            if (input_line_.empty()) {
+                if (auto dropped_file = detect_local_file_from_paste(pasted_text)) {
+                    input_line_.set_text(make_upload_command_for_path(*dropped_file));
+                    show_toast("Prepared /upload for dropped file");
+                    return true;
+                }
+            }
+            input_line_.insert_text(pasted_text);
+            return true;
+        };
+
         if (quit_confirm_visible_) {
             if (event == Event::Custom) {
                 return true;
@@ -1316,21 +1329,17 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (auto pasted = extract_bracketed_paste(event.input())) {
-            tab_completer_.reset();
-            input_line_.insert_text(*pasted);
-            return true;
+            return apply_pasted_text(*pasted);
         }
         if (is_shift_insert_paste(event.input())) {
             if (auto clipboard = read_from_clipboard()) {
-                tab_completer_.reset();
-                input_line_.insert_text(*clipboard);
+                return apply_pasted_text(*clipboard);
             }
             return true;
         }
         if (event.input() == "\x16") {
             if (auto clipboard = read_from_clipboard()) {
-                tab_completer_.reset();
-                input_line_.insert_text(*clipboard);
+                return apply_pasted_text(*clipboard);
             }
             return true;
         }

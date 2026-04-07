@@ -49,6 +49,14 @@ std::string canonical_channel_id(std::string channel_id) {
     return channel_id;
 }
 
+bool is_channel_target(std::string_view channel_id) {
+    return !channel_id.empty() && channel_id.front() == '#';
+}
+
+bool is_direct_target(std::string_view channel_id) {
+    return !channel_id.empty() && !is_server_channel(channel_id) && !is_channel_target(channel_id);
+}
+
 std::string trim_ascii_whitespace(std::string_view text) {
     size_t start = 0;
     size_t end = text.size();
@@ -648,24 +656,40 @@ void App::handle_command(const ParsedCommand& cmd) {
     } else if (cmd.name == "/vmode" || cmd.name == "/ptt") {
         voice_->toggle_voice_mode();
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::VOICE_MODE, voice_->voice_mode()));
-    } else if (cmd.name == "/upload" && !cmd.args.empty()) {
+    } else if (cmd.name == "/upload") {
+        if (cmd.args.empty()) {
+            ui_->push_system_msg("Usage: /upload <local-file-path>");
+            return;
+        }
         std::filesystem::path file_path = cmd.args[0];
         if (!std::filesystem::exists(file_path)) {
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_NOT_FOUND, file_path.string()));
         } else if (!file_mgr_) {
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_TRANSFER_NOT_AVAILABLE));
         } else {
-            auto channel = state_.active_channel().value_or("");
-            auto tid = file_mgr_->upload(file_path, "", channel);
+            const auto active = canonical_channel_id(state_.active_channel().value_or(""));
+            if (active.empty() || is_server_channel(active)) {
+                ui_->push_system_msg("Open a channel or DM before uploading.");
+                return;
+            }
+
+            const std::string recipient = is_direct_target(active) ? active : "";
+            const std::string channel = is_channel_target(active) ? active : "";
+            auto tid = file_mgr_->upload(file_path, recipient, channel);
             if (tid.empty()) {
                 ui_->push_system_msg(i18n::tr(i18n::I18nKey::UPLOAD_FAILED));
             } else {
                 ui_->push_system_msg(i18n::tr(i18n::I18nKey::UPLOADING,
                                                file_path.filename().string(),
                                                std::to_string(std::filesystem::file_size(file_path))));
+                ui_->push_system_msg("Upload queued for " + active + " (transfer " + tid + ")");
             }
         }
-    } else if (cmd.name == "/download" && !cmd.args.empty()) {
+    } else if (cmd.name == "/download") {
+        if (cmd.args.empty()) {
+            ui_->push_system_msg("Usage: /download <file-id> [save-path]");
+            return;
+        }
         std::string file_id = cmd.args[0];
         std::filesystem::path save_path = cmd.args.size() > 1
             ? std::filesystem::path(cmd.args[1])
@@ -673,12 +697,16 @@ void App::handle_command(const ParsedCommand& cmd) {
         if (!file_mgr_) {
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_TRANSFER_NOT_AVAILABLE));
         } else {
-            std::filesystem::create_directories(save_path.parent_path());
+            const auto parent = save_path.parent_path();
+            if (!parent.empty()) {
+                std::filesystem::create_directories(parent);
+            }
             auto tid = file_mgr_->download(file_id, save_path);
             if (tid.empty()) {
                 ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOAD_FAILED));
             } else {
                 ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOADING, file_id, save_path.string()));
+                ui_->push_system_msg("Download queued as transfer " + tid);
             }
         }
     } else if (cmd.name == "/trust" && !cmd.args.empty()) {

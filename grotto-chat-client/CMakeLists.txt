@@ -417,3 +417,15 @@ target_link_libraries(test-file-transfer PRIVATE
 )
 add_test(NAME file-transfer-tests COMMAND test-file-transfer)
 
+add_executable(test-command-parser
+    tests/test_command_parser.cpp
+    src/input/command_parser.cpp
+)
+target_include_directories(test-command-parser PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(test-command-parser PRIVATE
+    Catch2::Catch2WithMain
+)
+add_test(NAME command-parser-tests COMMAND test-command-parser)
+

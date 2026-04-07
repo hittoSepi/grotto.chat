@@ -208,6 +208,21 @@ std::optional<TransferInfo> FileTransferManager::get_transfer(const std::string&
     return std::nullopt;
 }
 
+std::optional<TransferInfo> FileTransferManager::get_transfer_by_file_id(const std::string& file_id) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto map_it = file_id_to_transfer_.find(file_id);
+    if (map_it == file_id_to_transfer_.end()) {
+        return std::nullopt;
+    }
+
+    auto transfer_it = transfers_.find(map_it->second);
+    if (transfer_it == transfers_.end()) {
+        return std::nullopt;
+    }
+
+    return transfer_it->second;
+}
+
 std::vector<TransferInfo> FileTransferManager::get_active_transfers() const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<TransferInfo> result;

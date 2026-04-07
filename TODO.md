@@ -11,6 +11,14 @@
   - [x] Verify final checksum on transfer completion
   - [x] Resolve named audio-device binding in the miniaudio backend with default-device fallback
 
+### Client File UX
+- [~] **Desktop file-transfer UX**
+  - [x] Treat terminal drag-and-drop as pasted local file path and prepare `/upload`
+  - [x] Improve `/upload` and `/download` feedback in the client
+  - [ ] Add `/transfers` command for active and recent transfers
+  - [ ] Add visible upload/download progress UI
+  - [ ] Surface server-side quota failures clearly in the client
+
 ### Documentation
 - [ ] **Translate Finnish documents to English**
   - `grotto-android/docs/android/architecture.md`
