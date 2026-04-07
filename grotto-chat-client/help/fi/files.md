@@ -5,6 +5,7 @@
 `/upload <polku>` lähettää tiedoston aktiiviselle kanavalle tai käyttäjälle.
 `/transfers [määrä]` näyttää aktiiviset ja viimeisimmät siirrot.
 `/files` päivittää aktiivisen kanavan tai DM:n tiedostolistan ja avaa files-panelin.
+`/downloads` avaa paikallisen downloads-kansion.
 
 Esimerkki:
 ```

@@ -214,6 +214,10 @@ std::filesystem::path default_download_path_for_file(std::string_view file_id,
     return base / (std::string(file_id) + ext);
 }
 
+std::filesystem::path default_downloads_dir() {
+    return std::filesystem::path("downloads");
+}
+
 std::string transfer_state_label(client::file::TransferState state) {
     using client::file::TransferState;
     switch (state) {
@@ -857,6 +861,11 @@ void App::handle_command(const ParsedCommand& cmd) {
         if (ui_) {
             ui_->show_files_panel();
         }
+    } else if (cmd.name == "/downloads") {
+        const auto downloads_dir = default_downloads_dir();
+        std::filesystem::create_directories(downloads_dir);
+        ui::open_path(downloads_dir.string());
+        ui_->push_system_msg("Opened downloads folder: " + downloads_dir.string());
     } else if (cmd.name == "/upload") {
         if (cmd.args.empty()) {
             ui_->push_system_msg("Usage: /upload <local-file-path>");
@@ -1454,10 +1463,13 @@ void App::download_remote_file(const RemoteFileEntry& file) {
     if (tid.empty()) {
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOAD_FAILED));
     } else {
+        const std::string label = file.filename.empty() ? file.file_id : file.filename;
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::DOWNLOADING,
-                                      file.filename.empty() ? file.file_id : file.filename,
+                                      label,
                                       save_path.string()));
-        ui_->push_system_msg("Download queued as transfer " + tid + " (see /transfers)");
+        ui_->push_system_msg(
+            "Download queued: " + label + " -> " + save_path.string() +
+            " (transfer " + tid + ", see /transfers)");
     }
     ui_->notify();
 }

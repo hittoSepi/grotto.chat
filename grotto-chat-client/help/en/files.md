@@ -5,6 +5,7 @@
 `/upload <path>` sends a file to the active channel or user.
 `/transfers [limit]` shows current and recent transfer state.
 `/files` refreshes the file list for the active channel or DM and opens the files panel.
+`/downloads` opens the local downloads folder.
 
 Examples:
 ```

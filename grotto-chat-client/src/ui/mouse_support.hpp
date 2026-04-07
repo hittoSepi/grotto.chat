@@ -189,5 +189,6 @@ std::optional<std::string> read_from_clipboard();
 // Link detection and opening
 bool is_url(const std::string& text);
 void open_url(const std::string& url);
+void open_path(const std::string& path);
 
 } // namespace grotto::ui

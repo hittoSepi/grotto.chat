@@ -49,6 +49,7 @@
 `/download <id> [path]`    download a file (alias: `/dl`)  
 `/transfers [limit]`       show recent file transfer state (alias: `/xfers`)  
 `/files`                   refresh files for the active channel/DM and open the files panel (alias: `/ls`)  
+`/downloads`               open the local downloads folder (alias: `/dir`)  
 
 ---
 

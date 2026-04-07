@@ -82,6 +82,7 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (ui.contains("user_list_collapsed")) {
                 cfg.ui.user_list_collapsed = toml::find<bool>(ui, "user_list_collapsed");
             }
+            if (ui.contains("files_panel_width")) cfg.ui.files_panel_width = toml::find<int>(ui, "files_panel_width");
             if (ui.contains("language")) cfg.ui.language = toml::find<std::string>(ui, "language");
         }
 
@@ -248,6 +249,7 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["ui"]["copy_selection_on_release"] = cfg.ui.copy_selection_on_release;
     data["ui"]["user_list_width"] = cfg.ui.user_list_width;
     data["ui"]["user_list_collapsed"] = cfg.ui.user_list_collapsed;
+    data["ui"]["files_panel_width"] = cfg.ui.files_panel_width;
     data["ui"]["language"] = cfg.ui.language;
 
     // Patch voice section
@@ -324,6 +326,7 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["ui"]["copy_selection_on_release"] = cfg.ui.copy_selection_on_release;
         data["ui"]["user_list_width"] = cfg.ui.user_list_width;
         data["ui"]["user_list_collapsed"] = cfg.ui.user_list_collapsed;
+        data["ui"]["files_panel_width"] = cfg.ui.files_panel_width;
         data["ui"]["language"] = cfg.ui.language;
         
         data["voice"]["input_device"] = cfg.voice.input_device;
@@ -403,6 +406,7 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             if (ui.contains("user_list_collapsed")) {
                 cfg.ui.user_list_collapsed = toml::find<bool>(ui, "user_list_collapsed");
             }
+            if (ui.contains("files_panel_width")) cfg.ui.files_panel_width = toml::find<int>(ui, "files_panel_width");
             if (ui.contains("language")) cfg.ui.language = toml::find<std::string>(ui, "language");
         }
         

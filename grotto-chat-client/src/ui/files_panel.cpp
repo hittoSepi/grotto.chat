@@ -51,13 +51,14 @@ Element render_file_entry(const RemoteFileEntry& file, int width, bool selected)
         meta += " <" + file.sender_id + ">";
     }
 
-    const int content_width = std::max(8, width - 2);
+    const std::string marker = selected ? "> " : "  ";
+    const int content_width = std::max(8, width - static_cast<int>(marker.size()) - 1);
     label = truncate_with_ellipsis(label, content_width);
     meta = truncate_with_ellipsis(meta, content_width);
 
     auto body = vbox({
-        text(" " + label) | color(selected ? palette::bg() : palette::fg()),
-        text(" " + meta) | color(selected ? palette::bg() : palette::comment()),
+        text(marker + label) | color(selected ? palette::bg() : palette::fg()),
+        text(marker + meta) | color(selected ? palette::bg() : palette::comment()),
     });
 
     if (selected) {
@@ -77,12 +78,18 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
     out_file_positions.clear();
 
     Elements content;
-    content.push_back(text("FILES " + std::to_string(files.size())) | bold | color(palette::fg_dark()));
+    content.push_back(
+        hbox({
+            text("FILES " + std::to_string(files.size())) | bold | color(palette::fg_dark()),
+            filler(),
+            text("Enter download") | color(palette::comment()),
+        }));
     content.push_back(separator() | color(palette::bg_highlight()));
 
     int current_y = base_y + 2;
     if (files.empty()) {
         content.push_back(text(" No files yet") | color(palette::comment()));
+        content.push_back(text(" Press /files to refresh") | color(palette::comment()));
     } else {
         for (const auto& file : files) {
             const bool selected = selected_file_id && *selected_file_id == file.file_id;
@@ -90,6 +97,8 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
             content.push_back(render_file_entry(file, width, selected));
             current_y += 2;
         }
+        content.push_back(separator() | color(palette::bg_highlight()));
+        content.push_back(text(" Up/Down move, double-click downloads") | color(palette::comment()));
     }
 
     return vbox(std::move(content)) | bgcolor(palette::bg_dark());

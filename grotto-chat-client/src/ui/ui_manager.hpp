@@ -106,6 +106,12 @@ public:
     void copy_selection_to_clipboard();
 
 private:
+    enum class ResizeTarget {
+        None,
+        UserList,
+        Files,
+    };
+
     enum class SidePanelMode {
         None,
         Files,
@@ -148,10 +154,12 @@ private:
     mutable std::vector<UserHitRegion> user_positions_;
     mutable std::vector<FileHitRegion> file_positions_;
     mutable int panel_divider_x_ = -1;
+    mutable int files_panel_divider_x_ = -1;
     mutable int user_list_y_start_ = 1;  // After header
     
     // Panel resize state
     bool is_resizing_panel_ = false;
+    ResizeTarget resize_target_ = ResizeTarget::None;
     int resize_start_x_ = 0;
     int resize_start_width_ = 0;
 

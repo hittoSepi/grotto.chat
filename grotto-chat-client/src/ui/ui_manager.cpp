@@ -17,6 +17,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <filesystem>
+#include <limits>
 #include <regex>
 #include <vector>
 
@@ -371,6 +372,7 @@ UIManager::UIManager(AppState& state, ClientConfig& cfg)
     // Initialize user list panel config from persisted settings
     user_list_config_.width = cfg.ui.user_list_width;
     user_list_config_.collapsed = cfg.ui.user_list_collapsed;
+    side_panel_width_ = cfg.ui.files_panel_width;
     initialize_clipboard_backend();
     configure_terminal_graphics(parse_terminal_graphics_mode(cfg_.preview.terminal_graphics));
 }
@@ -424,6 +426,7 @@ bool UIManager::handle_mouse_event(const Event& event) {
     // Handle mouse moved
     if (mouse.motion == Mouse::Moved) {
         mouse_tracker_.set_hover(mouse.x, mouse.y);
+        mouse_tracker_.update_drag(mouse.x, mouse.y);
         
         // Handle ongoing panel resize drag
         if (is_resizing_panel_) {
@@ -446,7 +449,7 @@ bool UIManager::handle_mouse_event(const Event& event) {
         mouse_tracker_.record_click(mouse.x, mouse.y);
         
         // Check for panel resize drag start (on divider)
-        if (mouse_tracker_.is_over_panel_divider() && !user_list_config_.collapsed) {
+        if (is_mouse_on_panel_divider(mouse.x, mouse.y)) {
             start_panel_resize(mouse.x);
             return true;
         }
@@ -715,9 +718,21 @@ std::optional<std::string> UIManager::get_user_at_position(int mouse_x, int mous
 }
 
 bool UIManager::is_mouse_on_panel_divider(int mouse_x, int mouse_y) const {
-    (void)mouse_x;
-    (void)mouse_y;
-    return mouse_tracker_.is_over_panel_divider();
+    if (!mouse_tracker_.message_region().contains_y(mouse_y)) {
+        return false;
+    }
+
+    const bool on_user_divider =
+        !user_list_config_.collapsed &&
+        panel_divider_x_ >= 0 &&
+        std::abs(mouse_x - panel_divider_x_) <= MouseConfig::kPanelResizeTolerance;
+
+    const bool on_files_divider =
+        side_panel_mode_ == SidePanelMode::Files &&
+        files_panel_divider_x_ >= 0 &&
+        std::abs(mouse_x - files_panel_divider_x_) <= MouseConfig::kPanelResizeTolerance;
+
+    return on_user_divider || on_files_divider;
 }
 
 bool UIManager::is_mouse_on_user_list_toggle(int mouse_x, int mouse_y) const {
@@ -734,25 +749,56 @@ bool UIManager::is_mouse_on_user_list_toggle(int mouse_x, int mouse_y) const {
 void UIManager::start_panel_resize(int mouse_x) {
     is_resizing_panel_ = true;
     resize_start_x_ = mouse_x;
-    resize_start_width_ = user_list_config_.width;
+    resize_target_ = ResizeTarget::None;
+
+    const int user_distance =
+        (!user_list_config_.collapsed && panel_divider_x_ >= 0)
+            ? std::abs(mouse_x - panel_divider_x_)
+            : std::numeric_limits<int>::max();
+    const int files_distance =
+        (side_panel_mode_ == SidePanelMode::Files && files_panel_divider_x_ >= 0)
+            ? std::abs(mouse_x - files_panel_divider_x_)
+            : std::numeric_limits<int>::max();
+
+    if (files_distance <= MouseConfig::kPanelResizeTolerance &&
+        files_distance < user_distance) {
+        resize_target_ = ResizeTarget::Files;
+        resize_start_width_ = side_panel_width_;
+    } else if (user_distance <= MouseConfig::kPanelResizeTolerance) {
+        resize_target_ = ResizeTarget::UserList;
+        resize_start_width_ = user_list_config_.width;
+    } else if (files_distance <= MouseConfig::kPanelResizeTolerance) {
+        resize_target_ = ResizeTarget::Files;
+        resize_start_width_ = side_panel_width_;
+    } else {
+        is_resizing_panel_ = false;
+        return;
+    }
     mouse_tracker_.start_drag(mouse_x, 0);
 }
 
 void UIManager::update_panel_resize(int mouse_x) {
     if (!is_resizing_panel_) return;
-    
+
+    const int max_width = std::max(MouseConfig::kMinPanelWidth, screen_.dimx() / 2);
+
+    if (resize_target_ == ResizeTarget::Files) {
+        int delta = mouse_x - resize_start_x_;
+        int new_width = std::clamp(resize_start_width_ - delta, MouseConfig::kMinPanelWidth, max_width);
+        side_panel_width_ = new_width;
+        cfg_.ui.files_panel_width = new_width;
+        return;
+    }
+
     int delta = resize_start_x_ - mouse_x;  // Invert: dragging left increases width
-    int new_width = resize_start_width_ + delta;
-    
-    // Clamp to reasonable bounds
-    new_width = std::clamp(new_width, MouseConfig::kMinPanelWidth, screen_.dimx() / 2);
-    
+    int new_width = std::clamp(resize_start_width_ + delta, MouseConfig::kMinPanelWidth, max_width);
     user_list_config_.width = new_width;
     cfg_.ui.user_list_width = new_width;
 }
 
 void UIManager::end_panel_resize() {
     is_resizing_panel_ = false;
+    resize_target_ = ResizeTarget::None;
     mouse_tracker_.end_drag();
 }
 
@@ -931,6 +977,11 @@ void UIManager::push_system_msg_to_channel(const std::string& channel_id,
             state_.set_active_channel(ch);
         }
         state_.push_message(ch, std::move(msg));
+        if (state_.active_channel().value_or("") == ch) {
+            state_.scroll_to_bottom(ch);
+            state_.mark_read(ch);
+        }
+        notify();
         return;
     }
 
@@ -940,6 +991,10 @@ void UIManager::push_system_msg_to_channel(const std::string& channel_id,
             state_.set_active_channel(ch);
         }
         state_.push_message(ch, std::move(m));
+        if (state_.active_channel().value_or("") == ch) {
+            state_.scroll_to_bottom(ch);
+            state_.mark_read(ch);
+        }
     });
     notify();
 }
@@ -1149,6 +1204,8 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
         mouse_tracker_.set_user_list_region({0, 0, 0, 0});
         mouse_tracker_.set_panel_divider_region({0, 0, 0, 0});
         file_positions_.clear();
+        files_panel_divider_x_ = -1;
+        panel_divider_x_ = -1;
         return msg_el | flex;
     }
 
@@ -1158,6 +1215,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     int next_x = msg_width;
     if (show_side_panel) {
         layout.push_back(separator());
+        files_panel_divider_x_ = next_x;
         next_x += 1;
         const auto files = state_.channel_files(active_ch);
         if (files.empty()) {
@@ -1176,11 +1234,13 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
         next_x += side_panel_width;
     } else {
         file_positions_.clear();
+        files_panel_divider_x_ = -1;
     }
     
     if (!show_user_list) {
         mouse_tracker_.set_user_list_region({0, 0, 0, 0});
         mouse_tracker_.set_panel_divider_region({0, 0, 0, 0});
+        panel_divider_x_ = -1;
         return hbox(std::move(layout));
     }
 
@@ -1204,9 +1264,10 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     mouse_tracker_.set_panel_divider_region({user_list_x - 1, mouse_tracker_.message_region().y, 1, msg_rows});
     panel_divider_x_ = user_list_x - 1;
 
+    int rendered_user_divider_x = panel_divider_x_;
     auto user_list_el = render_user_list_panel(users, voice_sec, user_list_config_,
                                                state_.local_user_id(), user_positions_,
-                                               panel_divider_x_, user_list_x,
+                                               rendered_user_divider_x, user_list_x,
                                                mouse_tracker_.message_region().y);
 
     layout.push_back(separator());
@@ -1239,7 +1300,7 @@ Element UIManager::build_document(int term_rows) {
         return lines;
     };
     int input_lines = std::max(1, std::min(5, count_visual_lines(input_line_.text(), term_cols)));
-    int msg_rows = std::max(1, term_rows - kTabBarHeight - kStatusBarHeight - input_lines - 2);  // -2 for separators
+    int msg_rows = std::max(1, term_rows - kTabBarHeight - kStatusBarHeight - input_lines - 3);  // -3 for separators
     int msg_y = kTabBarHeight + 1;  // After tab bar and separator
     
     int status_y = msg_y + msg_rows + 1;
@@ -1610,11 +1671,15 @@ void UIManager::run(SubmitFn on_submit,
         if (event == Event::Return) {
             if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
                 activate_selected_file_download();
+                notify();
                 return true;
             }
             tab_completer_.reset();
             std::string line = input_line_.commit();
-            if (!line.empty() && on_submit) on_submit(line);
+            if (!line.empty() && on_submit) {
+                on_submit(line);
+                notify();
+            }
             return true;
         }
         if (event == Event::Backspace) {

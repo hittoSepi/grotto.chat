@@ -440,4 +440,14 @@ void open_url(const std::string& url) {
 #endif
 }
 
+void open_path(const std::string& path) {
+#ifdef _WIN32
+    ShellExecuteA(nullptr, "open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#elif __APPLE__
+    std::system(("open \"" + path + "\" 2>/dev/null &").c_str());
+#else
+    std::system(("xdg-open \"" + path + "\" 2>/dev/null &").c_str());
+#endif
+}
+
 } // namespace grotto::ui
