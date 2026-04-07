@@ -1379,14 +1379,44 @@ void Session::send(const Envelope& env) {
     std::memcpy(frame.data() + 4, data.data(), data.size());
 
     auto self = shared_from_this();
+    boost::asio::post(strand_, [this, self, frame = std::move(frame)]() mutable {
+        if (state_ == SessionState::Dead) {
+            return;
+        }
+        pending_writes_.push_back(std::move(frame));
+        if (write_in_progress_) {
+            return;
+        }
+        do_write();
+    });
+}
+
+void Session::do_write() {
+    if (write_in_progress_ || pending_writes_.empty() || state_ == SessionState::Dead) {
+        return;
+    }
+
+    write_in_progress_ = true;
+    auto self = shared_from_this();
     boost::asio::async_write(socket_,
-        boost::asio::buffer(frame),
+        boost::asio::buffer(pending_writes_.front()),
         boost::asio::bind_executor(strand_,
             [this, self](const boost::system::error_code& ec, size_t) {
+                write_in_progress_ = false;
+
                 if (ec) {
-                    spdlog::warn("[{}] Send error: {}", remote_endpoint_, ec.message());
-                    server_ctx_.on_session_disconnected(self, "Send error");
+                    if (state_ != SessionState::Dead) {
+                        spdlog::warn("[{}] Send error: {}", remote_endpoint_, ec.message());
+                        pending_writes_.clear();
+                        server_ctx_.on_session_disconnected(self, "Send error");
+                    }
+                    return;
                 }
+
+                if (!pending_writes_.empty()) {
+                    pending_writes_.pop_front();
+                }
+                do_write();
             }));
 }
 

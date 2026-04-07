@@ -12,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <unordered_map>
+#include <deque>
 #include <mutex>
 
 #include "grotto.pb.h"
@@ -96,6 +97,7 @@ private:
     // Send helpers
     void send_envelope(MessageType type, const google::protobuf::Message& msg);
     void send_error(uint32_t code, const std::string& message);
+    void do_write();
 
     // Timer for ping/pong
     void start_ping_timer();
@@ -117,6 +119,8 @@ private:
     // Frame buffers
     std::array<uint8_t, 4> header_buf_;
     std::vector<uint8_t> payload_buf_;
+    std::deque<std::vector<uint8_t>> pending_writes_;
+    bool write_in_progress_ = false;
 
     // Maximum message size (from config)
     static constexpr size_t kMaxMessageSize = 65536;  // 64 KB
