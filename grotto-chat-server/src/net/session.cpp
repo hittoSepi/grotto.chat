@@ -1210,8 +1210,8 @@ void Session::handle_file_download(const FileDownloadRequest& req) {
         return;
     }
     
-    // Calculate chunk size and total chunks
-    constexpr size_t chunk_size = 64 * 1024;  // 64 KB chunks
+    // Keep download frames under the 64 KB envelope limit after protobuf overhead.
+    constexpr size_t chunk_size = 60 * 1024;
     size_t total_chunks = (metadata->file_size + chunk_size - 1) / chunk_size;
     
     // Send chunks starting from requested index
