@@ -62,6 +62,22 @@ size_t expected_chunk_size(uint64_t file_size,
     return static_cast<size_t>(std::min<uint64_t>(chunk_size, file_size - offset));
 }
 
+bool can_download_file(const db::FileMetadata& metadata,
+                       const std::string& requester_user_id,
+                       commands::CommandHandler* command_handler) {
+    if (!metadata.channel_id.empty()) {
+        return command_handler != nullptr &&
+               command_handler->is_in_channel(metadata.channel_id, requester_user_id);
+    }
+
+    if (!metadata.recipient_id.empty()) {
+        return requester_user_id == metadata.sender_id ||
+               requester_user_id == metadata.recipient_id;
+    }
+
+    return requester_user_id == metadata.sender_id;
+}
+
 // Get current timestamp in milliseconds
 uint64_t now_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1120,6 +1136,17 @@ void Session::handle_file_download(const FileDownloadRequest& req) {
         err.set_error_code(4083);
         err.set_error_message("File not found");
         send_envelope(MT_FILE_ERROR, err);
+        return;
+    }
+
+    if (!can_download_file(*metadata, user_id_, server_ctx_.command_handler())) {
+        FileError err;
+        err.set_file_id(req.file_id());
+        err.set_error_code(4087);
+        err.set_error_message("Access denied");
+        send_envelope(MT_FILE_ERROR, err);
+        spdlog::warn("[{}] File download denied: {} for user {}",
+            remote_endpoint_, req.file_id(), user_id_);
         return;
     }
     

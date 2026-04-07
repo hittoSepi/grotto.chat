@@ -1,4 +1,4 @@
-# IRCord Server Configuration
+# Grotto Server Configuration
 # Copy this file to server.toml and modify as needed
 
 [server]
@@ -15,7 +15,7 @@ log_level = "info"
 max_connections = 100
 
 # Public server listing
-# Set to true to list this server in the public IRCord directory
+# Set to true to list this server in the public Grotto directory
 public = true
 
 [tls]
@@ -29,7 +29,7 @@ key_file = "./certs/server.key"
 
 [database]
 # SQLite database file path
-path = "./ircord.db"
+path = "./grotto.db"
 
 [limits]
 # Maximum message size in bytes (64 KB default)
@@ -98,16 +98,16 @@ clamav_port = 0
 enabled = true
 
 # Directory service URL
-url = "https://directory.ircord.dev"
+url = "https://directory.grotto.chat"
 
 # How often to ping the directory (seconds)
 ping_interval_sec = 300
 
 # Display name for this server in the directory
-server_name = "Rausku IRCord Server"
+server_name = "My Grotto Server"
 
 # Short description (max ~100 characters)
-description = "A friendly IRCord encrypted chat server"
+description = "A friendly Grotto encrypted chat server"
 
 [http_api]
 # HTTP API server for external integrations (REST API)
@@ -137,4 +137,4 @@ auto_join_channels = ["#general"]       # Channels admin auto-joins
 additional_reserved = []
 
 # TUI (admin interface) socket path
-tui_socket = "/run/ircord/admin.sock"
+tui_socket = "/run/grotto/admin.sock"
