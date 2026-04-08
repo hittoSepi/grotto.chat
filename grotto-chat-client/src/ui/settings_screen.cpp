@@ -63,6 +63,8 @@ constexpr bool kDefaultNotifyMention = true;
 constexpr bool kDefaultNotifyDM = true;
 constexpr bool kDefaultShareTypingIndicators = true;
 constexpr bool kDefaultShareReadReceipts = true;
+constexpr bool kDefaultAutoAwayEnabled = false;
+constexpr int kDefaultAutoAwayMinutes = 10;
 constexpr bool kDefaultShowTimestamps = true;
 constexpr bool kDefaultShowUserColors = true;
 constexpr int kDefaultFontScale = 100;
@@ -439,6 +441,8 @@ void SettingsScreen::build_ui() {
     dm_cb_ = Checkbox(i18n::tr(i18n::I18nKey::NOTIFY_ON_DM), &notify_on_dm_);
     share_typing_indicators_cb_ = Checkbox(i18n::tr(i18n::I18nKey::SHARE_TYPING_INDICATORS), &share_typing_indicators_);
     share_read_receipts_cb_ = Checkbox(i18n::tr(i18n::I18nKey::SHARE_READ_RECEIPTS), &share_read_receipts_);
+    auto_away_cb_ = Checkbox(i18n::tr(i18n::I18nKey::AUTO_AWAY_ENABLED), &auto_away_enabled_);
+    auto_away_minutes_input_ = Input(&auto_away_minutes_, "10");
 
     // Account action buttons (created once, not per-render)
     export_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_EXPORT_SETTINGS), [this] { export_settings(); });
@@ -512,6 +516,8 @@ void SettingsScreen::build_ui() {
     privacy_container_ = Container::Vertical({
         share_typing_indicators_cb_,
         share_read_receipts_cb_,
+        auto_away_cb_,
+        auto_away_minutes_input_,
     });
 
     account_container_ = Container::Vertical({
@@ -766,9 +772,17 @@ Element SettingsScreen::render_notifications() {
 }
 
 Element SettingsScreen::render_privacy() {
+    auto auto_away_row = hbox({
+        text(i18n::tr(i18n::I18nKey::AUTO_AWAY_MINUTES_LABEL)) | color(palette::fg_dark()),
+        auto_away_minutes_input_->Render() | size(WIDTH, GREATER_THAN, 8) | border,
+    });
     return vbox({
         share_typing_indicators_cb_->Render(),
         share_read_receipts_cb_->Render(),
+        auto_away_cb_->Render(),
+        auto_away_row,
+        text(""),
+        text(i18n::tr(i18n::I18nKey::AUTO_AWAY_NOTE)) | color(palette::comment()) | dim,
         text(""),
         text(i18n::tr(i18n::I18nKey::PRIVACY_NOTE)) | color(palette::comment()) | dim,
     });
@@ -896,6 +910,8 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     // Privacy
     share_typing_indicators_ = cfg.privacy.share_typing_indicators;
     share_read_receipts_ = cfg.privacy.share_read_receipts;
+    auto_away_enabled_ = cfg.privacy.auto_away_enabled;
+    auto_away_minutes_ = std::to_string(std::clamp(cfg.privacy.auto_away_minutes, 1, 240));
     
     // Account
     nickname_ = cfg.identity.user_id;
@@ -976,6 +992,9 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
     // Privacy
     cfg.privacy.share_typing_indicators = share_typing_indicators_;
     cfg.privacy.share_read_receipts = share_read_receipts_;
+    cfg.privacy.auto_away_enabled = auto_away_enabled_;
+    cfg.privacy.auto_away_minutes = clamp_int(parse_int_or(auto_away_minutes_, kDefaultAutoAwayMinutes), 1, 240);
+    auto_away_minutes_ = std::to_string(cfg.privacy.auto_away_minutes);
     
     // Account
     if (!nickname_.empty() && nickname_ != cfg.identity.user_id) {
@@ -1038,6 +1057,8 @@ void SettingsScreen::reset_to_defaults() {
     mention_keywords_ = nickname_;
     share_typing_indicators_ = kDefaultShareTypingIndicators;
     share_read_receipts_ = kDefaultShareReadReceipts;
+    auto_away_enabled_ = kDefaultAutoAwayEnabled;
+    auto_away_minutes_ = std::to_string(kDefaultAutoAwayMinutes);
 }
 
 void SettingsScreen::export_settings() {
@@ -1082,6 +1103,8 @@ void SettingsScreen::export_settings() {
         data["notifications"]["keywords"] = mention_keywords_;
         data["privacy"]["share_typing_indicators"] = share_typing_indicators_;
         data["privacy"]["share_read_receipts"] = share_read_receipts_;
+        data["privacy"]["auto_away_enabled"] = auto_away_enabled_;
+        data["privacy"]["auto_away_minutes"] = std::clamp(std::stoi(auto_away_minutes_), 1, 240);
         
         std::ofstream ofs(export_path);
         ofs << data;
@@ -1198,6 +1221,12 @@ void SettingsScreen::import_settings() {
             }
             if (privacy.contains("share_read_receipts")) {
                 share_read_receipts_ = toml::find<bool>(privacy, "share_read_receipts");
+            }
+            if (privacy.contains("auto_away_enabled")) {
+                auto_away_enabled_ = toml::find<bool>(privacy, "auto_away_enabled");
+            }
+            if (privacy.contains("auto_away_minutes")) {
+                auto_away_minutes_ = std::to_string(std::clamp(toml::find<int>(privacy, "auto_away_minutes"), 1, 240));
             }
         }
         

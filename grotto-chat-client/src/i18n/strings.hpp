@@ -112,6 +112,9 @@ enum class I18nKey {
     NOTIFY_ON_DM,
     SHARE_TYPING_INDICATORS,
     SHARE_READ_RECEIPTS,
+    AUTO_AWAY_ENABLED,
+    AUTO_AWAY_MINUTES_LABEL,
+    AUTO_AWAY_NOTE,
 
     // Settings buttons
     BUTTON_SAVE,
@@ -187,6 +190,7 @@ enum class I18nKey {
     FILE_TRANSFER_ERROR,
     READ_RECEIPT_SENT,
     READ_RECEIPT_READ,
+    OFFLINE_MESSAGES_MARKER,
 
     // Status bar
     USERS_COUNT,

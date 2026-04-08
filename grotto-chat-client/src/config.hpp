@@ -85,6 +85,8 @@ struct NotificationConfig {
 struct PrivacyConfig {
     bool        share_typing_indicators = true;
     bool        share_read_receipts = true;
+    bool        auto_away_enabled = false;
+    int         auto_away_minutes = 10;
 };
 
 struct SessionConfig {

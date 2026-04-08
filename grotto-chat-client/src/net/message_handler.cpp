@@ -36,6 +36,7 @@ void MessageHandler::dispatch(const Envelope& env) {
     case MT_CHAT_ENVELOPE:  handle_chat(env);           break;
     case MT_TYPING:         handle_typing(env);         break;
     case MT_READ_RECEIPT:   handle_read_receipt(env);   break;
+    case MT_OFFLINE_SYNC:   handle_offline_sync(env);   break;
     case MT_KEY_BUNDLE:     handle_key_bundle(env);     break;
     case MT_IDENTITY_RESET: handle_identity_reset(env); break;
     case MT_PRESENCE:       handle_presence(env);       break;
@@ -250,6 +251,10 @@ void MessageHandler::handle_chat(const Envelope& env) {
     // For DMs: keep the user list pinned to exactly local user + peer.
     else if (!channel_id.empty() && channel_id[0] != '#') {
         state_.set_direct_message_users(channel_id, cfg_.identity.user_id, channel_id);
+    }
+
+    if (offline_sync_active_ && offline_marked_channels_.insert(channel_id).second) {
+        push_system_to_channel(channel_id, i18n::tr(i18n::I18nKey::OFFLINE_MESSAGES_MARKER));
     }
 
     const bool has_dm_candidate =
@@ -536,6 +541,24 @@ void MessageHandler::handle_read_receipt(const Envelope& env) {
     }
     if (read_receipt_fn_) {
         read_receipt_fn_(receipt);
+    }
+}
+
+void MessageHandler::handle_offline_sync(const Envelope& env) {
+    OfflineSync sync;
+    if (!sync.ParseFromString(env.payload())) {
+        spdlog::warn("Failed to parse OfflineSync");
+        return;
+    }
+
+    if (sync.begin()) {
+        offline_sync_active_ = true;
+        offline_marked_channels_.clear();
+        spdlog::debug("Offline sync started: {} message(s)", sync.message_count());
+    } else {
+        offline_sync_active_ = false;
+        offline_marked_channels_.clear();
+        spdlog::debug("Offline sync finished");
     }
 }
 

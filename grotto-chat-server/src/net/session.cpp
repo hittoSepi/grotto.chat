@@ -799,6 +799,12 @@ void Session::handle_auth_response(const AuthResponse& auth) {
 
     // --- Deliver offline messages ---
     auto offline_msgs = server_ctx_.offline_store().fetch_and_delete(user_id_);
+    if (!offline_msgs.empty()) {
+        OfflineSync sync;
+        sync.set_begin(true);
+        sync.set_message_count(static_cast<uint32_t>(offline_msgs.size()));
+        send_envelope(MT_OFFLINE_SYNC, sync);
+    }
     for (const auto& payload : offline_msgs) {
         Envelope env;
         if (env.ParseFromArray(payload.data(), static_cast<int>(payload.size()))) {
@@ -806,6 +812,10 @@ void Session::handle_auth_response(const AuthResponse& auth) {
         }
     }
     if (!offline_msgs.empty()) {
+        OfflineSync sync;
+        sync.set_begin(false);
+        sync.set_message_count(static_cast<uint32_t>(offline_msgs.size()));
+        send_envelope(MT_OFFLINE_SYNC, sync);
         spdlog::info("[{}] Delivered {} offline messages to {}",
             remote_endpoint_, offline_msgs.size(), user_id_);
     }

@@ -149,6 +149,12 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (p.contains("share_read_receipts")) {
                 cfg.privacy.share_read_receipts = toml::find<bool>(p, "share_read_receipts");
             }
+            if (p.contains("auto_away_enabled")) {
+                cfg.privacy.auto_away_enabled = toml::find<bool>(p, "auto_away_enabled");
+            }
+            if (p.contains("auto_away_minutes")) {
+                cfg.privacy.auto_away_minutes = std::clamp(toml::find<int>(p, "auto_away_minutes"), 1, 240);
+            }
         }
 
         if (data.contains("session")) {
@@ -334,6 +340,8 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     // Patch privacy section
     data["privacy"]["share_typing_indicators"] = cfg.privacy.share_typing_indicators;
     data["privacy"]["share_read_receipts"] = cfg.privacy.share_read_receipts;
+    data["privacy"]["auto_away_enabled"] = cfg.privacy.auto_away_enabled;
+    data["privacy"]["auto_away_minutes"] = std::clamp(cfg.privacy.auto_away_minutes, 1, 240);
 
     toml::array remembered_channels;
     for (const auto& channel : cfg.session.remembered_channels) {
@@ -421,6 +429,8 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         
         data["privacy"]["share_typing_indicators"] = cfg.privacy.share_typing_indicators;
         data["privacy"]["share_read_receipts"] = cfg.privacy.share_read_receipts;
+        data["privacy"]["auto_away_enabled"] = cfg.privacy.auto_away_enabled;
+        data["privacy"]["auto_away_minutes"] = std::clamp(cfg.privacy.auto_away_minutes, 1, 240);
 
         toml::array remembered_channels;
         for (const auto& channel : cfg.session.remembered_channels) {
@@ -540,6 +550,12 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             }
             if (p.contains("share_read_receipts")) {
                 cfg.privacy.share_read_receipts = toml::find<bool>(p, "share_read_receipts");
+            }
+            if (p.contains("auto_away_enabled")) {
+                cfg.privacy.auto_away_enabled = toml::find<bool>(p, "auto_away_enabled");
+            }
+            if (p.contains("auto_away_minutes")) {
+                cfg.privacy.auto_away_minutes = std::clamp(toml::find<int>(p, "auto_away_minutes"), 1, 240);
             }
         }
         

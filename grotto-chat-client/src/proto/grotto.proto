@@ -45,6 +45,7 @@ enum MessageType {
   // Push notifications
   MT_FCM_TOKEN        = 70;   // Client → Server: register FCM token
   MT_FCM_UNREGISTER   = 71;   // Client → Server: unregister FCM token
+  MT_OFFLINE_SYNC     = 76;   // Server → Client: Offline message delivery boundary
 
   // Keepalive
   MT_PING             = 90;
@@ -160,6 +161,11 @@ message ReadReceipt {
   string target_id = 2;    // Original sender to notify
   string message_id = 3;   // Latest seen DM message from target
   int64 read_at_ms = 4;    // When the message was read
+}
+
+message OfflineSync {
+  bool begin = 1;
+  uint32 message_count = 2;
 }
 
 // Voice signaling messages

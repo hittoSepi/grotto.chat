@@ -94,6 +94,7 @@ private:
     void handle_chat(const Envelope& env);
     void handle_typing(const Envelope& env);
     void handle_read_receipt(const Envelope& env);
+    void handle_offline_sync(const Envelope& env);
     void handle_key_bundle(const Envelope& env);
     void handle_identity_reset(const Envelope& env);
     void handle_presence(const Envelope& env);
@@ -152,6 +153,8 @@ private:
     std::mutex pending_sends_mu_;
     std::unordered_map<std::string, std::vector<PendingSend>> pending_sends_;
     std::unordered_set<std::string> pending_repair_requests_;
+    bool offline_sync_active_ = false;
+    std::unordered_set<std::string> offline_marked_channels_;
 };
 
 } // namespace grotto::net

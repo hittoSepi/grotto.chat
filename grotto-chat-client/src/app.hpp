@@ -93,6 +93,9 @@ private:
     std::string files_panel_quota_summary() const;
     void handle_typing_update(const TypingUpdate& typing);
     void handle_read_receipt(const ReadReceipt& receipt);
+    void note_local_activity(bool trigger_auto_back);
+    void schedule_auto_away();
+    void cancel_auto_away();
     void track_dm_read_candidate(const std::string& channel_id, const Message& msg);
     void on_active_channel_changed(const std::string& channel_id);
     std::string build_typing_summary() const;
@@ -129,6 +132,7 @@ private:
     boost::asio::io_context                 ioc_;
     boost::asio::steady_timer               typing_idle_timer_{ioc_};
     boost::asio::steady_timer               typing_cleanup_timer_{ioc_};
+    boost::asio::steady_timer               auto_away_timer_{ioc_};
     std::shared_ptr<net::NetClient>         net_client_;
     std::unique_ptr<net::MessageHandler>    msg_handler_;
 
@@ -153,7 +157,9 @@ private:
     std::unordered_map<std::string, std::string> dm_presence_notice_keys_;
     std::string local_typing_target_;
     bool local_typing_active_ = false;
+    bool auto_away_active_ = false;
     std::chrono::steady_clock::time_point last_typing_sent_{};
+    std::chrono::steady_clock::time_point last_local_activity_{};
 
     // Flag to indicate if app should exit (for settings logout)
     bool should_exit_ = false;

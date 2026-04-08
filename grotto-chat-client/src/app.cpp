@@ -35,6 +35,8 @@ constexpr std::size_t kMaxRememberedTargets = 24;
 constexpr auto kTypingIdleTimeout = std::chrono::seconds(3);
 constexpr auto kTypingRefreshInterval = std::chrono::seconds(2);
 constexpr auto kTypingRemoteTtl = std::chrono::seconds(5);
+constexpr int kAutoAwayMinMinutes = 1;
+constexpr int kAutoAwayMaxMinutes = 240;
 
 bool is_server_channel(std::string_view channel_id) {
     if (channel_id.size() != 6) {
@@ -238,7 +240,7 @@ std::string dm_presence_notice(const PresenceInfo& presence, std::string_view us
         return {};
     }
 
-    std::string notice = "• " + std::string(user_id);
+    std::string notice = std::string(user_id);
     if (presence.status == PresenceStatus::Away) {
         notice += " is away right now";
     } else {
@@ -267,6 +269,11 @@ std::string dm_presence_notice_key(const PresenceInfo& presence) {
 std::string quota_preflight_message(std::string_view label, uint64_t file_size, uint64_t limit) {
     return "Upload blocked: file exceeds the " + std::string(label) + " (" +
            human_bytes(file_size) + " > " + human_bytes(limit) + ")";
+}
+
+std::chrono::minutes auto_away_timeout(const ClientConfig& cfg) {
+    return std::chrono::minutes(
+        std::clamp(cfg.privacy.auto_away_minutes, kAutoAwayMinMinutes, kAutoAwayMaxMinutes));
 }
 
 std::filesystem::path default_download_path_for_file(std::string_view file_id,
@@ -649,6 +656,8 @@ bool App::init(const std::filesystem::path& config_path,
 
 int App::run() {
     state_.set_connecting(true);
+    last_local_activity_ = std::chrono::steady_clock::now();
+    schedule_auto_away();
 
     // ── IO thread ─────────────────────────────────────────────────────────
     auto work = boost::asio::make_work_guard(ioc_);
@@ -696,6 +705,7 @@ int App::run() {
 
 void App::on_submit(const std::string& line) {
     if (line.empty()) return;
+    note_local_activity(!line.empty() && line[0] != '/');
     stop_local_typing();
 
     if (line[0] == '/') {
@@ -708,6 +718,7 @@ void App::on_submit(const std::string& line) {
 }
 
 void App::on_input_changed(const std::string& text) {
+    note_local_activity(!text.empty() && text[0] != '/');
     const auto active = canonical_channel_id(state_.active_channel().value_or(""));
     const std::string target = typing_target_for_active_channel(active);
     if (!cfg_.privacy.share_typing_indicators || target.empty() || text.empty() || text[0] == '/') {
@@ -908,6 +919,12 @@ void App::handle_command(const ParsedCommand& cmd) {
     }
 
     if (cmd.name == "/away" || cmd.name == "/back" || cmd.name == "/dnd") {
+        auto_away_active_ = false;
+        if (cmd.name == "/back") {
+            schedule_auto_away();
+        } else {
+            cancel_auto_away();
+        }
         const std::string command = cmd.name.substr(1);
         msg_handler_->send_command(command, cmd.args);
         return;
@@ -1553,6 +1570,7 @@ void App::switch_to_channel_by_index(int index) {
 }
 
 void App::switch_to_channel(const std::string& channel_id) {
+    note_local_activity(true);
     stop_local_typing();
     auto canonical_id = canonical_channel_id(channel_id);
     const std::string switch_message = i18n::tr(i18n::I18nKey::SWITCHED_TO, canonical_id);
@@ -1584,6 +1602,8 @@ void App::open_settings() {
     std::string pubkey_hex = get_public_key_hex();
     const bool was_sharing_typing = cfg_.privacy.share_typing_indicators;
     const bool was_sharing_receipts = cfg_.privacy.share_read_receipts;
+    const bool was_auto_away_enabled = cfg_.privacy.auto_away_enabled;
+    const int was_auto_away_minutes = cfg_.privacy.auto_away_minutes;
     
     // Create a new screen for settings (modal)
     ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
@@ -1601,6 +1621,16 @@ void App::open_settings() {
             }
             if (!was_sharing_receipts && cfg_.privacy.share_read_receipts) {
                 on_active_channel_changed(state_.active_channel().value_or(""));
+            }
+            if (was_auto_away_enabled && !cfg_.privacy.auto_away_enabled) {
+                cancel_auto_away();
+                if (auto_away_active_ && msg_handler_ && msg_handler_->is_authenticated()) {
+                    msg_handler_->send_command("back", {});
+                }
+                auto_away_active_ = false;
+            } else if (cfg_.privacy.auto_away_enabled &&
+                       (!was_auto_away_enabled || was_auto_away_minutes != cfg_.privacy.auto_away_minutes)) {
+                schedule_auto_away();
             }
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::SETTINGS_SAVED));
             break;
@@ -1843,6 +1873,62 @@ void App::handle_read_receipt(const ReadReceipt& receipt) {
             }
         }
     });
+}
+
+void App::note_local_activity(bool trigger_auto_back) {
+    last_local_activity_ = std::chrono::steady_clock::now();
+
+    if (auto_away_active_ &&
+        trigger_auto_back &&
+        msg_handler_ &&
+        msg_handler_->is_authenticated() &&
+        net_client_ &&
+        net_client_->is_connected()) {
+        msg_handler_->send_command("back", {});
+        auto_away_active_ = false;
+    }
+
+    schedule_auto_away();
+}
+
+void App::schedule_auto_away() {
+    auto_away_timer_.cancel();
+    if (!cfg_.privacy.auto_away_enabled) {
+        return;
+    }
+
+    const auto timeout = auto_away_timeout(cfg_);
+    auto_away_timer_.expires_after(timeout);
+    auto_away_timer_.async_wait([this, timeout](const boost::system::error_code& ec) {
+        if (ec || !cfg_.privacy.auto_away_enabled) {
+            return;
+        }
+
+        if (std::chrono::steady_clock::now() - last_local_activity_ < timeout) {
+            schedule_auto_away();
+            return;
+        }
+
+        if (!msg_handler_ || !msg_handler_->is_authenticated() || !net_client_ || !net_client_->is_connected()) {
+            schedule_auto_away();
+            return;
+        }
+
+        const auto local_presence = state_.presence(cfg_.identity.user_id);
+        if (local_presence != PresenceStatus::Online) {
+            if (!auto_away_active_) {
+                schedule_auto_away();
+            }
+            return;
+        }
+
+        msg_handler_->send_command("away", {});
+        auto_away_active_ = true;
+    });
+}
+
+void App::cancel_auto_away() {
+    auto_away_timer_.cancel();
 }
 
 void App::track_dm_read_candidate(const std::string& channel_id, const Message& msg) {
