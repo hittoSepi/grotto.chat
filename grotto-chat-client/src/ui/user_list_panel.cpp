@@ -26,6 +26,18 @@ Color presence_dot_color(PresenceStatus presence) {
     }
 }
 
+std::string users_header_label() {
+    return i18n::current_language() == "fi" ? " KÄYTTÄJÄT: " : " USERS: ";
+}
+
+std::string offline_header_label() {
+    return i18n::current_language() == "fi" ? " OFFLINE: " : " OFFLINE: ";
+}
+
+std::string voice_header_label() {
+    return i18n::current_language() == "fi" ? " ÄÄNI: " : " VOICE: ";
+}
+
 Element render_user_entry(const ChannelUserInfo& user, const std::string& local_user_id) {
     std::string prefix = user.prefix();
     std::string display = prefix + user.user_id;
@@ -182,8 +194,7 @@ Element render_user_list_panel(
     }
     
     // ── USERS: header ──────────────────────────────────────────────────────
-    std::string users_header = i18n::tr(i18n::I18nKey::USERS_HEADER) +
-                               std::to_string(online_users.size());
+    std::string users_header = users_header_label() + std::to_string(online_users.size());
     panel_content.push_back(text(users_header) | bold | color(palette::fg_dark()));
     panel_content.push_back(separator() | color(palette::bg_highlight()));
     current_y += 2;  // Header + separator
@@ -199,8 +210,7 @@ Element render_user_list_panel(
     if (config.show_offline && !offline_users.empty()) {
         panel_content.push_back(text(""));  // Spacer
         current_y++;
-        std::string offline_header = i18n::tr(i18n::I18nKey::OFFLINE_HEADER) +
-                                     std::to_string(offline_users.size());
+        std::string offline_header = offline_header_label() + std::to_string(offline_users.size());
         panel_content.push_back(text(offline_header) | bold | color(palette::comment()));
         panel_content.push_back(separator() | color(palette::bg_highlight()));
         current_y += 2;
@@ -219,7 +229,7 @@ Element render_user_list_panel(
     if (voice_count > 0) {
         panel_content.push_back(text(""));  // Spacer
         current_y++;
-        std::string voice_header = i18n::tr(i18n::I18nKey::VOICE_HEADER) + std::to_string(voice_count);
+        std::string voice_header = voice_header_label() + std::to_string(voice_count);
         panel_content.push_back(text(voice_header) | bold | color(palette::fg_dark()));
         panel_content.push_back(separator() | color(palette::bg_highlight()));
         current_y += 2;
