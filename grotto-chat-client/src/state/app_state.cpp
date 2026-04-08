@@ -51,21 +51,39 @@ bool AppState::mark_direct_messages_read_by_remote(const std::string& channel_id
         return false;
     }
 
-    bool found_target = false;
-    for (auto& msg : it->second.messages) {
-        if (msg.type != Message::Type::Chat) {
+    int existing_read_index = -1;
+    int target_index = -1;
+    for (size_t i = 0; i < it->second.messages.size(); ++i) {
+        const auto& msg = it->second.messages[i];
+        if (msg.type != Message::Type::Chat || msg.sender_id != local_user_id) {
             continue;
         }
-        if (msg.sender_id == local_user_id) {
-            msg.read_by_remote = true;
-            msg.read_at_ms = std::max(msg.read_at_ms, read_at_ms);
+        if (msg.read_by_remote) {
+            existing_read_index = static_cast<int>(i);
         }
         if (msg.message_id == message_id) {
-            found_target = true;
-            break;
+            target_index = static_cast<int>(i);
         }
     }
-    return found_target;
+
+    if (target_index < 0) {
+        return false;
+    }
+    if (existing_read_index > target_index) {
+        return true;
+    }
+
+    for (auto& msg : it->second.messages) {
+        if (msg.type == Message::Type::Chat && msg.sender_id == local_user_id) {
+            msg.read_by_remote = false;
+            msg.read_at_ms = 0;
+        }
+    }
+
+    auto& target = it->second.messages[static_cast<size_t>(target_index)];
+    target.read_by_remote = true;
+    target.read_at_ms = std::max(target.read_at_ms, read_at_ms);
+    return true;
 }
 
 std::optional<std::string> AppState::active_channel() const {
