@@ -844,11 +844,16 @@ void App::handle_command(const ParsedCommand& cmd) {
         ui_->notify();
         return;
     }
-
     // All remaining commands require server connection + authentication
     if (!msg_handler_ || !msg_handler_->is_authenticated()) {
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::NOT_CONNECTED_CHECK_STATUS));
         ui_->notify();
+        return;
+    }
+
+    if (cmd.name == "/away" || cmd.name == "/back" || cmd.name == "/dnd") {
+        const std::string command = cmd.name.substr(1);
+        msg_handler_->send_command(command, cmd.args);
         return;
     }
 

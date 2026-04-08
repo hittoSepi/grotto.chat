@@ -12,6 +12,9 @@
 `/part [#channel]`         leave current or specified channel (alias: `/p`)  
 `/names`                   list online users (alias: `/ns`)  
 `/whois <name>`            show user info  
+`/away [reason]`           set yourself away  
+`/back`                    return to online status  
+`/dnd [reason]`            set yourself to do not disturb  
 
 ## Voice
 

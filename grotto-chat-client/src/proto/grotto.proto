@@ -142,6 +142,7 @@ message PresenceUpdate {
     OFFLINE = 0;
     ONLINE  = 1;
     AWAY    = 2;
+    DND     = 3;
   }
   Status status = 2;
 }

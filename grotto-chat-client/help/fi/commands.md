@@ -12,6 +12,9 @@
 `/part [#kanava]`          poistu nykyiseltä tai nimetyltä kanavalta (alias: `/p`)  
 `/names`                   listaa paikalla olevat (alias: `/ns`)  
 `/whois <nimi>`            näytä käyttäjän tiedot  
+`/away [syy]`              merkitse itsesi poissa-tilaan  
+`/back`                    palaa takaisin online-tilaan  
+`/dnd [syy]`               merkitse itsesi älä häiritse -tilaan  
 
 ## Ääni
 

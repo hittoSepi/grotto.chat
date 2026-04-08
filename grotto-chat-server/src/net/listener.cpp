@@ -66,8 +66,25 @@ void Listener::run() {
         auto broadcast = [this](const Envelope& env, std::shared_ptr<Session> exclude) {
             this->broadcast(env, exclude);
         };
+        auto update_presence = [this](const std::string& user_id,
+                                      PresenceUpdate::Status status,
+                                      std::shared_ptr<Session> exclude) {
+            {
+                std::lock_guard<std::mutex> lock(sessions_mutex_);
+                if (status == PresenceUpdate::OFFLINE) {
+                    user_presence_.erase(user_id);
+                } else {
+                    user_presence_[user_id] = status;
+                }
+            }
+
+            PresenceUpdate presence;
+            presence.set_user_id(user_id);
+            presence.set_status(status);
+            this->broadcast_presence(presence, exclude);
+        };
         command_handler_ = std::make_unique<commands::CommandHandler>(
-            find_session, broadcast, *db_, user_store_, offline_store_, *file_store_,
+            find_session, broadcast, update_presence, *db_, user_store_, offline_store_, *file_store_,
             max_total_storage_bytes_, max_user_storage_bytes_);
         spdlog::info("Command handler initialized");
 
@@ -196,7 +213,7 @@ void Listener::shutdown() {
 
 void Listener::on_session_authenticated(std::shared_ptr<Session> session) {
     const std::string& user_id = session->user_id();
-    std::vector<std::string> online_user_ids;
+    std::vector<std::pair<std::string, PresenceUpdate::Status>> presence_snapshot;
 
     {
         std::lock_guard<std::mutex> lock(sessions_mutex_);
@@ -214,19 +231,18 @@ void Listener::on_session_authenticated(std::shared_ptr<Session> session) {
         // Add new session
         sessions_by_user_[user_id] = session;
         users_by_session_[session] = user_id;
+        user_presence_[user_id] = PresenceUpdate::ONLINE;
 
-        online_user_ids.reserve(sessions_by_user_.size());
-        for (const auto& [online_user_id, online_session] : sessions_by_user_) {
-            if (online_session && online_session->state() == SessionState::Established) {
-                online_user_ids.push_back(online_user_id);
-            }
+        presence_snapshot.reserve(user_presence_.size());
+        for (const auto& [online_user_id, status] : user_presence_) {
+            presence_snapshot.emplace_back(online_user_id, status);
         }
 
         spdlog::info("User {} authenticated. Total sessions: {}",
             user_id, sessions_by_user_.size());
     }
 
-    send_presence_snapshot(session, online_user_ids);
+    send_presence_snapshot(session, presence_snapshot);
 }
 
 void Listener::on_session_disconnected(std::shared_ptr<Session> session, const std::string& reason) {
@@ -244,6 +260,7 @@ void Listener::on_session_disconnected(std::shared_ptr<Session> session, const s
 
             sessions_by_user_.erase(disconnected_user_id);
             users_by_session_.erase(it);
+            user_presence_.erase(disconnected_user_id);
         }
     }
 
@@ -345,16 +362,17 @@ void Listener::broadcast_presence(const PresenceUpdate& update,
     broadcast(env, exclude);
 }
 
-void Listener::send_presence_snapshot(const std::shared_ptr<Session>& session,
-                                      const std::vector<std::string>& online_user_ids) {
+void Listener::send_presence_snapshot(
+    const std::shared_ptr<Session>& session,
+    const std::vector<std::pair<std::string, PresenceUpdate::Status>>& snapshot) {
     if (!session) {
         return;
     }
 
-    for (const auto& online_user_id : online_user_ids) {
+    for (const auto& [online_user_id, status] : snapshot) {
         PresenceUpdate update;
         update.set_user_id(online_user_id);
-        update.set_status(PresenceUpdate::ONLINE);
+        update.set_status(status);
 
         Envelope env;
         env.set_seq(0);

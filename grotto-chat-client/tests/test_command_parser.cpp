@@ -64,6 +64,25 @@ TEST_CASE("parse_command recognizes quota command", "[command-parser]") {
     CHECK(parsed->args.empty());
 }
 
+TEST_CASE("parse_command recognizes away and dnd commands", "[command-parser]") {
+    const auto away = grotto::parse_command("/away lunch");
+    REQUIRE(away.has_value());
+    REQUIRE(away->name == "/away");
+    REQUIRE(away->args.size() == 1);
+    CHECK(away->args[0] == "lunch");
+
+    const auto back = grotto::parse_command("/back");
+    REQUIRE(back.has_value());
+    REQUIRE(back->name == "/back");
+    CHECK(back->args.empty());
+
+    const auto dnd = grotto::parse_command("/dnd focus");
+    REQUIRE(dnd.has_value());
+    REQUIRE(dnd->name == "/dnd");
+    REQUIRE(dnd->args.size() == 1);
+    CHECK(dnd->args[0] == "focus");
+}
+
 TEST_CASE("parse_command recognizes rmfile command", "[command-parser]") {
     const auto parsed = grotto::parse_command("/rmfile abc123");
     REQUIRE(parsed.has_value());

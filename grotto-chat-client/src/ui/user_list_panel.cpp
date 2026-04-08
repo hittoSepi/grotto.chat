@@ -28,6 +28,12 @@ Element render_user_entry(const ChannelUserInfo& user, const std::string& local_
     } else {
         name_color = palette::fg();
     }
+
+    if (user.presence == PresenceStatus::Away) {
+        name_color = palette::yellow();
+    } else if (user.presence == PresenceStatus::Dnd) {
+        name_color = palette::red();
+    }
     
     // Highlight local user
     if (user.user_id == local_user_id) {

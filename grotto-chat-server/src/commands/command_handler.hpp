@@ -21,6 +21,7 @@ namespace grotto::commands {
 using SessionPtr = std::shared_ptr<net::Session>;
 using SessionFinder = std::function<SessionPtr(const std::string&)>;
 using BroadcastFunc = std::function<void(const Envelope&, SessionPtr)>;
+using PresenceUpdateFn = std::function<void(const std::string&, PresenceUpdate::Status, SessionPtr)>;
 
 // Channel state with operators and settings
 struct ChannelState {
@@ -42,6 +43,7 @@ public:
     CommandHandler(
         SessionFinder find_session,
         BroadcastFunc broadcast,
+        PresenceUpdateFn update_presence,
         db::Database& db,
         db::UserStore& user_store,
         db::OfflineStore& offline_store,
@@ -85,6 +87,9 @@ private:
     CommandResponse cmd_password(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_quit(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_msg(const std::vector<std::string>& args, SessionPtr session);
+    CommandResponse cmd_away(const std::vector<std::string>& args, SessionPtr session);
+    CommandResponse cmd_back(const std::vector<std::string>& args, SessionPtr session);
+    CommandResponse cmd_dnd(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_quota(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_rmfile(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_resetdb(const std::vector<std::string>& args, SessionPtr session);
@@ -98,6 +103,7 @@ private:
 
     SessionFinder find_session_;
     BroadcastFunc broadcast_;
+    PresenceUpdateFn update_presence_;
     db::Database& db_;
     db::UserStore& user_store_;
     db::OfflineStore& offline_store_;

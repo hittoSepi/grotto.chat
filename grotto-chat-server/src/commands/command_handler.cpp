@@ -82,6 +82,17 @@ std::string quota_remaining_label(uint64_t used, uint64_t limit) {
     return human_bytes(remaining);
 }
 
+std::string join_command_args(const std::vector<std::string>& args) {
+    std::string joined;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (i > 0) {
+            joined += ' ';
+        }
+        joined += args[i];
+    }
+    return joined;
+}
+
 } // namespace
 
 // Helper to create CommandResponse
@@ -96,6 +107,7 @@ inline CommandResponse make_response(bool success, const std::string& message, c
 CommandHandler::CommandHandler(
     SessionFinder find_session,
     BroadcastFunc broadcast,
+    PresenceUpdateFn update_presence,
     db::Database& db,
     db::UserStore& user_store,
     db::OfflineStore& offline_store,
@@ -104,6 +116,7 @@ CommandHandler::CommandHandler(
     uint64_t max_user_storage_bytes)
     : find_session_(std::move(find_session))
     , broadcast_(std::move(broadcast))
+    , update_presence_(std::move(update_presence))
     , db_(db)
     , user_store_(user_store)
     , offline_store_(offline_store)
@@ -130,6 +143,9 @@ CommandHandler::CommandHandler(
     command_map_["quit"] = [this](auto& args, auto s) { return cmd_quit(args, s); };
     command_map_["msg"] = [this](auto& args, auto s) { return cmd_msg(args, s); };
     command_map_["query"] = [this](auto& args, auto s) { return cmd_msg(args, s); };
+    command_map_["away"] = [this](auto& args, auto s) { return cmd_away(args, s); };
+    command_map_["back"] = [this](auto& args, auto s) { return cmd_back(args, s); };
+    command_map_["dnd"] = [this](auto& args, auto s) { return cmd_dnd(args, s); };
     command_map_["quota"] = [this](auto& args, auto s) { return cmd_quota(args, s); };
     command_map_["rmfile"] = [this](auto& args, auto s) { return cmd_rmfile(args, s); };
     command_map_["resetdb"] = [this](auto& args, auto s) { return cmd_resetdb(args, s); };
@@ -864,6 +880,48 @@ CommandResponse CommandHandler::cmd_msg(const std::vector<std::string>& args, Se
 
     spdlog::debug("Private message from {} to {}: {}", session->user_id(), target_id, message);
     return make_response(true, "-> " + target + ": " + message, "msg");
+}
+
+CommandResponse CommandHandler::cmd_away(const std::vector<std::string>& args, SessionPtr session) {
+    if (!session) {
+        return make_response(false, "Session unavailable", "away");
+    }
+    const std::string& user_id = session->user_id();
+    if (update_presence_) {
+        update_presence_(user_id, PresenceUpdate::AWAY, nullptr);
+    }
+    const std::string reason = join_command_args(args);
+    return make_response(true,
+                         reason.empty() ? "Status set to away"
+                                        : "Status set to away: " + reason,
+                         "away");
+}
+
+CommandResponse CommandHandler::cmd_back(const std::vector<std::string>& args, SessionPtr session) {
+    if (!args.empty()) {
+        return make_response(false, "Usage: /back", "back");
+    }
+    if (!session) {
+        return make_response(false, "Session unavailable", "back");
+    }
+    if (update_presence_) {
+        update_presence_(session->user_id(), PresenceUpdate::ONLINE, nullptr);
+    }
+    return make_response(true, "Status set to online", "back");
+}
+
+CommandResponse CommandHandler::cmd_dnd(const std::vector<std::string>& args, SessionPtr session) {
+    if (!session) {
+        return make_response(false, "Session unavailable", "dnd");
+    }
+    if (update_presence_) {
+        update_presence_(session->user_id(), PresenceUpdate::DND, nullptr);
+    }
+    const std::string reason = join_command_args(args);
+    return make_response(true,
+                         reason.empty() ? "Status set to do not disturb"
+                                        : "Status set to do not disturb: " + reason,
+                         "dnd");
 }
 
 CommandResponse CommandHandler::cmd_quota(const std::vector<std::string>& args, SessionPtr session) {

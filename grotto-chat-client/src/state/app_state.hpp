@@ -15,7 +15,7 @@
 
 namespace grotto {
 
-enum class PresenceStatus { Offline, Online, Away };
+enum class PresenceStatus { Offline, Online, Away, Dnd };
 
 // User role/prefix for display
 enum class UserRole { Regular, Voice, Admin };

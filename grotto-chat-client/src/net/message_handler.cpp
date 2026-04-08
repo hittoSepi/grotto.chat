@@ -392,13 +392,28 @@ void MessageHandler::handle_presence(const Envelope& env) {
     switch (update.status()) {
     case PresenceUpdate::ONLINE:  status = PresenceStatus::Online;  break;
     case PresenceUpdate::AWAY:    status = PresenceStatus::Away;    break;
+    case PresenceUpdate::DND:     status = PresenceStatus::Dnd;     break;
     default:                       status = PresenceStatus::Offline; break;
     }
 
     const std::string& uid = update.user_id();
     state_.post_ui([this, uid, status]() {
         state_.set_presence(uid, status);
-        std::string text = uid + (status == PresenceStatus::Online ? " is now online" : " went offline");
+        std::string text;
+        switch (status) {
+        case PresenceStatus::Online:
+            text = uid + " is now online";
+            break;
+        case PresenceStatus::Away:
+            text = uid + " is away";
+            break;
+        case PresenceStatus::Dnd:
+            text = uid + " is in do not disturb";
+            break;
+        default:
+            text = uid + " went offline";
+            break;
+        }
         push_system(text);
     });
 }
