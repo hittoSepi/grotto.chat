@@ -1147,7 +1147,57 @@ std::vector<RemoteFileEntry> UIManager::visible_files_for_channel(const std::str
             filtered.push_back(file);
         }
     }
-    return filtered;
+    files = std::move(filtered);
+
+    auto mode = file_sort_mode(channel_id);
+    std::sort(files.begin(), files.end(), [mode](const RemoteFileEntry& a, const RemoteFileEntry& b) {
+        switch (mode) {
+            case FileSortMode::Oldest:
+                if (a.uploaded_at != b.uploaded_at) return a.uploaded_at < b.uploaded_at;
+                break;
+            case FileSortMode::Name:
+                if (a.filename != b.filename) return a.filename < b.filename;
+                if (a.uploaded_at != b.uploaded_at) return a.uploaded_at > b.uploaded_at;
+                break;
+            case FileSortMode::Size:
+                if (a.file_size != b.file_size) return a.file_size > b.file_size;
+                if (a.uploaded_at != b.uploaded_at) return a.uploaded_at > b.uploaded_at;
+                break;
+            case FileSortMode::Newest:
+            default:
+                if (a.uploaded_at != b.uploaded_at) return a.uploaded_at > b.uploaded_at;
+                break;
+        }
+        if (a.filename != b.filename) return a.filename < b.filename;
+        return a.file_id < b.file_id;
+    });
+    return files;
+}
+
+UIManager::FileSortMode UIManager::file_sort_mode(const std::string& channel_id) const {
+    auto it = file_sort_modes_.find(channel_id);
+    return it != file_sort_modes_.end() ? it->second : FileSortMode::Newest;
+}
+
+void UIManager::cycle_file_sort_mode(const std::string& channel_id) {
+    auto next = file_sort_mode(channel_id);
+    switch (next) {
+        case FileSortMode::Newest: next = FileSortMode::Oldest; break;
+        case FileSortMode::Oldest: next = FileSortMode::Name; break;
+        case FileSortMode::Name:   next = FileSortMode::Size; break;
+        case FileSortMode::Size:   next = FileSortMode::Newest; break;
+    }
+    file_sort_modes_[channel_id] = next;
+}
+
+std::string UIManager::file_sort_mode_label(const std::string& channel_id) const {
+    switch (file_sort_mode(channel_id)) {
+        case FileSortMode::Newest: return "Newest";
+        case FileSortMode::Oldest: return "Oldest";
+        case FileSortMode::Name:   return "Name";
+        case FileSortMode::Size:   return "Size";
+    }
+    return "Newest";
 }
 
 void UIManager::refresh_files_for_channel_if_needed(const std::string& channel_id) {
@@ -1389,6 +1439,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
                                            side_panel_width,
                                            selected_file_id(active_ch),
                                            file_filter_text(active_ch),
+                                           file_sort_mode_label(active_ch),
                                            quota_summary_provider_ ? quota_summary_provider_() : std::string{},
                                            file_positions_,
                                            next_x,
@@ -1878,6 +1929,17 @@ void UIManager::run(SubmitFn on_submit,
             if (!files_filter_editing_ && (event == Event::Character("r") || event == Event::Character("R"))) {
                 force_refresh_active_files();
                 notify();
+                return true;
+            }
+            if (!files_filter_editing_ && (event == Event::Character("s") || event == Event::Character("S"))) {
+                if (!active_ch.empty()) {
+                    cycle_file_sort_mode(active_ch);
+                    const auto visible_files = visible_files_for_channel(active_ch);
+                    if (!visible_files.empty()) {
+                        set_selected_file_id(active_ch, visible_files.front().file_id);
+                    }
+                    notify();
+                }
                 return true;
             }
             if (!files_filter_editing_ && (event == Event::Character("d") || event == Event::Character("D"))) {

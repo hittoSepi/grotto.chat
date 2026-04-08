@@ -115,6 +115,7 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
                            int width,
                            const std::optional<std::string>& selected_file_id,
                            const std::string& filter_text,
+                           const std::string& sort_label,
                            const std::string& quota_summary,
                            std::vector<FileHitRegion>& out_file_positions,
                            int base_x,
@@ -126,8 +127,11 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
         hbox({
             text("FILES " + std::to_string(files.size())) | bold | color(palette::fg_dark()),
             filler(),
-            text("[Ctrl+F] filter  [Enter] dl  [Del] rm  [r] Refresh  [o] Open dl folder") | color(palette::comment()),
+            text("[Ctrl+F] filter  [s] sort  [Enter] dl  [Del] rm  [r] Refresh  [o] Open dl folder") | color(palette::comment()),
         }));
+    if (!sort_label.empty()) {
+        content.push_back(text(" Sort: " + sort_label) | color(palette::comment()));
+    }
     if (!filter_text.empty()) {
         const std::string lowered_filter = ascii_lower_copy(filter_text);
         content.push_back(
@@ -159,7 +163,7 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
             current_y += 2;
         }
         content.push_back(separator() | color(palette::bg_highlight()));
-        content.push_back(text(" [Up/Down] move  [Ctrl+F] filter  [Enter] dl  [Del] rm  [r] Refresh  [o] Open dl folder")
+        content.push_back(text(" [Up/Down] move  [Ctrl+F] filter  [s] sort  [Enter] dl  [Del] rm  [r] Refresh  [o] Open dl folder")
                           | color(palette::comment()));
     }
 

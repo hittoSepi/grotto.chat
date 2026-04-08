@@ -148,6 +148,10 @@ private:
     std::string file_filter_text(const std::string& channel_id) const;
     void set_file_filter_text(const std::string& channel_id, std::string text);
     std::vector<RemoteFileEntry> visible_files_for_channel(const std::string& channel_id) const;
+    enum class FileSortMode { Newest, Oldest, Name, Size };
+    FileSortMode file_sort_mode(const std::string& channel_id) const;
+    void cycle_file_sort_mode(const std::string& channel_id);
+    std::string file_sort_mode_label(const std::string& channel_id) const;
     void move_file_selection(int delta);
     void activate_selected_file_download();
     void activate_selected_file_delete();
@@ -209,6 +213,7 @@ private:
     int side_panel_width_ = 34;
     std::unordered_map<std::string, std::string> selected_file_ids_;
     std::unordered_map<std::string, std::string> file_filter_texts_;
+    std::unordered_map<std::string, FileSortMode> file_sort_modes_;
     bool files_filter_editing_ = false;
     std::string last_files_refresh_channel_;
 };

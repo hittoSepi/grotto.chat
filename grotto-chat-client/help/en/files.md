@@ -21,6 +21,8 @@ When someone sends a file, Grotto shows a notification. Use `/download` to save 
 
 Press `F3` to open the files panel for the current channel or DM. You can:
 - browse the available files
+- open search with `Ctrl+F`
+- change sorting with `s`
 - move selection with arrow keys when the input is empty
 - press `Enter` to download the selected file
 - press `Del` to remove the selected file if you are allowed to delete it

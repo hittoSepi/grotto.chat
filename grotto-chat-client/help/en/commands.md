@@ -13,6 +13,7 @@
 `/names`                   list online users (alias: `/ns`)  
 `/whois <name>`            show user info  
 `/away [reason]`           set yourself away  
+`/afk [reason]`            alias for `/away`  
 `/back`                    return to online status  
 `/dnd [reason]`            set yourself to do not disturb  
 
@@ -59,4 +60,4 @@
 ---
 
 Tip: Commands autocomplete with the `Tab` key. Type `/` and press Tab.
-In the `F3` files panel, use `r` to refresh, `Del` to remove, and `o` to open downloads.
+In the `F3` files panel, use `Ctrl+F` to filter, `s` to change sorting, `r` to refresh, `Del` to remove, and `o` to open downloads.

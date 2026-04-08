@@ -134,6 +134,25 @@ std::vector<LayoutRow> render_text_block(const Message& msg,
                                          bool dim_message = false) {
     std::vector<LayoutRow> rows;
 
+    if (msg.type == Message::Type::System &&
+        text_content == i18n::tr(i18n::I18nKey::OFFLINE_MESSAGES_MARKER)) {
+        const std::string plain = "----- " + text_content + " -----";
+        rows.push_back({
+            message_index,
+            block_index,
+            LayoutBlockKind::Text,
+            plain,
+            std::nullopt,
+            false,
+            hbox({
+                filler(),
+                text(text_content) | color(palette::comment()) | dim,
+                filler(),
+            }),
+        });
+        return rows;
+    }
+
     if (msg.type == Message::Type::System || msg.type == Message::Type::VoiceEvent ||
         msg.type == Message::Type::Preview) {
         const std::string first_prefix = (msg.type == Message::Type::Preview) ? "" : "• ";

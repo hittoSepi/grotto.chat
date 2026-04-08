@@ -22,6 +22,8 @@ Kun joku lähettää tiedoston, Grotto näyttää ilmoituksen. Käytä `/downloa
 Paina `F3` avataksesi nykyisen kanavan tai DM:n files-panelin. Siellä voit:
 - selata tiedostoja
 - liikkua nuolinäppäimillä kun input-rivi on tyhjä
+- avata haun `Ctrl+F`:llä
+- vaihtaa lajittelua `s`-näppäimellä
 - ladata valitun tiedoston `Enter`-näppäimellä
 - poistaa valitun tiedoston `Del`-näppäimellä jos sinulla on siihen oikeus
 - päivittää listan `r`-näppäimellä

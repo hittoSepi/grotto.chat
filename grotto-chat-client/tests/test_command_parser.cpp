@@ -81,6 +81,12 @@ TEST_CASE("parse_command recognizes away and dnd commands", "[command-parser]") 
     REQUIRE(dnd->name == "/dnd");
     REQUIRE(dnd->args.size() == 1);
     CHECK(dnd->args[0] == "focus");
+
+    const auto afk = grotto::parse_command("/afk coffee");
+    REQUIRE(afk.has_value());
+    REQUIRE(afk->name == "/away");
+    REQUIRE(afk->args.size() == 1);
+    CHECK(afk->args[0] == "coffee");
 }
 
 TEST_CASE("parse_command recognizes rmfile command", "[command-parser]") {

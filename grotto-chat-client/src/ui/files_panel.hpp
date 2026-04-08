@@ -23,6 +23,7 @@ ftxui::Element render_files_panel(
     int width,
     const std::optional<std::string>& selected_file_id,
     const std::string& filter_text,
+    const std::string& sort_label,
     const std::string& quota_summary,
     std::vector<FileHitRegion>& out_file_positions,
     int base_x = 0,

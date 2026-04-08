@@ -13,6 +13,7 @@
 `/names`                   listaa paikalla olevat (alias: `/ns`)  
 `/whois <nimi>`            näytä käyttäjän tiedot  
 `/away [syy]`              merkitse itsesi poissa-tilaan  
+`/afk [syy]`               alias komennolle `/away`  
 `/back`                    palaa takaisin online-tilaan  
 `/dnd [syy]`               merkitse itsesi älä häiritse -tilaan  
 
@@ -59,4 +60,4 @@
 ---
 
 Vihje: Komento täydentyy `Tab`-näppäimellä. Kirjoita `/` ja paina Tab.
-`F3` files-panelissa `r` päivittää listan, `Del` poistaa ja `o` avaa downloads-kansion.
+`F3` files-panelissa `Ctrl+F` avaa haun, `s` vaihtaa lajittelua, `r` päivittää listan, `Del` poistaa ja `o` avaa downloads-kansion.
