@@ -641,6 +641,7 @@ void MessageHandler::handle_file_error(const Envelope& env) {
     if (!error.ParseFromString(env.payload())) return;
     if (file_mgr_) {
         bool already_reported = false;
+        bool handled = false;
         std::string detail = error.error_message();
         if (auto info = file_mgr_->get_transfer_by_file_id(error.file_id())) {
             already_reported =
@@ -649,7 +650,10 @@ void MessageHandler::handle_file_error(const Envelope& env) {
             detail = info->filename + ": " + error.error_message();
         }
         file_mgr_->on_file_error(error);
-        if (!already_reported) {
+        if (file_error_fn_) {
+            handled = file_error_fn_(error);
+        }
+        if (!already_reported && !handled) {
             push_system(i18n::tr(i18n::I18nKey::FILE_TRANSFER_ERROR, detail));
         }
     }

@@ -74,6 +74,14 @@ std::string quota_limit_label(uint64_t limit) {
     return limit == 0 ? std::string("unlimited") : human_bytes(limit);
 }
 
+std::string quota_remaining_label(uint64_t used, uint64_t limit) {
+    if (limit == 0) {
+        return "unlimited";
+    }
+    const auto remaining = (used >= limit) ? uint64_t{0} : (limit - used);
+    return human_bytes(remaining);
+}
+
 } // namespace
 
 // Helper to create CommandResponse
@@ -868,10 +876,18 @@ CommandResponse CommandHandler::cmd_quota(const std::vector<std::string>& args, 
 
     std::ostringstream message;
     message << "File storage quotas:\n";
-    message << "Your usage: " << human_bytes(user_reserved)
-            << " / " << quota_limit_label(max_user_storage_bytes_) << "\n";
-    message << "Server usage: " << human_bytes(total_reserved)
-            << " / " << quota_limit_label(max_total_storage_bytes_);
+    message << "Your usage: " << human_bytes(user_reserved) << "\n";
+    message << "Your limit: " << quota_limit_label(max_user_storage_bytes_) << "\n";
+    if (max_user_storage_bytes_ > 0) {
+        message << "Your remaining: "
+                << quota_remaining_label(user_reserved, max_user_storage_bytes_) << "\n";
+    }
+    message << "Server usage: " << human_bytes(total_reserved) << "\n";
+    message << "Server limit: " << quota_limit_label(max_total_storage_bytes_);
+    if (max_total_storage_bytes_ > 0) {
+        message << "\nServer remaining: "
+                << quota_remaining_label(total_reserved, max_total_storage_bytes_);
+    }
 
     return make_response(true, message.str(), "quota");
 }

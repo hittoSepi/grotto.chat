@@ -6,7 +6,7 @@
 `/transfers [limit]` shows current and recent transfer state.
 `/files` refreshes the file list for the active channel or DM and opens the files panel.
 `/downloads` opens the local downloads folder.
-`/quota` shows your current file storage usage and limits.
+`/quota` shows your current storage usage, limits, and remaining space.
 `/rmfile <id>` deletes a file you uploaded.
 
 Examples:
@@ -32,5 +32,6 @@ Press `F3` to open the files panel for the current channel or DM. You can:
 
 Files are encrypted the same way as messages. The server only forwards chunks without seeing the content.
 
-If the server advertises file policy, the client blocks uploads that are too large or use disallowed MIME types before sending them.
-If the server advertises storage quotas, `/quota` shows the current usage and configured limits.
+If the server advertises file policy, the client blocks uploads that are obviously too large or use disallowed MIME types before sending them.
+Live quota enforcement still happens on the server, so an upload can still fail later if current reserved usage has changed.
+If the server advertises storage quotas, `/quota` and the files panel show usage, limits, and remaining space.

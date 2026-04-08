@@ -8,6 +8,7 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <string_view>
 
 using namespace ftxui;
 
@@ -63,6 +64,21 @@ std::string format_uploaded_at(int64_t uploaded_at) {
     return buffer;
 }
 
+std::vector<std::string> split_lines(std::string_view text) {
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const auto end = text.find('\n', start);
+        const auto count = (end == std::string_view::npos) ? text.size() - start : end - start;
+        lines.emplace_back(text.substr(start, count));
+        if (end == std::string_view::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+    return lines;
+}
+
 Element render_file_entry(const RemoteFileEntry& file, int width, bool selected) {
     std::string label = file.filename.empty() ? file.file_id : file.filename;
     std::string meta = human_bytes(file.file_size) + "  " + format_uploaded_at(file.uploaded_at);
@@ -105,7 +121,15 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
             text("[Enter] dl  [Del] rm  [r] Refresh  [o] Open dl folder") | color(palette::comment()),
         }));
     if (!quota_summary.empty()) {
-        content.push_back(text(" " + quota_summary) | color(palette::comment()));
+        const int summary_width = std::max(12, width - 2);
+        for (const auto& line : split_lines(quota_summary)) {
+            if (line.empty()) {
+                continue;
+            }
+            content.push_back(
+                text(" " + truncate_with_ellipsis(line, summary_width))
+                | color(palette::comment()));
+        }
     }
     content.push_back(separator() | color(palette::bg_highlight()));
 

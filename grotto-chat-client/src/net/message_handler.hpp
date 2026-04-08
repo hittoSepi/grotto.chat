@@ -54,6 +54,8 @@ public:
     void set_file_list_callback(FileListFn fn) { file_list_fn_ = std::move(fn); }
     using FileChangedFn = std::function<void(const FileChanged&)>;
     void set_file_changed_callback(FileChangedFn fn) { file_changed_fn_ = std::move(fn); }
+    using FileErrorFn = std::function<bool(const FileError&)>;
+    void set_file_error_callback(FileErrorFn fn) { file_error_fn_ = std::move(fn); }
 
     // File transfer manager (optional)
     void set_file_transfer_manager(client::file::FileTransferManager* ftm) { file_mgr_ = ftm; }
@@ -117,6 +119,7 @@ private:
     FilePolicyFn         file_policy_fn_;
     FileListFn           file_list_fn_;
     FileChangedFn        file_changed_fn_;
+    FileErrorFn          file_error_fn_;
 
     bool   authenticated_ = false;
     bool   onboarding_shown_ = false;

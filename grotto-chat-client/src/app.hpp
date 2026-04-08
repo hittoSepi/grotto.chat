@@ -59,6 +59,7 @@ private:
                                 bool reset_attempt_timer = false,
                                 bool activate_server = false);
     void handle_command_response(const CommandResponse& response);
+    bool handle_file_transfer_error(const FileError& error);
     void clear_pending_channel_commands();
     bool has_pending_command(const std::deque<std::string>& queue,
                              const std::string& target) const;

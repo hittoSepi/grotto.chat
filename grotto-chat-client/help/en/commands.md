@@ -50,7 +50,7 @@
 `/transfers [limit]`       show recent file transfer state (alias: `/xfers`)  
 `/files`                   refresh files for the active channel/DM and open the files panel (alias: `/ls`)  
 `/downloads`               open the local downloads folder (alias: `/dir`)  
-`/quota`                   show your current file storage usage and limits  
+`/quota`                   show your current file storage usage, limits, and remaining space
 `/rmfile <id>`             delete one of your uploaded files (or a channel file if you are an operator)  
 
 ---

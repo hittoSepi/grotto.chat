@@ -15,9 +15,9 @@
 - [~] **Desktop file-transfer UX**
   - [x] Treat terminal drag-and-drop as pasted local file path and prepare `/upload`
   - [x] Improve `/upload` and `/download` feedback in the client
-  - [ ] Add `/transfers` command for active and recent transfers
-  - [ ] Add visible upload/download progress UI
-  - [ ] Surface server-side quota failures clearly in the client
+  - [x] Add `/transfers` command for active and recent transfers
+  - [x] Add visible upload/download progress UI
+  - [x] Surface server-side quota failures clearly in the client
 
 ### Documentation
 - [ ] **Translate Finnish documents to English**

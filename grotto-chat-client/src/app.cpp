@@ -22,6 +22,7 @@
 #include <cmath>
 #include <optional>
 #include <sstream>
+#include <string_view>
 
 namespace grotto {
 
@@ -188,6 +189,16 @@ std::string human_bytes(uint64_t bytes) {
         oss << std::fixed << std::setprecision(1) << value << ' ' << kUnits[unit_index];
     }
     return oss.str();
+}
+
+bool is_quota_error_message(std::string_view message) {
+    return message == "User storage quota exceeded" ||
+           message == "Server storage quota exceeded";
+}
+
+std::string quota_preflight_message(std::string_view label, uint64_t file_size, uint64_t limit) {
+    return "Upload blocked: file exceeds the " + std::string(label) + " (" +
+           human_bytes(file_size) + " > " + human_bytes(limit) + ")";
 }
 
 std::filesystem::path default_download_path_for_file(std::string_view file_id,
@@ -479,6 +490,9 @@ bool App::init(const std::filesystem::path& config_path,
     });
     msg_handler_->set_file_changed_callback([this](const FileChanged& changed) {
         handle_file_changed(changed);
+    });
+    msg_handler_->set_file_error_callback([this](const FileError& error) {
+        return handle_file_transfer_error(error);
     });
     msg_handler_->set_preview_callback([this](const std::string& channel_id, const std::string& text) {
         trigger_previews(channel_id, text);
@@ -904,28 +918,28 @@ void App::handle_command(const ParsedCommand& cmd) {
             if (file_transfer_policy_.received &&
                 file_transfer_policy_.max_upload_bytes > 0 &&
                 file_size > file_transfer_policy_.max_upload_bytes) {
-                ui_->push_system_msg(
-                    "Upload blocked by server policy: file is too large (" +
-                    human_bytes(file_size) + " > " +
-                    human_bytes(file_transfer_policy_.max_upload_bytes) + ")");
+                ui_->push_system_msg(quota_preflight_message(
+                    "upload limit",
+                    file_size,
+                    file_transfer_policy_.max_upload_bytes));
                 return;
             }
             if (file_transfer_policy_.received &&
                 file_transfer_policy_.max_total_storage_bytes > 0 &&
                 file_size > file_transfer_policy_.max_total_storage_bytes) {
-                ui_->push_system_msg(
-                    "Upload blocked by server policy: file exceeds the server storage quota (" +
-                    human_bytes(file_size) + " > " +
-                    human_bytes(file_transfer_policy_.max_total_storage_bytes) + ")");
+                ui_->push_system_msg(quota_preflight_message(
+                    "server storage quota",
+                    file_size,
+                    file_transfer_policy_.max_total_storage_bytes));
                 return;
             }
             if (file_transfer_policy_.received &&
                 file_transfer_policy_.max_user_storage_bytes > 0 &&
                 file_size > file_transfer_policy_.max_user_storage_bytes) {
-                ui_->push_system_msg(
-                    "Upload blocked by server policy: file exceeds your user storage quota (" +
-                    human_bytes(file_size) + " > " +
-                    human_bytes(file_transfer_policy_.max_user_storage_bytes) + ")");
+                ui_->push_system_msg(quota_preflight_message(
+                    "your storage quota",
+                    file_size,
+                    file_transfer_policy_.max_user_storage_bytes));
                 return;
             }
             if (file_transfer_policy_.received &&
@@ -1178,9 +1192,9 @@ void App::handle_command_response(const CommandResponse& response) {
         const auto newline = summary.find('\n');
         if (newline != std::string::npos) {
             summary = summary.substr(newline + 1);
-            std::replace(summary.begin(), summary.end(), '\n', ' ');
-            summary = std::regex_replace(summary, std::regex(R"(\s+)"), " ");
         }
+        summary = std::regex_replace(summary, std::regex(R"(\r\n?)"), "\n");
+        summary = trim_ascii_whitespace(summary);
         {
             std::lock_guard lk(quota_summary_mu_);
             quota_summary_text_ = summary;
@@ -1194,6 +1208,10 @@ void App::handle_command_response(const CommandResponse& response) {
         if (!active.empty() && active != "server") {
             log_system_message(active, prefix + command + ": " + response.message(), false);
         }
+    }
+
+    if (command == "rmfile" && response.success()) {
+        request_quota_summary();
     }
 
     if (command == "join") {
@@ -1497,6 +1515,8 @@ void App::handle_file_changed(const FileChanged& changed) {
         return;
     }
 
+    request_quota_summary();
+
     const std::string active = canonical_channel_id(state_.active_channel().value_or(""));
     if (active != target) {
         return;
@@ -1507,7 +1527,6 @@ void App::handle_file_changed(const FileChanged& changed) {
     }
 
     request_remote_files_for_target(target, false);
-    request_quota_summary();
 }
 
 void App::request_remote_files_for_target(const std::string& target, bool echo_to_chat) {
@@ -1583,6 +1602,43 @@ void App::request_quota_summary() {
 std::string App::files_panel_quota_summary() const {
     std::lock_guard lk(quota_summary_mu_);
     return quota_summary_text_;
+}
+
+bool App::handle_file_transfer_error(const FileError& error) {
+    if (!is_quota_error_message(error.error_message())) {
+        return false;
+    }
+
+    request_quota_summary();
+
+    if (!ui_ || !file_mgr_) {
+        return true;
+    }
+
+    const auto info = file_mgr_->get_transfer_by_file_id(error.file_id());
+    const std::string label = (info && !info->filename.empty()) ? info->filename : error.file_id();
+
+    std::string message = "Upload failed: " + label + " ";
+    if (error.error_message() == "User storage quota exceeded") {
+        message += "hit your storage quota. See /quota.";
+    } else {
+        message += "hit the server storage quota. See /quota.";
+    }
+
+    if (info && info->direction == client::file::TransferDirection::UPLOAD) {
+        const std::string target = !info->channel_id.empty() ? info->channel_id : info->recipient_id;
+        if (!target.empty() && !is_server_channel(target)) {
+            log_system_message(target, message, false);
+            if (ui_) {
+                ui_->notify();
+            }
+            return true;
+        }
+    }
+
+    ui_->push_system_msg(message);
+    ui_->notify();
+    return true;
 }
 
 std::string App::get_public_key_hex() const {
