@@ -78,6 +78,12 @@ file_encryption_key = ""
 # Maximum upload size in bytes
 max_upload_bytes = 104857600
 
+# Maximum total reserved file storage on the server (0 = unlimited)
+max_total_storage_bytes = 0
+
+# Maximum reserved file storage per uploading user (0 = unlimited)
+max_user_storage_bytes = 0
+
 # MIME types allowed for upload. Empty list = allow all unless blocked.
 # Prefix matches are supported with trailing "/" or "*", for example "image/" or "audio/*".
 allowed_mime_types = []

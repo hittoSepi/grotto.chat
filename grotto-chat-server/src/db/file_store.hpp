@@ -140,6 +140,18 @@ public:
      * Get received bytes for a file.
      */
     uint64_t getReceivedBytes(const std::string& file_id);
+
+    /**
+     * Get total non-expired bytes currently reserved by files in storage.
+     * Includes incomplete uploads so concurrent uploads still count against quotas.
+     */
+    uint64_t getReservedBytes();
+
+    /**
+     * Get non-expired bytes currently reserved by files uploaded by a user.
+     * Includes incomplete uploads so concurrent uploads still count against quotas.
+     */
+    uint64_t getUserReservedBytes(const std::string& sender_id);
     
     /**
      * Encrypt and store a chunk (for completed files).

@@ -378,6 +378,46 @@ uint64_t FileStore::getReceivedBytes(const std::string& file_id) {
     return 0;
 }
 
+uint64_t FileStore::getReservedBytes() {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+
+    try {
+        SQLite::Statement query(db_.get(),
+            "SELECT COALESCE(SUM(file_size), 0) FROM files WHERE expires_at > ?");
+        query.bind(1, nowUnix());
+
+        if (query.executeStep()) {
+            return static_cast<uint64_t>(query.getColumn(0).getInt64());
+        }
+    } catch (const SQLite::Exception& e) {
+        spdlog::error("FileStore::getReservedBytes failed: {}", e.what());
+    }
+
+    return 0;
+}
+
+uint64_t FileStore::getUserReservedBytes(const std::string& sender_id) {
+    std::lock_guard<std::mutex> lock(db_.mutex());
+
+    try {
+        SQLite::Statement query(db_.get(), R"(
+            SELECT COALESCE(SUM(file_size), 0)
+            FROM files
+            WHERE sender_id = ? AND expires_at > ?
+        )");
+        query.bind(1, sender_id);
+        query.bind(2, nowUnix());
+
+        if (query.executeStep()) {
+            return static_cast<uint64_t>(query.getColumn(0).getInt64());
+        }
+    } catch (const SQLite::Exception& e) {
+        spdlog::error("FileStore::getUserReservedBytes failed: {}", e.what());
+    }
+
+    return 0;
+}
+
 int FileStore::cleanupExpired() {
     std::lock_guard<std::mutex> lock(db_.mutex());
     

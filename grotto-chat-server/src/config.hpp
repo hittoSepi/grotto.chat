@@ -84,6 +84,12 @@ conn_rate_per_min = 10
 # Maximum upload size in bytes
 max_upload_bytes = 104857600
 
+# Maximum total reserved file storage on the server (0 = unlimited)
+max_total_storage_bytes = 0
+
+# Maximum reserved file storage per uploading user (0 = unlimited)
+max_user_storage_bytes = 0
+
 # MIME types allowed for upload. Empty list = allow all unless blocked.
 # Prefix matches are supported with trailing "/" or "*", for example "image/" or "audio/*".
 allowed_mime_types = []
@@ -152,6 +158,8 @@ struct ServerConfig {
 
     // [files]
     uint64_t max_upload_bytes = 100ull * 1024ull * 1024ull; // 100 MB default
+    uint64_t max_total_storage_bytes = 0;                   // 0 = unlimited
+    uint64_t max_user_storage_bytes = 0;                    // 0 = unlimited
     std::vector<std::string> allowed_mime_types;
     std::vector<std::string> blocked_mime_types;
     

@@ -159,6 +159,8 @@ You can enforce upload size and MIME rules from `server.toml`:
 ```toml
 [files]
 max_upload_bytes = 104857600
+max_total_storage_bytes = 0
+max_user_storage_bytes = 0
 allowed_mime_types = ["image/", "text/plain", "application/pdf"]
 blocked_mime_types = ["application/x-msdownload", "application/x-dosexec"]
 ```
@@ -166,6 +168,9 @@ blocked_mime_types = ["application/x-msdownload", "application/x-dosexec"]
 Rules:
 
 - `max_upload_bytes` is enforced by the server and advertised to clients after auth.
+- `max_total_storage_bytes = 0` means the server-wide storage quota is disabled.
+- `max_user_storage_bytes = 0` means per-user storage quota is disabled.
+- Quotas reserve space at upload start, so incomplete uploads still count until they expire or are cleaned up.
 - `allowed_mime_types = []` means "allow all unless blocked".
 - `blocked_mime_types` always wins over allow rules.
 - MIME prefix rules are supported with trailing `/` or `*`, for example `image/` and `audio/*`.

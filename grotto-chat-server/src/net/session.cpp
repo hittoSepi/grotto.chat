@@ -993,6 +993,38 @@ void Session::handle_file_request(const FileUploadRequest& req, const Envelope& 
         send_envelope(MT_FILE_ERROR, err);
         return;
     }
+
+    const auto max_total_storage = server_ctx_.max_total_storage_bytes();
+    if (max_total_storage > 0) {
+        const auto reserved_bytes = file_store.getReservedBytes();
+        if (reserved_bytes > max_total_storage ||
+            req.file_size() > (max_total_storage - reserved_bytes)) {
+            FileError err;
+            err.set_file_id(req.file_id());
+            err.set_error_code(4093);
+            err.set_error_message("Server storage quota exceeded");
+            send_envelope(MT_FILE_ERROR, err);
+            spdlog::info("[{}] Upload rejected by server quota: file_id={}, reserved={}, requested={}, limit={}",
+                         remote_endpoint_, req.file_id(), reserved_bytes, req.file_size(), max_total_storage);
+            return;
+        }
+    }
+
+    const auto max_user_storage = server_ctx_.max_user_storage_bytes();
+    if (max_user_storage > 0) {
+        const auto reserved_user_bytes = file_store.getUserReservedBytes(user_id_);
+        if (reserved_user_bytes > max_user_storage ||
+            req.file_size() > (max_user_storage - reserved_user_bytes)) {
+            FileError err;
+            err.set_file_id(req.file_id());
+            err.set_error_code(4094);
+            err.set_error_message("User storage quota exceeded");
+            send_envelope(MT_FILE_ERROR, err);
+            spdlog::info("[{}] Upload rejected by user quota: user={}, file_id={}, reserved={}, requested={}, limit={}",
+                         remote_endpoint_, user_id_, req.file_id(), reserved_user_bytes, req.file_size(), max_user_storage);
+            return;
+        }
+    }
     
     // Create file entry
     db::FileMetadata metadata;

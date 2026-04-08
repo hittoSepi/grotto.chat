@@ -107,6 +107,8 @@ Server::Server(const ServerConfig& config)
     listener_->set_max_chat_payload_bytes(config_.max_chat_payload_bytes);
     listener_->set_file_policy(
         config_.max_upload_bytes,
+        config_.max_total_storage_bytes,
+        config_.max_user_storage_bytes,
         config_.allowed_mime_types,
         config_.blocked_mime_types);
     listener_->set_max_connections(config_.max_connections);

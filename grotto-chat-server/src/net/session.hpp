@@ -202,6 +202,8 @@ public:
     virtual int msg_rate_per_sec() const = 0;
     virtual size_t max_chat_payload_bytes() const = 0;
     virtual uint64_t max_upload_bytes() const = 0;
+    virtual uint64_t max_total_storage_bytes() const = 0;
+    virtual uint64_t max_user_storage_bytes() const = 0;
     virtual const std::string& motd() const = 0;
     virtual const std::vector<std::string>& allowed_mime_types() const = 0;
     virtual const std::vector<std::string>& blocked_mime_types() const = 0;

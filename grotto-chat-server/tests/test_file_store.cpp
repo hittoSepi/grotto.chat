@@ -108,3 +108,62 @@ TEST_CASE("file store lists complete DM conversation files in both directions", 
 
     cleanup(db_path);
 }
+
+TEST_CASE("file store reports reserved bytes for server and user quotas", "[file-store]") {
+    const auto db_path = make_temp_db_path();
+
+    {
+        grotto::db::Database db(db_path.string());
+        grotto::db::FileStore store(db);
+
+        grotto::db::FileMetadata alice_active;
+        alice_active.file_id = "quota-1";
+        alice_active.filename = "alice-active.bin";
+        alice_active.file_size = 100;
+        alice_active.mime_type = "application/octet-stream";
+        alice_active.sender_id = "alice";
+        alice_active.recipient_id = "bob";
+        alice_active.storage_path = "quota-1";
+
+        grotto::db::FileMetadata alice_incomplete;
+        alice_incomplete.file_id = "quota-2";
+        alice_incomplete.filename = "alice-incomplete.bin";
+        alice_incomplete.file_size = 50;
+        alice_incomplete.mime_type = "application/octet-stream";
+        alice_incomplete.sender_id = "alice";
+        alice_incomplete.recipient_id = "bob";
+        alice_incomplete.storage_path = "quota-2";
+
+        grotto::db::FileMetadata bob_active;
+        bob_active.file_id = "quota-3";
+        bob_active.filename = "bob-active.bin";
+        bob_active.file_size = 25;
+        bob_active.mime_type = "application/octet-stream";
+        bob_active.sender_id = "bob";
+        bob_active.recipient_id = "alice";
+        bob_active.storage_path = "quota-3";
+
+        grotto::db::FileMetadata expired;
+        expired.file_id = "quota-4";
+        expired.filename = "expired.bin";
+        expired.file_size = 1000;
+        expired.mime_type = "application/octet-stream";
+        expired.sender_id = "alice";
+        expired.recipient_id = "bob";
+        expired.storage_path = "quota-4";
+        expired.expires_at = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count() - 1;
+
+        REQUIRE(store.createFile(alice_active));
+        REQUIRE(store.createFile(alice_incomplete));
+        REQUIRE(store.createFile(bob_active));
+        REQUIRE(store.createFile(expired));
+
+        CHECK(store.getReservedBytes() == 175);
+        CHECK(store.getUserReservedBytes("alice") == 150);
+        CHECK(store.getUserReservedBytes("bob") == 25);
+        CHECK(store.getUserReservedBytes("nobody") == 0);
+    }
+
+    cleanup(db_path);
+}

@@ -67,6 +67,8 @@ public:
     int msg_rate_per_sec() const override { return msg_rate_per_sec_; }
     size_t max_chat_payload_bytes() const override { return max_chat_payload_bytes_; }
     uint64_t max_upload_bytes() const override { return max_upload_bytes_; }
+    uint64_t max_total_storage_bytes() const override { return max_total_storage_bytes_; }
+    uint64_t max_user_storage_bytes() const override { return max_user_storage_bytes_; }
     const std::string& motd() const override { return motd_; }
     const std::vector<std::string>& allowed_mime_types() const override { return allowed_mime_types_; }
     const std::vector<std::string>& blocked_mime_types() const override { return blocked_mime_types_; }
@@ -79,9 +81,13 @@ public:
     void set_rate_limits(int msg_rate_per_sec, int conn_rate_per_min);
     void set_max_chat_payload_bytes(size_t max_chat_payload_bytes) { max_chat_payload_bytes_ = max_chat_payload_bytes; }
     void set_file_policy(uint64_t max_upload_bytes,
+                         uint64_t max_total_storage_bytes,
+                         uint64_t max_user_storage_bytes,
                          std::vector<std::string> allowed_mime_types,
                          std::vector<std::string> blocked_mime_types) {
         max_upload_bytes_ = max_upload_bytes;
+        max_total_storage_bytes_ = max_total_storage_bytes;
+        max_user_storage_bytes_ = max_user_storage_bytes;
         allowed_mime_types_ = std::move(allowed_mime_types);
         blocked_mime_types_ = std::move(blocked_mime_types);
     }
@@ -147,6 +153,8 @@ private:
     int max_connections_ = 100;
     size_t max_chat_payload_bytes_ = 8192;
     uint64_t max_upload_bytes_ = 100ull * 1024ull * 1024ull;
+    uint64_t max_total_storage_bytes_ = 0;
+    uint64_t max_user_storage_bytes_ = 0;
     std::vector<std::string> allowed_mime_types_;
     std::vector<std::string> blocked_mime_types_;
 

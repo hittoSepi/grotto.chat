@@ -123,8 +123,27 @@ namespace grotto {
 		// [files] section - optional
 		if ( data.contains( "files" ) ) {
 			const auto &files = data.at( "files" );
-			config.max_upload_bytes = static_cast<uint64_t>(
-				get_optional<int64_t>( files, "max_upload_bytes", 100ll * 1024ll * 1024ll ) );
+			const auto max_upload_bytes = get_optional<int64_t>(
+				files, "max_upload_bytes", 100ll * 1024ll * 1024ll );
+			if ( max_upload_bytes <= 0 ) {
+				throw std::runtime_error( "Invalid config: max_upload_bytes must be greater than 0" );
+			}
+			config.max_upload_bytes = static_cast<uint64_t>( max_upload_bytes );
+
+			const auto max_total_storage_bytes = get_optional<int64_t>(
+				files, "max_total_storage_bytes", 0ll );
+			if ( max_total_storage_bytes < 0 ) {
+				throw std::runtime_error( "Invalid config: max_total_storage_bytes must be 0 or greater" );
+			}
+			config.max_total_storage_bytes = static_cast<uint64_t>( max_total_storage_bytes );
+
+			const auto max_user_storage_bytes = get_optional<int64_t>(
+				files, "max_user_storage_bytes", 0ll );
+			if ( max_user_storage_bytes < 0 ) {
+				throw std::runtime_error( "Invalid config: max_user_storage_bytes must be 0 or greater" );
+			}
+			config.max_user_storage_bytes = static_cast<uint64_t>( max_user_storage_bytes );
+
 			if ( files.contains( "allowed_mime_types" ) ) {
 				config.allowed_mime_types = get_optional<std::vector<std::string>>( files, "allowed_mime_types", {} );
 			}
