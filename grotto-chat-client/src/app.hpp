@@ -86,6 +86,8 @@ private:
     struct FileTransferPolicyState {
         bool received = false;
         uint64_t max_upload_bytes = 0;
+        uint64_t max_total_storage_bytes = 0;
+        uint64_t max_user_storage_bytes = 0;
         std::vector<std::string> allowed_mime_types;
         std::vector<std::string> blocked_mime_types;
     };

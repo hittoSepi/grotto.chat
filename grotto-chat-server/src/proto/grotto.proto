@@ -291,6 +291,8 @@ message FileTransferPolicy {
   uint64 max_upload_bytes = 1;           // 0 = server did not advertise a limit
   repeated string allowed_mime_types = 2; // Empty = allow all unless blocked
   repeated string blocked_mime_types = 3; // Always denied when matched
+  uint64 max_total_storage_bytes = 4;    // 0 = unlimited server quota
+  uint64 max_user_storage_bytes = 5;     // 0 = unlimited per-user quota
 }
 
 message FileListRequest {

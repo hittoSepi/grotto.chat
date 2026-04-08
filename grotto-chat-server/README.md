@@ -167,7 +167,7 @@ blocked_mime_types = ["application/x-msdownload", "application/x-dosexec"]
 
 Rules:
 
-- `max_upload_bytes` is enforced by the server and advertised to clients after auth.
+- `max_upload_bytes`, `max_total_storage_bytes`, and `max_user_storage_bytes` are enforced by the server and advertised to clients after auth.
 - `max_total_storage_bytes = 0` means the server-wide storage quota is disabled.
 - `max_user_storage_bytes = 0` means per-user storage quota is disabled.
 - Quotas reserve space at upload start, so incomplete uploads still count until they expire or are cleaned up.

@@ -717,6 +717,8 @@ void Session::handle_auth_response(const AuthResponse& auth) {
 
     FileTransferPolicy file_policy;
     file_policy.set_max_upload_bytes(server_ctx_.max_upload_bytes());
+    file_policy.set_max_total_storage_bytes(server_ctx_.max_total_storage_bytes());
+    file_policy.set_max_user_storage_bytes(server_ctx_.max_user_storage_bytes());
     for (const auto& mime : server_ctx_.allowed_mime_types()) {
         file_policy.add_allowed_mime_types(mime);
     }

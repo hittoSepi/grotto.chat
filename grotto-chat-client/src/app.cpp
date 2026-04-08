@@ -892,6 +892,24 @@ void App::handle_command(const ParsedCommand& cmd) {
                 return;
             }
             if (file_transfer_policy_.received &&
+                file_transfer_policy_.max_total_storage_bytes > 0 &&
+                file_size > file_transfer_policy_.max_total_storage_bytes) {
+                ui_->push_system_msg(
+                    "Upload blocked by server policy: file exceeds the server storage quota (" +
+                    human_bytes(file_size) + " > " +
+                    human_bytes(file_transfer_policy_.max_total_storage_bytes) + ")");
+                return;
+            }
+            if (file_transfer_policy_.received &&
+                file_transfer_policy_.max_user_storage_bytes > 0 &&
+                file_size > file_transfer_policy_.max_user_storage_bytes) {
+                ui_->push_system_msg(
+                    "Upload blocked by server policy: file exceeds your user storage quota (" +
+                    human_bytes(file_size) + " > " +
+                    human_bytes(file_transfer_policy_.max_user_storage_bytes) + ")");
+                return;
+            }
+            if (file_transfer_policy_.received &&
                 !mime_allowed_by_policy(mime_type,
                                         file_transfer_policy_.allowed_mime_types,
                                         file_transfer_policy_.blocked_mime_types)) {
@@ -1350,6 +1368,8 @@ std::vector<std::string> App::format_transfer_lines(std::size_t limit) const {
 void App::update_file_transfer_policy(const FileTransferPolicy& policy) {
     file_transfer_policy_.received = true;
     file_transfer_policy_.max_upload_bytes = policy.max_upload_bytes();
+    file_transfer_policy_.max_total_storage_bytes = policy.max_total_storage_bytes();
+    file_transfer_policy_.max_user_storage_bytes = policy.max_user_storage_bytes();
     file_transfer_policy_.allowed_mime_types.clear();
     file_transfer_policy_.blocked_mime_types.clear();
 
@@ -1365,8 +1385,10 @@ void App::update_file_transfer_policy(const FileTransferPolicy& policy) {
         file_transfer_policy_.blocked_mime_types.push_back(ascii_lower_copy(mime));
     }
 
-    spdlog::info("Received file transfer policy: max_upload_bytes={}, allowed_mimes={}, blocked_mimes={}",
+    spdlog::info("Received file transfer policy: max_upload_bytes={}, max_total_storage_bytes={}, max_user_storage_bytes={}, allowed_mimes={}, blocked_mimes={}",
                  file_transfer_policy_.max_upload_bytes,
+                 file_transfer_policy_.max_total_storage_bytes,
+                 file_transfer_policy_.max_user_storage_bytes,
                  file_transfer_policy_.allowed_mime_types.size(),
                  file_transfer_policy_.blocked_mime_types.size());
 }
