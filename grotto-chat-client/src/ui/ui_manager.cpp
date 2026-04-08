@@ -1417,6 +1417,9 @@ Element UIManager::build_document(int term_rows) {
     if (transfer_summary_provider_) {
         si.transfer_summary = transfer_summary_provider_();
     }
+    if (typing_summary_provider_) {
+        si.typing_summary = typing_summary_provider_();
+    }
     auto status_el = render_status_bar(si);
 
     // Input line — render with proper wrapping and multiline support
@@ -1580,6 +1583,7 @@ Element UIManager::build_document(int term_rows) {
 }
 
 void UIManager::run(SubmitFn on_submit,
+                    InputChangedFn on_input_changed,
                     std::function<void()> on_quit,
                     std::function<void(int)> on_channel_switch,
                     ChannelCycleFn on_channel_cycle,
@@ -1614,16 +1618,23 @@ void UIManager::run(SubmitFn on_submit,
     });
 
     auto event_handler = CatchEvent(renderer, [&](Event event) -> bool {
+        auto notify_input_changed = [&]() {
+            if (on_input_changed) {
+                on_input_changed(input_line_.text());
+            }
+        };
         auto apply_pasted_text = [&](const std::string& pasted_text) {
             tab_completer_.reset();
             if (input_line_.empty()) {
                 if (auto dropped_file = detect_local_file_from_paste(pasted_text)) {
                     input_line_.set_text(make_upload_command_for_path(*dropped_file));
+                    notify_input_changed();
                     show_toast("Prepared /upload for dropped file");
                     return true;
                 }
             }
             input_line_.insert_text(pasted_text);
+            notify_input_changed();
             return true;
         };
 
@@ -1721,6 +1732,7 @@ void UIManager::run(SubmitFn on_submit,
             event.input() == "\x1b[13;2u" || event.input() == "\x1b[13;5u") {
             tab_completer_.reset();
             input_line_.insert(U'\n');
+            notify_input_changed();
             return true;
         }
         if (event == Event::Return) {
@@ -1731,6 +1743,7 @@ void UIManager::run(SubmitFn on_submit,
             }
             tab_completer_.reset();
             std::string line = input_line_.commit();
+            notify_input_changed();
             if (!line.empty() && on_submit) {
                 on_submit(line);
                 notify();
@@ -1757,6 +1770,7 @@ void UIManager::run(SubmitFn on_submit,
         if (event == Event::Backspace) {
             tab_completer_.reset();
             input_line_.backspace();
+            notify_input_changed();
             return true;
         }
         if (event == Event::Delete) {
@@ -1767,6 +1781,7 @@ void UIManager::run(SubmitFn on_submit,
             }
             tab_completer_.reset();
             input_line_.del_forward();
+            notify_input_changed();
             return true;
         }
         if (event == Event::ArrowLeft) {
@@ -1815,18 +1830,21 @@ void UIManager::run(SubmitFn on_submit,
         if (event.input() == "\x0b") {
             tab_completer_.reset();
             input_line_.kill_to_end();
+            notify_input_changed();
             return true;
         }
         // Ctrl+U — kill whole input line (readline: unix-line-discard)
         if (event.input() == "\x15") {
             tab_completer_.reset();
             input_line_.clear();
+            notify_input_changed();
             return true;
         }
         // Ctrl+W — delete word backward (readline: unix-word-rubout)
         if (event.input() == "\x17") {
             tab_completer_.reset();
             input_line_.delete_word_backward();
+            notify_input_changed();
             return true;
         }
         if (event == Event::End) {
@@ -1850,6 +1868,7 @@ void UIManager::run(SubmitFn on_submit,
             if (!text.empty()) {
                 tab_completer_.reset();
                 input_line_.insert_text(text);
+                notify_input_changed();
                 return true;
             }
         }
@@ -1861,6 +1880,7 @@ void UIManager::run(SubmitFn on_submit,
                 state_.channel_list(),
                 known_commands());
             input_line_.set_text(completed);
+            notify_input_changed();
             return true;
         }
         // Alt+1..9 — switch to channel by 0-based index

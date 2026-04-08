@@ -29,6 +29,7 @@ namespace grotto::ui {
 
 // Callback type for a submitted input line
 using SubmitFn = std::function<void(const std::string&)>;
+using InputChangedFn = std::function<void(const std::string&)>;
 using PttToggleFn = std::function<void(bool)>;
 using OpenSettingsFn = std::function<void()>;
 using ChannelCycleFn = std::function<void(int)>;
@@ -43,6 +44,7 @@ public:
     // on_channel_switch(i): called with 0-based index when user presses Alt+1..9.
     // on_channel_cycle(delta): called with -1/+1 for Alt+Left/Alt+Right.
     void run(SubmitFn on_submit,
+             InputChangedFn on_input_changed,
              std::function<void()> on_quit,
              std::function<void(int)> on_channel_switch = {},
              ChannelCycleFn on_channel_cycle = {},
@@ -72,6 +74,9 @@ public:
     }
     void set_quota_refresh_handler(std::function<void()> handler) {
         quota_refresh_handler_ = std::move(handler);
+    }
+    void set_typing_summary_provider(std::function<std::string()> provider) {
+        typing_summary_provider_ = std::move(provider);
     }
 
     // Wake the FTXUI event loop after AppState changes.
@@ -188,6 +193,7 @@ private:
     std::function<void(const RemoteFileEntry&)> file_delete_handler_;
     std::function<std::string()> quota_summary_provider_;
     std::function<void()> quota_refresh_handler_;
+    std::function<std::string()> typing_summary_provider_;
     std::string toast_text_;
     std::chrono::steady_clock::time_point toast_until_{};
     bool quit_confirm_visible_ = false;

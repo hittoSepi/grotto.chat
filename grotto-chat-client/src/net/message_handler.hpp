@@ -56,6 +56,8 @@ public:
     void set_file_changed_callback(FileChangedFn fn) { file_changed_fn_ = std::move(fn); }
     using FileErrorFn = std::function<bool(const FileError&)>;
     void set_file_error_callback(FileErrorFn fn) { file_error_fn_ = std::move(fn); }
+    using TypingFn = std::function<void(const TypingUpdate&)>;
+    void set_typing_callback(TypingFn fn) { typing_fn_ = std::move(fn); }
 
     // File transfer manager (optional)
     void set_file_transfer_manager(client::file::FileTransferManager* ftm) { file_mgr_ = ftm; }
@@ -82,6 +84,7 @@ private:
     void handle_auth_ok(const Envelope& env);
     void handle_auth_fail(const Envelope& env);
     void handle_chat(const Envelope& env);
+    void handle_typing(const Envelope& env);
     void handle_key_bundle(const Envelope& env);
     void handle_presence(const Envelope& env);
     void handle_voice_signal(const Envelope& env);
@@ -120,6 +123,7 @@ private:
     FileListFn           file_list_fn_;
     FileChangedFn        file_changed_fn_;
     FileErrorFn          file_error_fn_;
+    TypingFn             typing_fn_;
 
     bool   authenticated_ = false;
     bool   onboarding_shown_ = false;

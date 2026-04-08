@@ -15,6 +15,7 @@
 #include "runtime/runtime_capabilities.hpp"
 
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <chrono>
 #include <deque>
 #include <filesystem>
@@ -43,6 +44,7 @@ public:
 private:
     // Called by UIManager when user presses Enter
     void on_submit(const std::string& line);
+    void on_input_changed(const std::string& text);
     void handle_command(const ParsedCommand& cmd);
     void send_chat(const std::string& text);
     void switch_channel(int delta);
@@ -86,6 +88,12 @@ private:
     void delete_remote_file(const RemoteFileEntry& file);
     void request_quota_summary();
     std::string files_panel_quota_summary() const;
+    void handle_typing_update(const TypingUpdate& typing);
+    std::string build_typing_summary() const;
+    void stop_local_typing();
+    void send_typing_update(const std::string& target, bool is_typing);
+    void schedule_remote_typing_cleanup();
+    void prune_remote_typing_locked(std::chrono::steady_clock::time_point now) const;
 
     struct FileTransferPolicyState {
         bool received = false;
@@ -111,6 +119,8 @@ private:
     std::unique_ptr<client::file::FileTransferManager> file_mgr_;
 
     boost::asio::io_context                 ioc_;
+    boost::asio::steady_timer               typing_idle_timer_{ioc_};
+    boost::asio::steady_timer               typing_cleanup_timer_{ioc_};
     std::shared_ptr<net::NetClient>         net_client_;
     std::unique_ptr<net::MessageHandler>    msg_handler_;
 
@@ -128,6 +138,11 @@ private:
     std::unordered_set<std::string> pending_file_list_echo_targets_;
     mutable std::mutex quota_summary_mu_;
     std::string quota_summary_text_;
+    mutable std::mutex typing_mu_;
+    mutable std::unordered_map<std::string, std::unordered_map<std::string, std::chrono::steady_clock::time_point>> remote_typing_;
+    std::string local_typing_target_;
+    bool local_typing_active_ = false;
+    std::chrono::steady_clock::time_point last_typing_sent_{};
 
     // Flag to indicate if app should exit (for settings logout)
     bool should_exit_ = false;

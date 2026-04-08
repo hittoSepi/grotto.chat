@@ -29,6 +29,9 @@ namespace grotto {
 namespace {
 
 constexpr size_t kMaxPlaintextMessageBytes = 4096;
+constexpr auto kTypingIdleTimeout = std::chrono::seconds(3);
+constexpr auto kTypingRefreshInterval = std::chrono::seconds(2);
+constexpr auto kTypingRemoteTtl = std::chrono::seconds(5);
 
 bool is_server_channel(std::string_view channel_id) {
     if (channel_id.size() != 6) {
@@ -68,6 +71,13 @@ std::string canonical_file_target(std::string_view recipient_id, std::string_vie
         return std::string(recipient_id);
     }
     return {};
+}
+
+std::string typing_target_for_active_channel(std::string_view active_channel) {
+    if (active_channel.empty() || is_server_channel(active_channel)) {
+        return {};
+    }
+    return std::string(active_channel);
 }
 
 std::string ascii_lower_copy_view(std::string_view text) {
@@ -467,6 +477,11 @@ bool App::init(const std::filesystem::path& config_path,
         msg_handler_->on_transport_disconnected();
         crypto_->reset_group_sessions();  // Re-send SKDM on next connection
         clear_pending_channel_commands();
+        stop_local_typing();
+        {
+            std::lock_guard lk(typing_mu_);
+            remote_typing_.clear();
+        }
         log_server_event("Disconnected: " + reason, true);
     };
 
@@ -494,6 +509,9 @@ bool App::init(const std::filesystem::path& config_path,
     msg_handler_->set_file_error_callback([this](const FileError& error) {
         return handle_file_transfer_error(error);
     });
+    msg_handler_->set_typing_callback([this](const TypingUpdate& typing) {
+        handle_typing_update(typing);
+    });
     msg_handler_->set_preview_callback([this](const std::string& channel_id, const std::string& text) {
         trigger_previews(channel_id, text);
     });
@@ -513,6 +531,9 @@ bool App::init(const std::filesystem::path& config_path,
     });
     ui_->set_quota_summary_provider([this]() {
         return files_panel_quota_summary();
+    });
+    ui_->set_typing_summary_provider([this]() {
+        return build_typing_summary();
     });
     ui_->set_quota_refresh_handler([this]() {
         request_quota_summary();
@@ -574,6 +595,7 @@ int App::run() {
     // ── FTXUI event loop (blocks main thread) ─────────────────────────────
     ui_->run(
         [this](const std::string& line) { on_submit(line); },
+        [this](const std::string& text) { on_input_changed(text); },
         [this]()                         { ioc_.stop(); },
         [this](int idx)                  { switch_to_channel_by_index(idx); },
         [this](int delta)                { switch_channel(delta); },
@@ -592,6 +614,7 @@ int App::run() {
 
 void App::on_submit(const std::string& line) {
     if (line.empty()) return;
+    stop_local_typing();
 
     if (line[0] == '/') {
         auto cmd = parse_command(line);
@@ -600,6 +623,45 @@ void App::on_submit(const std::string& line) {
     } else {
         send_chat(line);
     }
+}
+
+void App::on_input_changed(const std::string& text) {
+    const auto active = canonical_channel_id(state_.active_channel().value_or(""));
+    const std::string target = typing_target_for_active_channel(active);
+    if (target.empty() || text.empty() || text[0] == '/') {
+        stop_local_typing();
+        return;
+    }
+
+    if (!msg_handler_ || !msg_handler_->is_authenticated() || !net_client_ || !net_client_->is_connected()) {
+        stop_local_typing();
+        return;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    if (local_typing_active_ && local_typing_target_ != target) {
+        send_typing_update(local_typing_target_, false);
+        local_typing_active_ = false;
+        local_typing_target_.clear();
+    }
+
+    if (!local_typing_active_ || local_typing_target_ != target ||
+        now - last_typing_sent_ >= kTypingRefreshInterval) {
+        send_typing_update(target, true);
+        local_typing_active_ = true;
+        local_typing_target_ = target;
+        last_typing_sent_ = now;
+    }
+
+    typing_idle_timer_.expires_after(kTypingIdleTimeout);
+    typing_idle_timer_.async_wait([this, target](const boost::system::error_code& ec) {
+        if (ec) {
+            return;
+        }
+        if (local_typing_active_ && local_typing_target_ == target) {
+            stop_local_typing();
+        }
+    });
 }
 
 void App::handle_command(const ParsedCommand& cmd) {
@@ -1316,6 +1378,7 @@ void App::switch_to_channel_by_index(int index) {
 }
 
 void App::switch_to_channel(const std::string& channel_id) {
+    stop_local_typing();
     auto canonical_id = canonical_channel_id(channel_id);
     state_.ensure_channel(canonical_id);
     state_.set_active_channel(canonical_id);
@@ -1529,6 +1592,42 @@ void App::handle_file_changed(const FileChanged& changed) {
     request_remote_files_for_target(target, false);
 }
 
+void App::handle_typing_update(const TypingUpdate& typing) {
+    if (typing.sender_id().empty() || typing.sender_id() == cfg_.identity.user_id) {
+        return;
+    }
+
+    std::string target = typing.target_id();
+    if (target.empty()) {
+        return;
+    }
+    if (target.front() != '#') {
+        target = typing.sender_id();
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard lk(typing_mu_);
+        if (typing.is_typing()) {
+            remote_typing_[target][typing.sender_id()] = now + kTypingRemoteTtl;
+        } else {
+            auto target_it = remote_typing_.find(target);
+            if (target_it != remote_typing_.end()) {
+                target_it->second.erase(typing.sender_id());
+                if (target_it->second.empty()) {
+                    remote_typing_.erase(target_it);
+                }
+            }
+        }
+        prune_remote_typing_locked(now);
+    }
+
+    schedule_remote_typing_cleanup();
+    if (ui_) {
+        ui_->notify();
+    }
+}
+
 void App::request_remote_files_for_target(const std::string& target, bool echo_to_chat) {
     if (!msg_handler_ || !msg_handler_->is_authenticated()) {
         if (echo_to_chat && ui_) {
@@ -1602,6 +1701,126 @@ void App::request_quota_summary() {
 std::string App::files_panel_quota_summary() const {
     std::lock_guard lk(quota_summary_mu_);
     return quota_summary_text_;
+}
+
+std::string App::build_typing_summary() const {
+    const std::string active = canonical_channel_id(state_.active_channel().value_or(""));
+    if (active.empty() || is_server_channel(active)) {
+        return {};
+    }
+
+    std::vector<std::string> users;
+    {
+        const auto now = std::chrono::steady_clock::now();
+        std::lock_guard lk(typing_mu_);
+        prune_remote_typing_locked(now);
+        auto it = remote_typing_.find(active);
+        if (it != remote_typing_.end()) {
+            users.reserve(it->second.size());
+            for (const auto& [user_id, _] : it->second) {
+                users.push_back(user_id);
+            }
+        }
+    }
+
+    if (users.empty()) {
+        return {};
+    }
+
+    std::sort(users.begin(), users.end());
+    if (users.size() == 1) {
+        return users[0] + " is typing...";
+    }
+    if (users.size() == 2) {
+        return users[0] + " and " + users[1] + " are typing...";
+    }
+    return users[0] + ", " + users[1] + " +" + std::to_string(users.size() - 2) + " typing...";
+}
+
+void App::stop_local_typing() {
+    typing_idle_timer_.cancel();
+    if (!local_typing_active_ || local_typing_target_.empty()) {
+        return;
+    }
+    send_typing_update(local_typing_target_, false);
+    local_typing_active_ = false;
+    local_typing_target_.clear();
+}
+
+void App::send_typing_update(const std::string& target, bool is_typing) {
+    if (!net_client_ || !msg_handler_ || !msg_handler_->is_authenticated() || !net_client_->is_connected()) {
+        return;
+    }
+
+    TypingUpdate update;
+    update.set_sender_id(cfg_.identity.user_id);
+    update.set_target_id(target);
+    update.set_is_typing(is_typing);
+
+    Envelope env;
+    env.set_type(MT_TYPING);
+    env.set_payload(update.SerializeAsString());
+    env.set_timestamp_ms(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count());
+    net_client_->send(env);
+}
+
+void App::schedule_remote_typing_cleanup() {
+    std::optional<std::chrono::steady_clock::time_point> next_expiry;
+    {
+        std::lock_guard lk(typing_mu_);
+        const auto now = std::chrono::steady_clock::now();
+        prune_remote_typing_locked(now);
+        for (const auto& [_, users] : remote_typing_) {
+            for (const auto& [_, expiry] : users) {
+                if (!next_expiry || expiry < *next_expiry) {
+                    next_expiry = expiry;
+                }
+            }
+        }
+    }
+
+    typing_cleanup_timer_.cancel();
+    if (!next_expiry) {
+        return;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    const auto delay = (*next_expiry > now)
+        ? (*next_expiry - now)
+        : std::chrono::steady_clock::duration::zero();
+    typing_cleanup_timer_.expires_after(delay);
+    typing_cleanup_timer_.async_wait([this](const boost::system::error_code& ec) {
+        if (ec) {
+            return;
+        }
+        {
+            std::lock_guard lk(typing_mu_);
+            prune_remote_typing_locked(std::chrono::steady_clock::now());
+        }
+        schedule_remote_typing_cleanup();
+        if (ui_) {
+            ui_->notify();
+        }
+    });
+}
+
+void App::prune_remote_typing_locked(std::chrono::steady_clock::time_point now) const {
+    for (auto target_it = remote_typing_.begin(); target_it != remote_typing_.end();) {
+        auto& users = target_it->second;
+        for (auto user_it = users.begin(); user_it != users.end();) {
+            if (user_it->second <= now) {
+                user_it = users.erase(user_it);
+            } else {
+                ++user_it;
+            }
+        }
+        if (users.empty()) {
+            target_it = remote_typing_.erase(target_it);
+        } else {
+            ++target_it;
+        }
+    }
 }
 
 bool App::handle_file_transfer_error(const FileError& error) {

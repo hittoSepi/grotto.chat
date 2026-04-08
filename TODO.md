@@ -126,7 +126,7 @@
   - [x] Full-text search in channels (FTS5)
   - [x] Search by user/date (filters ready)
 - [ ] **Typing indicators**
-  - [ ] Show "X is typing..."
+  - [x] Show "X is typing..."
 - [ ] **Read receipts**
   - [ ] Show message delivery status
   - [ ] Show read status for DMs

@@ -343,6 +343,20 @@ void Session::handle_envelope(const Envelope& env) {
         ping_sent_ = false;
         break;
 
+    case MT_TYPING:
+        if (state_ == SessionState::Established) {
+            TypingUpdate typing;
+            if (!env.payload().empty() && typing.ParseFromArray(
+                    env.payload().data(), static_cast<int>(env.payload().size()))) {
+                handle_typing(typing, env);
+            } else {
+                send_error(4036, "Invalid TYPING");
+            }
+        } else {
+            send_error(4037, "Not authenticated");
+        }
+        break;
+
     case MT_CHAT_ENVELOPE:
         spdlog::debug("[{}] MT_CHAT_ENVELOPE received, state={}, user_id={}",
             remote_endpoint_, static_cast<int>(state_), user_id_);
@@ -1372,6 +1386,32 @@ void Session::handle_file_download(const FileDownloadRequest& req) {
     
     spdlog::info("[{}] File download started: {} ({} wire chunks)",
         remote_endpoint_, req.file_id(), wire_chunk_index);
+}
+
+void Session::handle_typing(const TypingUpdate& typing, const Envelope& raw) {
+    if (typing.sender_id() != user_id_) {
+        spdlog::warn("[{}] Typing sender mismatch: claimed={}, actual={}",
+            remote_endpoint_, typing.sender_id(), user_id_);
+        send_error(4038, "Sender ID mismatch");
+        disconnect("Typing spoofing attempt");
+        return;
+    }
+
+    if (typing.target_id().empty()) {
+        send_error(4039, "Empty typing target");
+        return;
+    }
+
+    const auto& target = typing.target_id();
+    if (!target.empty() && target.front() == '#') {
+        server_ctx_.broadcast(raw, shared_from_this());
+        return;
+    }
+
+    auto recipient_session = server_ctx_.find_session(target);
+    if (recipient_session) {
+        recipient_session->send(raw);
+    }
 }
 
 void Session::handle_file_list_request(const FileListRequest& req) {

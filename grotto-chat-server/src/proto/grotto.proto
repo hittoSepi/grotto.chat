@@ -28,6 +28,7 @@ enum MessageType {
 
   // Presence
   MT_PRESENCE         = 30;  // Presence updates (online/away/offline)
+  MT_TYPING           = 31;  // Typing indicator relay
 
   // Voice signaling
   MT_VOICE_SIGNAL     = 40;  // ICE/SDP relay for WebRTC
@@ -139,6 +140,12 @@ message PresenceUpdate {
     AWAY    = 2;
   }
   Status status = 2;
+}
+
+message TypingUpdate {
+  string sender_id = 1;
+  string target_id = 2;   // "#channel" or DM recipient user_id
+  bool is_typing = 3;
 }
 
 // Voice signaling messages

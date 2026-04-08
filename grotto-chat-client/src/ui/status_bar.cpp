@@ -58,10 +58,9 @@ Element render_status_bar(const StatusInfo& info) {
         left.push_back(text(info.transfer_summary) | color(palette::cyan()));
     }
 
-    // Right side: online users
     Elements right;
-    for (auto& u : info.online_users) {
-        right.push_back(text("\u25CF " + u + " ") | color(palette::online()));
+    if (!info.typing_summary.empty()) {
+        right.push_back(text(info.typing_summary) | color(palette::comment()));
     }
 
     return hbox({

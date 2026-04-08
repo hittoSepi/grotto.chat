@@ -83,6 +83,7 @@ private:
     void handle_auth_response(const AuthResponse& auth);
     void handle_ping(const Envelope& env);
     void handle_chat(const ChatEnvelope& chat, const Envelope& raw);
+    void handle_typing(const TypingUpdate& typing, const Envelope& raw);
     void handle_key_upload(const KeyUpload& ku);
     void handle_key_request(const KeyRequest& kr);
     void handle_voice_signal(const VoiceSignal& vs, const Envelope& raw);

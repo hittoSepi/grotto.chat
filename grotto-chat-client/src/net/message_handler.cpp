@@ -34,6 +34,7 @@ void MessageHandler::dispatch(const Envelope& env) {
     case MT_AUTH_OK:        handle_auth_ok(env);        break;
     case MT_AUTH_FAIL:      handle_auth_fail(env);      break;
     case MT_CHAT_ENVELOPE:  handle_chat(env);           break;
+    case MT_TYPING:         handle_typing(env);         break;
     case MT_KEY_BUNDLE:     handle_key_bundle(env);     break;
     case MT_PRESENCE:       handle_presence(env);       break;
     case MT_VOICE_SIGNAL:      handle_voice_signal(env);      break;
@@ -413,6 +414,17 @@ void MessageHandler::handle_voice_room_state(const Envelope& env) {
         state_.set_voice_state(vs);
         state_.set_voice_room_users(state.channel_id(), participants);
     });
+}
+
+void MessageHandler::handle_typing(const Envelope& env) {
+    TypingUpdate typing;
+    if (!typing.ParseFromString(env.payload())) {
+        spdlog::warn("Failed to parse TypingUpdate");
+        return;
+    }
+    if (typing_fn_) {
+        typing_fn_(typing);
+    }
 }
 
 void MessageHandler::request_file_list(const std::string& recipient_id,
