@@ -204,7 +204,7 @@ std::vector<LayoutRow> render_text_block(const Message& msg,
 
 std::vector<LayoutRow> render_one_message(const Message& msg,
                                           int message_index,
-                                          bool show_delivery_status,
+                                          bool dim_as_unread_outgoing,
                                           const std::string& ts_fmt,
                                           int width) {
     std::vector<LayoutRow> rows;
@@ -252,7 +252,7 @@ std::vector<LayoutRow> render_one_message(const Message& msg,
             ts_prefix,
             std::max(1, width),
             part.text,
-            show_delivery_status && !msg.read_by_remote);
+            dim_as_unread_outgoing);
         rows.insert(rows.end(),
                     std::make_move_iterator(text_rows.begin()),
                     std::make_move_iterator(text_rows.end()));
@@ -270,25 +270,27 @@ std::vector<LayoutRow> flatten_message_rows(const ChannelState& state,
     std::vector<LayoutRow> all_rows;
     const bool is_direct_channel =
         !channel_id.empty() && channel_id != "server" && channel_id.front() != '#';
-    int latest_outgoing_dm_index = -1;
+    int latest_read_outgoing_dm_index = -1;
     if (is_direct_channel && !local_user_id.empty()) {
         for (size_t i = 0; i < state.messages.size(); ++i) {
             const auto& msg = state.messages[i];
-            if (msg.type == Message::Type::Chat && msg.sender_id == local_user_id) {
-                latest_outgoing_dm_index = static_cast<int>(i);
+            if (msg.type == Message::Type::Chat &&
+                msg.sender_id == local_user_id &&
+                msg.read_by_remote) {
+                latest_read_outgoing_dm_index = static_cast<int>(i);
             }
         }
     }
     for (size_t i = 0; i < state.messages.size(); ++i) {
-        const bool show_delivery_status =
+        const bool dim_as_unread_outgoing =
             is_direct_channel &&
-            static_cast<int>(i) == latest_outgoing_dm_index &&
             state.messages[i].type == Message::Type::Chat &&
-            state.messages[i].sender_id == local_user_id;
+            state.messages[i].sender_id == local_user_id &&
+            static_cast<int>(i) > latest_read_outgoing_dm_index;
         auto rows = render_one_message(
             state.messages[i],
             static_cast<int>(i),
-            show_delivery_status,
+            dim_as_unread_outgoing,
             timestamp_format,
             width);
         all_rows.insert(all_rows.end(),
