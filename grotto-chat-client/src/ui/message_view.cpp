@@ -19,6 +19,13 @@ namespace grotto::ui {
 
 namespace {
 
+std::string no_messages_label() {
+    if (i18n::current_language() == "fi") {
+        return "(ei viestejä)";
+    }
+    return "(no messages)";
+}
+
 static std::string format_ts(int64_t ms, const std::string& fmt) {
     if (ms == 0) return "[--:--]";
     time_t secs = static_cast<time_t>(ms / 1000);
@@ -319,12 +326,12 @@ Element render_messages(const ChannelState& state,
                         int selected_end_row,
                         int selected_end_col) {
     if (state.messages.empty()) {
-        return text(i18n::tr(i18n::I18nKey::NO_MESSAGES)) | color(palette::comment()) | center;
+        return text(no_messages_label()) | color(palette::comment()) | center;
     }
 
     auto all_rows = flatten_message_rows(state, channel_id, local_user_id, timestamp_format, width);
     if (all_rows.empty()) {
-        return text(i18n::tr(i18n::I18nKey::NO_MESSAGES)) | color(palette::comment()) | center;
+        return text(no_messages_label()) | color(palette::comment()) | center;
     }
 
     const auto [top_idx, bottom_idx] = visible_row_window(

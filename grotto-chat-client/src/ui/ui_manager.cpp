@@ -435,9 +435,11 @@ void UIManager::toggle_user_list() {
 
 void UIManager::toggle_files_panel() {
     if (side_panel_mode_ == SidePanelMode::Files) {
+        files_filter_editing_ = false;
         side_panel_mode_ = SidePanelMode::None;
         return;
     }
+    files_filter_editing_ = false;
     side_panel_mode_ = SidePanelMode::Files;
     last_files_refresh_channel_.clear();
     refresh_quota_summary();
@@ -447,6 +449,7 @@ void UIManager::toggle_files_panel() {
 }
 
 void UIManager::show_files_panel() {
+    files_filter_editing_ = false;
     side_panel_mode_ = SidePanelMode::Files;
     last_files_refresh_channel_.clear();
     refresh_quota_summary();
@@ -1108,6 +1111,45 @@ void UIManager::set_selected_file_id(const std::string& channel_id, std::string 
     selected_file_ids_[channel_id] = std::move(file_id);
 }
 
+std::string UIManager::file_filter_text(const std::string& channel_id) const {
+    auto it = file_filter_texts_.find(channel_id);
+    return it != file_filter_texts_.end() ? it->second : std::string{};
+}
+
+void UIManager::set_file_filter_text(const std::string& channel_id, std::string text) {
+    if (text.empty()) {
+        file_filter_texts_.erase(channel_id);
+    } else {
+        file_filter_texts_[channel_id] = std::move(text);
+    }
+}
+
+std::vector<RemoteFileEntry> UIManager::visible_files_for_channel(const std::string& channel_id) const {
+    auto files = state_.channel_files(channel_id);
+    const auto filter = file_filter_text(channel_id);
+    if (filter.empty()) {
+        return files;
+    }
+
+    std::string lowered_filter = filter;
+    std::transform(lowered_filter.begin(), lowered_filter.end(), lowered_filter.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    std::vector<RemoteFileEntry> filtered;
+    filtered.reserve(files.size());
+    for (const auto& file : files) {
+        std::string haystack = file.filename + "\n" + file.file_id + "\n" + file.sender_id + "\n" + file.mime_type;
+        std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (haystack.find(lowered_filter) != std::string::npos) {
+            filtered.push_back(file);
+        }
+    }
+    return filtered;
+}
+
 void UIManager::refresh_files_for_channel_if_needed(const std::string& channel_id) {
     if (channel_id.empty() || is_server_channel(channel_id) || !files_refresh_handler_) {
         return;
@@ -1156,7 +1198,7 @@ void UIManager::move_file_selection(int delta) {
         return;
     }
 
-    const auto files = state_.channel_files(channel_id);
+    const auto files = visible_files_for_channel(channel_id);
     if (files.empty()) {
         return;
     }
@@ -1184,7 +1226,7 @@ void UIManager::activate_selected_file_download() {
         return;
     }
 
-    const auto files = state_.channel_files(channel_id);
+    const auto files = visible_files_for_channel(channel_id);
     if (files.empty()) {
         return;
     }
@@ -1208,7 +1250,7 @@ void UIManager::activate_selected_file_delete() {
     if (channel_id.empty()) {
         return;
     }
-    const auto files = state_.channel_files(channel_id);
+    const auto files = visible_files_for_channel(channel_id);
     if (files.empty()) {
         return;
     }
@@ -1337,7 +1379,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
         layout.push_back(separator());
         files_panel_divider_x_ = next_x;
         next_x += 1;
-        const auto files = state_.channel_files(active_ch);
+        const auto files = visible_files_for_channel(active_ch);
         if (files.empty()) {
             selected_file_ids_.erase(active_ch);
         } else if (!selected_file_id(active_ch).has_value()) {
@@ -1346,6 +1388,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
         auto files_el = render_files_panel(files,
                                            side_panel_width,
                                            selected_file_id(active_ch),
+                                           file_filter_text(active_ch),
                                            quota_summary_provider_ ? quota_summary_provider_() : std::string{},
                                            file_positions_,
                                            next_x,
@@ -1436,6 +1479,7 @@ Element UIManager::build_document(int term_rows) {
     auto active_ch = state_.active_channel().value_or("");
 
     if (active_ch != last_active_channel_) {
+        files_filter_editing_ = false;
         has_persistent_text_selection_ = false;
         mouse_tracker_.end_selection();
         last_active_channel_ = active_ch;
@@ -1771,6 +1815,13 @@ void UIManager::run(SubmitFn on_submit,
             copy_selection_to_clipboard();
             return true;
         }
+        if (event.input() == "\x06") {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+                files_filter_editing_ = true;
+                notify();
+                return true;
+            }
+        }
         if (event.input() == "\x04") {
             return true;
         }
@@ -1808,7 +1859,7 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (event == Event::Return) {
-            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files && !files_filter_editing_) {
                 activate_selected_file_download();
                 notify();
                 return true;
@@ -1823,23 +1874,39 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
-            if (event == Event::Character("r") || event == Event::Character("R")) {
+            const auto active_ch = state_.active_channel().value_or("");
+            if (!files_filter_editing_ && (event == Event::Character("r") || event == Event::Character("R"))) {
                 force_refresh_active_files();
                 notify();
                 return true;
             }
-            if (event == Event::Character("d") || event == Event::Character("D")) {
+            if (!files_filter_editing_ && (event == Event::Character("d") || event == Event::Character("D"))) {
                 activate_selected_file_delete();
                 notify();
                 return true;
             }
-            if (event == Event::Character("o") || event == Event::Character("O")) {
+            if (!files_filter_editing_ && (event == Event::Character("o") || event == Event::Character("O"))) {
                 open_downloads_folder();
                 notify();
                 return true;
             }
         }
         if (event == Event::Backspace) {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files && files_filter_editing_) {
+                const auto active_ch = state_.active_channel().value_or("");
+                if (!active_ch.empty()) {
+                    auto filter = file_filter_text(active_ch);
+                    if (!filter.empty()) {
+                        filter.pop_back();
+                        set_file_filter_text(active_ch, std::move(filter));
+                        notify();
+                        return true;
+                    }
+                    files_filter_editing_ = false;
+                    notify();
+                    return true;
+                }
+            }
             tab_completer_.reset();
             input_line_.backspace();
             notify_input_changed();
@@ -1847,6 +1914,13 @@ void UIManager::run(SubmitFn on_submit,
         }
         if (event == Event::Delete) {
             if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+                const auto active_ch = state_.active_channel().value_or("");
+                if (files_filter_editing_ && !active_ch.empty() && !file_filter_text(active_ch).empty()) {
+                    set_file_filter_text(active_ch, "");
+                    notify();
+                    return true;
+                }
+                files_filter_editing_ = false;
                 activate_selected_file_delete();
                 notify();
                 return true;
@@ -1865,7 +1939,7 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (event == Event::ArrowUp) {
-            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files && !files_filter_editing_) {
                 move_file_selection(-1);
                 return true;
             }
@@ -1875,7 +1949,7 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (event == Event::ArrowDown) {
-            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files && !files_filter_editing_) {
                 move_file_selection(1);
                 return true;
             }
@@ -1932,12 +2006,42 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (event == Event::Escape) {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+                const auto active_ch = state_.active_channel().value_or("");
+                if (files_filter_editing_) {
+                    files_filter_editing_ = false;
+                    if (!active_ch.empty() && !file_filter_text(active_ch).empty()) {
+                        set_file_filter_text(active_ch, "");
+                    }
+                    notify();
+                    return true;
+                }
+                if (!active_ch.empty() && !file_filter_text(active_ch).empty()) {
+                    set_file_filter_text(active_ch, "");
+                    notify();
+                    return true;
+                }
+            }
             quit_confirm_visible_ = true;
             return true;
         }
         if (event.is_character()) {
             std::string text = event.character();
             if (!text.empty()) {
+                if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files && files_filter_editing_) {
+                    const auto active_ch = state_.active_channel().value_or("");
+                    if (!active_ch.empty()) {
+                        auto filter = file_filter_text(active_ch);
+                        filter += text;
+                        set_file_filter_text(active_ch, std::move(filter));
+                        const auto visible_files = visible_files_for_channel(active_ch);
+                        if (!visible_files.empty()) {
+                            set_selected_file_id(active_ch, visible_files.front().file_id);
+                        }
+                        notify();
+                        return true;
+                    }
+                }
                 tab_completer_.reset();
                 input_line_.insert_text(text);
                 notify_input_changed();
