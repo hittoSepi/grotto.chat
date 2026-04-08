@@ -357,6 +357,20 @@ void Session::handle_envelope(const Envelope& env) {
         }
         break;
 
+    case MT_READ_RECEIPT:
+        if (state_ == SessionState::Established) {
+            ReadReceipt receipt;
+            if (!env.payload().empty() && receipt.ParseFromArray(
+                    env.payload().data(), static_cast<int>(env.payload().size()))) {
+                handle_read_receipt(receipt, env);
+            } else {
+                send_error(4038, "Invalid READ_RECEIPT");
+            }
+        } else {
+            send_error(4039, "Not authenticated");
+        }
+        break;
+
     case MT_CHAT_ENVELOPE:
         spdlog::debug("[{}] MT_CHAT_ENVELOPE received, state={}, user_id={}",
             remote_endpoint_, static_cast<int>(state_), user_id_);
@@ -1411,6 +1425,38 @@ void Session::handle_typing(const TypingUpdate& typing, const Envelope& raw) {
     auto recipient_session = server_ctx_.find_session(target);
     if (recipient_session) {
         recipient_session->send(raw);
+    }
+}
+
+void Session::handle_read_receipt(const ReadReceipt& receipt, const Envelope& raw) {
+    if (receipt.reader_id() != user_id_) {
+        spdlog::warn("[{}] ReadReceipt reader mismatch: claimed={}, actual={}",
+            remote_endpoint_, receipt.reader_id(), user_id_);
+        send_error(4042, "Reader ID mismatch");
+        disconnect("Read receipt spoofing attempt");
+        return;
+    }
+
+    if (receipt.target_id().empty() || receipt.message_id().empty()) {
+        send_error(4043, "Invalid read receipt");
+        return;
+    }
+
+    if (!receipt.target_id().empty() && receipt.target_id().front() == '#') {
+        send_error(4044, "Read receipts only support DMs");
+        return;
+    }
+
+    auto recipient_session = server_ctx_.find_session(receipt.target_id());
+    if (recipient_session) {
+        recipient_session->send(raw);
+        return;
+    }
+
+    std::vector<uint8_t> payload(raw.ByteSizeLong());
+    raw.SerializeToArray(payload.data(), static_cast<int>(payload.size()));
+    if (!server_ctx_.offline_store().save(receipt.target_id(), payload)) {
+        send_error(4045, "Recipient offline queue full");
     }
 }
 

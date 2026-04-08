@@ -41,6 +41,33 @@ void AppState::push_message(const std::string& channel_id, Message msg) {
     }
 }
 
+bool AppState::mark_direct_messages_read_by_remote(const std::string& channel_id,
+                                                   const std::string& local_user_id,
+                                                   const std::string& message_id,
+                                                   int64_t read_at_ms) {
+    std::unique_lock lk(mu_);
+    auto it = channels_.find(channel_id);
+    if (it == channels_.end() || message_id.empty()) {
+        return false;
+    }
+
+    bool found_target = false;
+    for (auto& msg : it->second.messages) {
+        if (msg.type != Message::Type::Chat) {
+            continue;
+        }
+        if (msg.sender_id == local_user_id) {
+            msg.read_by_remote = true;
+            msg.read_at_ms = std::max(msg.read_at_ms, read_at_ms);
+        }
+        if (msg.message_id == message_id) {
+            found_target = true;
+            break;
+        }
+    }
+    return found_target;
+}
+
 std::optional<std::string> AppState::active_channel() const {
     std::shared_lock lk(mu_);
     if (active_channel_.empty()) return std::nullopt;

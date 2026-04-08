@@ -26,9 +26,12 @@ struct MessageRenderPart {
 };
 
 struct Message {
+    std::string message_id;
     std::string sender_id;
     std::string content;
     int64_t     timestamp_ms = 0;
+    bool        read_by_remote = false;
+    int64_t     read_at_ms = 0;
 
     enum class Type { Chat, System, VoiceEvent, Preview } type = Type::Chat;
 

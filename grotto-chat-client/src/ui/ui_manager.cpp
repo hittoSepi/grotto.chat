@@ -1373,6 +1373,9 @@ Element UIManager::build_document(int term_rows) {
         has_persistent_text_selection_ = false;
         mouse_tracker_.end_selection();
         last_active_channel_ = active_ch;
+        if (active_channel_changed_handler_) {
+            active_channel_changed_handler_(active_ch);
+        }
         if (side_panel_mode_ == SidePanelMode::Files) {
             last_files_refresh_channel_.clear();
             refresh_files_for_channel_if_needed(active_ch);
@@ -1588,7 +1591,9 @@ void UIManager::run(SubmitFn on_submit,
                     std::function<void(int)> on_channel_switch,
                     ChannelCycleFn on_channel_cycle,
                     PttToggleFn on_ptt_toggle,
-                    OpenSettingsFn on_open_settings) {
+                    OpenSettingsFn on_open_settings,
+                    ActiveChannelChangedFn on_active_channel_changed) {
+    active_channel_changed_handler_ = std::move(on_active_channel_changed);
     ui_thread_id_ = std::this_thread::get_id();
 #ifndef _WIN32
     // Re-assert swallow handlers at UI loop boundary.

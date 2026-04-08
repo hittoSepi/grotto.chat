@@ -70,6 +70,10 @@ public:
     // ── Channels ─────────────────────────────────────────────────────────
     void ensure_channel(const std::string& channel_id);
     void push_message(const std::string& channel_id, Message msg);
+    bool mark_direct_messages_read_by_remote(const std::string& channel_id,
+                                             const std::string& local_user_id,
+                                             const std::string& message_id,
+                                             int64_t read_at_ms);
     std::optional<std::string> active_channel() const;
     void set_active_channel(const std::string& channel_id);
     std::vector<std::string> channel_list() const;

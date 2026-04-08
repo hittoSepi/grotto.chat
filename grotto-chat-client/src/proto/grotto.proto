@@ -29,6 +29,7 @@ enum MessageType {
   // Presence
   MT_PRESENCE         = 30;  // Presence updates (online/away/offline)
   MT_TYPING           = 31;  // Typing indicator relay
+  MT_READ_RECEIPT     = 32;  // DM read receipt relay
 
   // Voice signaling
   MT_VOICE_SIGNAL     = 40;  // ICE/SDP relay for WebRTC
@@ -125,6 +126,7 @@ message ChatEnvelope {
   bytes  ciphertext    = 3;  // Signal Protocol ciphertext
   uint32 ciphertext_type = 4; // WHISPER_MESSAGE=1, PRE_KEY_MESSAGE=3, SENDER_KEY=4
   bytes  skdm          = 5;  // SenderKeyDistributionMessage (type=4, first send only)
+  string message_id    = 6;  // Client-generated message ID for receipts
 }
 
 // Presence messages
@@ -143,6 +145,13 @@ message TypingUpdate {
   string sender_id = 1;
   string target_id = 2;   // "#channel" or DM recipient user_id
   bool is_typing = 3;
+}
+
+message ReadReceipt {
+  string reader_id = 1;    // User who read the DM
+  string target_id = 2;    // Original sender to notify
+  string message_id = 3;   // Latest seen DM message from target
+  int64 read_at_ms = 4;    // When the message was read
 }
 
 // Voice signaling messages

@@ -62,6 +62,7 @@ constexpr bool kDefaultSoundAlerts = true;
 constexpr bool kDefaultNotifyMention = true;
 constexpr bool kDefaultNotifyDM = true;
 constexpr bool kDefaultShareTypingIndicators = true;
+constexpr bool kDefaultShareReadReceipts = true;
 constexpr bool kDefaultShowTimestamps = true;
 constexpr bool kDefaultShowUserColors = true;
 constexpr int kDefaultFontScale = 100;
@@ -432,6 +433,7 @@ void SettingsScreen::build_ui() {
     mention_cb_ = Checkbox(i18n::tr(i18n::I18nKey::NOTIFY_ON_MENTION), &notify_on_mention_);
     dm_cb_ = Checkbox(i18n::tr(i18n::I18nKey::NOTIFY_ON_DM), &notify_on_dm_);
     share_typing_indicators_cb_ = Checkbox(i18n::tr(i18n::I18nKey::SHARE_TYPING_INDICATORS), &share_typing_indicators_);
+    share_read_receipts_cb_ = Checkbox(i18n::tr(i18n::I18nKey::SHARE_READ_RECEIPTS), &share_read_receipts_);
 
     // Account action buttons (created once, not per-render)
     export_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_EXPORT_SETTINGS), [this] { export_settings(); });
@@ -489,6 +491,7 @@ void SettingsScreen::build_ui() {
         mention_cb_,
         dm_cb_,
         share_typing_indicators_cb_,
+        share_read_receipts_cb_,
         keywords_input_,
         nickname_input_,
         language_toggle_,
@@ -723,6 +726,7 @@ Element SettingsScreen::render_notifications() {
 Element SettingsScreen::render_privacy() {
     return vbox({
         share_typing_indicators_cb_->Render(),
+        share_read_receipts_cb_->Render(),
         text(""),
         text(i18n::tr(i18n::I18nKey::PRIVACY_NOTE)) | color(palette::comment()) | dim,
     });
@@ -849,6 +853,7 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
 
     // Privacy
     share_typing_indicators_ = cfg.privacy.share_typing_indicators;
+    share_read_receipts_ = cfg.privacy.share_read_receipts;
     
     // Account
     nickname_ = cfg.identity.user_id;
@@ -928,6 +933,7 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
 
     // Privacy
     cfg.privacy.share_typing_indicators = share_typing_indicators_;
+    cfg.privacy.share_read_receipts = share_read_receipts_;
     
     // Account
     if (!nickname_.empty() && nickname_ != cfg.identity.user_id) {
@@ -989,6 +995,7 @@ void SettingsScreen::reset_to_defaults() {
     notify_on_dm_ = kDefaultNotifyDM;
     mention_keywords_ = nickname_;
     share_typing_indicators_ = kDefaultShareTypingIndicators;
+    share_read_receipts_ = kDefaultShareReadReceipts;
 }
 
 void SettingsScreen::export_settings() {
@@ -1032,6 +1039,7 @@ void SettingsScreen::export_settings() {
         data["notifications"]["on_mention"] = notify_on_mention_;
         data["notifications"]["keywords"] = mention_keywords_;
         data["privacy"]["share_typing_indicators"] = share_typing_indicators_;
+        data["privacy"]["share_read_receipts"] = share_read_receipts_;
         
         std::ofstream ofs(export_path);
         ofs << data;
@@ -1145,6 +1153,9 @@ void SettingsScreen::import_settings() {
             auto& privacy = data.at("privacy");
             if (privacy.contains("share_typing_indicators")) {
                 share_typing_indicators_ = toml::find<bool>(privacy, "share_typing_indicators");
+            }
+            if (privacy.contains("share_read_receipts")) {
+                share_read_receipts_ = toml::find<bool>(privacy, "share_read_receipts");
             }
         }
         

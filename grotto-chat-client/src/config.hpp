@@ -84,6 +84,7 @@ struct NotificationConfig {
 
 struct PrivacyConfig {
     bool        share_typing_indicators = true;
+    bool        share_read_receipts = true;
 };
 
 struct ClientConfig {

@@ -58,6 +58,10 @@ public:
     void set_file_error_callback(FileErrorFn fn) { file_error_fn_ = std::move(fn); }
     using TypingFn = std::function<void(const TypingUpdate&)>;
     void set_typing_callback(TypingFn fn) { typing_fn_ = std::move(fn); }
+    using ReadReceiptFn = std::function<void(const ReadReceipt&)>;
+    void set_read_receipt_callback(ReadReceiptFn fn) { read_receipt_fn_ = std::move(fn); }
+    using DmReadCandidateFn = std::function<void(const std::string&, const Message&)>;
+    void set_dm_read_candidate_callback(DmReadCandidateFn fn) { dm_read_candidate_fn_ = std::move(fn); }
 
     // File transfer manager (optional)
     void set_file_transfer_manager(client::file::FileTransferManager* ftm) { file_mgr_ = ftm; }
@@ -71,7 +75,9 @@ public:
 
     // Send KEY_REQUEST for a DM recipient and track the pending plaintext
     // so it can be sent once the KEY_BUNDLE arrives.
-    void request_key(const std::string& recipient_id, const std::string& plaintext);
+    void request_key(const std::string& recipient_id,
+                     const std::string& plaintext,
+                     const std::string& message_id = {});
     void request_file_list(const std::string& recipient_id,
                            const std::string& channel_id,
                            uint32_t limit = 50);
@@ -85,6 +91,7 @@ private:
     void handle_auth_fail(const Envelope& env);
     void handle_chat(const Envelope& env);
     void handle_typing(const Envelope& env);
+    void handle_read_receipt(const Envelope& env);
     void handle_key_bundle(const Envelope& env);
     void handle_presence(const Envelope& env);
     void handle_voice_signal(const Envelope& env);
@@ -124,6 +131,8 @@ private:
     FileChangedFn        file_changed_fn_;
     FileErrorFn          file_error_fn_;
     TypingFn             typing_fn_;
+    ReadReceiptFn        read_receipt_fn_;
+    DmReadCandidateFn    dm_read_candidate_fn_;
 
     bool   authenticated_ = false;
     bool   onboarding_shown_ = false;
@@ -131,7 +140,11 @@ private:
 
     // Pending KEY_REQUEST recipients (to flush when KEY_BUNDLE arrives)
     // Stores multiple queued plaintexts per recipient
-    std::unordered_map<std::string, std::vector<std::string>> pending_sends_;
+    struct PendingSend {
+        std::string plaintext;
+        std::string message_id;
+    };
+    std::unordered_map<std::string, std::vector<PendingSend>> pending_sends_;
 };
 
 } // namespace grotto::net

@@ -242,6 +242,25 @@ std::vector<LayoutRow> render_one_message(const Message& msg,
         ++block_index;
     }
 
+    if (msg.type == Message::Type::Chat && msg.read_by_remote) {
+        const std::string ts_prefix(ts.size(), ' ');
+        const std::string nick_prefix(visible_width("<" + msg.sender_id + "> "), ' ');
+        const std::string label = i18n::tr(i18n::I18nKey::READ_RECEIPT_READ);
+        rows.push_back({
+            message_index,
+            block_index,
+            LayoutBlockKind::Text,
+            ts_prefix + nick_prefix + label,
+            std::nullopt,
+            false,
+            hbox({
+                text(ts_prefix) | color(palette::comment()),
+                text(nick_prefix),
+                text(label) | color(palette::comment()) | dim,
+            }),
+        });
+    }
+
     return rows;
 }
 

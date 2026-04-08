@@ -89,9 +89,14 @@ private:
     void request_quota_summary();
     std::string files_panel_quota_summary() const;
     void handle_typing_update(const TypingUpdate& typing);
+    void handle_read_receipt(const ReadReceipt& receipt);
+    void track_dm_read_candidate(const std::string& channel_id, const Message& msg);
+    void on_active_channel_changed(const std::string& channel_id);
     std::string build_typing_summary() const;
     void stop_local_typing();
     void send_typing_update(const std::string& target, bool is_typing);
+    void send_read_receipt(const std::string& target, const std::string& message_id);
+    void flush_pending_read_receipt_for_channel(const std::string& channel_id);
     void schedule_remote_typing_cleanup();
     void prune_remote_typing_locked(std::chrono::steady_clock::time_point now) const;
 
@@ -140,6 +145,8 @@ private:
     std::string quota_summary_text_;
     mutable std::mutex typing_mu_;
     mutable std::unordered_map<std::string, std::unordered_map<std::string, std::chrono::steady_clock::time_point>> remote_typing_;
+    mutable std::mutex pending_read_receipts_mu_;
+    std::unordered_map<std::string, std::string> pending_read_receipts_;
     std::string local_typing_target_;
     bool local_typing_active_ = false;
     std::chrono::steady_clock::time_point last_typing_sent_{};

@@ -115,6 +115,7 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::NOTIFY_ON_MENTION, "Notify on mentions"},
     {I18nKey::NOTIFY_ON_DM, "Notify on direct messages"},
     {I18nKey::SHARE_TYPING_INDICATORS, "Share typing indicators"},
+    {I18nKey::SHARE_READ_RECEIPTS, "Share read receipts"},
 
     // Settings buttons
     {I18nKey::BUTTON_SAVE, "[ SAVE ]"},
@@ -187,6 +188,7 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::COMMAND_RESPONSE, "Command {0}: {1}"},
     {I18nKey::FILE_TRANSFER_COMPLETED, "File transfer completed: {0}"},
     {I18nKey::FILE_TRANSFER_ERROR, "File transfer error: {0}"},
+    {I18nKey::READ_RECEIPT_READ, "Read"},
 
     // Status bar
     {I18nKey::USERS_COUNT, "{0} users"},
@@ -325,6 +327,7 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::NOTIFY_ON_MENTION, "Ilmoita maininnoista"},
     {I18nKey::NOTIFY_ON_DM, "Ilmoita yksityisviesteistä"},
     {I18nKey::SHARE_TYPING_INDICATORS, "Jaa kirjoitusindikaattorit"},
+    {I18nKey::SHARE_READ_RECEIPTS, "Jaa lukukuittaukset"},
 
     // Settings buttons
     {I18nKey::BUTTON_SAVE, "[ TALLENNA ]"},
@@ -397,6 +400,7 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::COMMAND_RESPONSE, "Komento {0}: {1}"},
     {I18nKey::FILE_TRANSFER_COMPLETED, "Tiedostonsiirto valmis: {0}"},
     {I18nKey::FILE_TRANSFER_ERROR, "Tiedostonsiirtovirhe: {0}"},
+    {I18nKey::READ_RECEIPT_READ, "Luettu"},
 
     // Status bar
     {I18nKey::USERS_COUNT, "{0} käyttäjää"},

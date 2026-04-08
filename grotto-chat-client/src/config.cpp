@@ -146,6 +146,9 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (p.contains("share_typing_indicators")) {
                 cfg.privacy.share_typing_indicators = toml::find<bool>(p, "share_typing_indicators");
             }
+            if (p.contains("share_read_receipts")) {
+                cfg.privacy.share_read_receipts = toml::find<bool>(p, "share_read_receipts");
+            }
         }
 
     } catch (const std::exception& e) {
@@ -308,6 +311,7 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
 
     // Patch privacy section
     data["privacy"]["share_typing_indicators"] = cfg.privacy.share_typing_indicators;
+    data["privacy"]["share_read_receipts"] = cfg.privacy.share_read_receipts;
 
     try {
         std::filesystem::create_directories(path.parent_path());
@@ -382,6 +386,7 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["notifications"]["mention_keywords"] = cfg.notifications.mention_keywords;
 
         data["privacy"]["share_typing_indicators"] = cfg.privacy.share_typing_indicators;
+        data["privacy"]["share_read_receipts"] = cfg.privacy.share_read_receipts;
         
         std::filesystem::create_directories(path.parent_path());
         std::ofstream ofs(path);
@@ -486,6 +491,9 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             auto& p = data.at("privacy");
             if (p.contains("share_typing_indicators")) {
                 cfg.privacy.share_typing_indicators = toml::find<bool>(p, "share_typing_indicators");
+            }
+            if (p.contains("share_read_receipts")) {
+                cfg.privacy.share_read_receipts = toml::find<bool>(p, "share_read_receipts");
             }
         }
         

@@ -18,6 +18,7 @@
 #include <thread>
 #include <functional>
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <optional>
@@ -237,6 +238,18 @@ std::filesystem::path default_download_path_for_file(std::string_view file_id,
 
 std::filesystem::path default_downloads_dir() {
     return std::filesystem::path("downloads");
+}
+
+std::string generate_message_id() {
+    std::array<unsigned char, 16> bytes{};
+    randombytes_buf(bytes.data(), bytes.size());
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string out(bytes.size() * 2, '\0');
+    for (size_t i = 0; i < bytes.size(); ++i) {
+        out[i * 2] = kHex[(bytes[i] >> 4) & 0x0F];
+        out[i * 2 + 1] = kHex[bytes[i] & 0x0F];
+    }
+    return out;
 }
 
 std::string transfer_state_label(client::file::TransferState state) {
@@ -482,6 +495,10 @@ bool App::init(const std::filesystem::path& config_path,
             std::lock_guard lk(typing_mu_);
             remote_typing_.clear();
         }
+        {
+            std::lock_guard lk(pending_read_receipts_mu_);
+            pending_read_receipts_.clear();
+        }
         log_server_event("Disconnected: " + reason, true);
     };
 
@@ -511,6 +528,12 @@ bool App::init(const std::filesystem::path& config_path,
     });
     msg_handler_->set_typing_callback([this](const TypingUpdate& typing) {
         handle_typing_update(typing);
+    });
+    msg_handler_->set_read_receipt_callback([this](const ReadReceipt& receipt) {
+        handle_read_receipt(receipt);
+    });
+    msg_handler_->set_dm_read_candidate_callback([this](const std::string& channel_id, const Message& msg) {
+        track_dm_read_candidate(channel_id, msg);
     });
     msg_handler_->set_preview_callback([this](const std::string& channel_id, const std::string& text) {
         trigger_previews(channel_id, text);
@@ -600,7 +623,8 @@ int App::run() {
         [this](int idx)                  { switch_to_channel_by_index(idx); },
         [this](int delta)                { switch_channel(delta); },
         [this](bool active)              { voice_->set_ptt_active(active); },
-        [this]()                         { open_settings(); }
+        [this]()                         { open_settings(); },
+        [this](const std::string& ch)    { on_active_channel_changed(ch); }
     );
 
     // ── Shutdown ─────────────────────────────────────────────────────────
@@ -1119,9 +1143,11 @@ void App::send_chat(const std::string& text) {
     }
 
     const std::string& local_id = cfg_.identity.user_id;
+    const std::string message_id = generate_message_id();
 
     // Show immediately in local UI
     Message local_msg;
+    local_msg.message_id   = message_id;
     local_msg.sender_id    = local_id;
     local_msg.content      = text;
     local_msg.type         = Message::Type::Chat;
@@ -1145,11 +1171,12 @@ void App::send_chat(const std::string& text) {
     // the plaintext and sends KEY_REQUEST; the message is flushed when
     // KEY_BUNDLE arrives in handle_key_bundle).
     auto env = crypto_->encrypt(local_id, active, text,
-        [this, text](const std::string& recipient_id) {
-            msg_handler_->request_key(recipient_id, text);
+        [this, text, message_id](const std::string& recipient_id) {
+            msg_handler_->request_key(recipient_id, text, message_id);
         });
 
     if (!env.sender_id().empty()) {
+        env.set_message_id(message_id);
         Envelope wire;
         wire.set_type(MT_CHAT_ENVELOPE);
         wire.set_payload(env.SerializeAsString());
@@ -1392,6 +1419,7 @@ void App::open_settings() {
     // Get public key for display
     std::string pubkey_hex = get_public_key_hex();
     const bool was_sharing_typing = cfg_.privacy.share_typing_indicators;
+    const bool was_sharing_receipts = cfg_.privacy.share_read_receipts;
     
     // Create a new screen for settings (modal)
     ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
@@ -1406,6 +1434,9 @@ void App::open_settings() {
             refresh_runtime_capabilities();
             if (was_sharing_typing && !cfg_.privacy.share_typing_indicators) {
                 stop_local_typing();
+            }
+            if (!was_sharing_receipts && cfg_.privacy.share_read_receipts) {
+                on_active_channel_changed(state_.active_channel().value_or(""));
             }
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::SETTINGS_SAVED));
             break;
@@ -1630,6 +1661,89 @@ void App::handle_typing_update(const TypingUpdate& typing) {
     if (ui_) {
         ui_->notify();
     }
+}
+
+void App::handle_read_receipt(const ReadReceipt& receipt) {
+    if (receipt.reader_id().empty() ||
+        receipt.target_id() != cfg_.identity.user_id ||
+        receipt.message_id().empty()) {
+        return;
+    }
+
+    const std::string channel_id = receipt.reader_id();
+    state_.post_ui([this, channel_id, message_id = receipt.message_id(), read_at_ms = receipt.read_at_ms()]() {
+        if (state_.mark_direct_messages_read_by_remote(
+                channel_id, cfg_.identity.user_id, message_id, read_at_ms)) {
+            if (ui_) {
+                ui_->notify();
+            }
+        }
+    });
+}
+
+void App::track_dm_read_candidate(const std::string& channel_id, const Message& msg) {
+    if (!is_direct_target(channel_id) || msg.message_id.empty()) {
+        return;
+    }
+
+    const std::string active = canonical_channel_id(state_.active_channel().value_or(""));
+    if (cfg_.privacy.share_read_receipts && active == channel_id) {
+        send_read_receipt(channel_id, msg.message_id);
+        return;
+    }
+
+    std::lock_guard lk(pending_read_receipts_mu_);
+    pending_read_receipts_[channel_id] = msg.message_id;
+}
+
+void App::on_active_channel_changed(const std::string& channel_id) {
+    stop_local_typing();
+    flush_pending_read_receipt_for_channel(canonical_channel_id(channel_id));
+}
+
+void App::send_read_receipt(const std::string& target, const std::string& message_id) {
+    if (!cfg_.privacy.share_read_receipts ||
+        target.empty() ||
+        !is_direct_target(target) ||
+        message_id.empty() ||
+        !net_client_ ||
+        !msg_handler_ ||
+        !msg_handler_->is_authenticated() ||
+        !net_client_->is_connected()) {
+        return;
+    }
+
+    ReadReceipt receipt;
+    receipt.set_reader_id(cfg_.identity.user_id);
+    receipt.set_target_id(target);
+    receipt.set_message_id(message_id);
+    receipt.set_read_at_ms(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count());
+
+    Envelope env;
+    env.set_type(MT_READ_RECEIPT);
+    env.set_payload(receipt.SerializeAsString());
+    env.set_timestamp_ms(receipt.read_at_ms());
+    net_client_->send(env);
+}
+
+void App::flush_pending_read_receipt_for_channel(const std::string& channel_id) {
+    if (!cfg_.privacy.share_read_receipts || !is_direct_target(channel_id)) {
+        return;
+    }
+
+    std::string message_id;
+    {
+        std::lock_guard lk(pending_read_receipts_mu_);
+        auto it = pending_read_receipts_.find(channel_id);
+        if (it == pending_read_receipts_.end()) {
+            return;
+        }
+        message_id = std::move(it->second);
+        pending_read_receipts_.erase(it);
+    }
+
+    send_read_receipt(channel_id, message_id);
 }
 
 void App::request_remote_files_for_target(const std::string& target, bool echo_to_chat) {

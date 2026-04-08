@@ -33,6 +33,7 @@ using InputChangedFn = std::function<void(const std::string&)>;
 using PttToggleFn = std::function<void(bool)>;
 using OpenSettingsFn = std::function<void()>;
 using ChannelCycleFn = std::function<void(int)>;
+using ActiveChannelChangedFn = std::function<void(const std::string&)>;
 
 // UIManager owns the FTXUI ScreenInteractive and builds the full UI component.
 // Call run() from the main thread — it blocks until the user quits.
@@ -49,7 +50,8 @@ public:
              std::function<void(int)> on_channel_switch = {},
              ChannelCycleFn on_channel_cycle = {},
              PttToggleFn on_ptt_toggle = {},
-             OpenSettingsFn on_open_settings = {});
+             OpenSettingsFn on_open_settings = {},
+             ActiveChannelChangedFn on_active_channel_changed = {});
 
     // Push a system message to the active (or server) channel.
     // Thread-safe: safe to call from IO/preview threads.
@@ -194,6 +196,7 @@ private:
     std::function<std::string()> quota_summary_provider_;
     std::function<void()> quota_refresh_handler_;
     std::function<std::string()> typing_summary_provider_;
+    ActiveChannelChangedFn active_channel_changed_handler_;
     std::string toast_text_;
     std::chrono::steady_clock::time_point toast_until_{};
     bool quit_confirm_visible_ = false;

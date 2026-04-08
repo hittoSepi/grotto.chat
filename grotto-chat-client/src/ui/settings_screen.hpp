@@ -138,6 +138,7 @@ private:
 
     // === Privacy Settings ===
     bool share_typing_indicators_ = true;
+    bool share_read_receipts_ = true;
 
     // === Account Settings ===
     std::string nickname_;
@@ -192,6 +193,7 @@ private:
     ftxui::Component mention_cb_;
     ftxui::Component dm_cb_;
     ftxui::Component share_typing_indicators_cb_;
+    ftxui::Component share_read_receipts_cb_;
 
     // Account action buttons (must persist across renders)
     ftxui::Component export_button_persistent_;

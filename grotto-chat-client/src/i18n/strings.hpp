@@ -111,6 +111,7 @@ enum class I18nKey {
     NOTIFY_ON_MENTION,
     NOTIFY_ON_DM,
     SHARE_TYPING_INDICATORS,
+    SHARE_READ_RECEIPTS,
 
     // Settings buttons
     BUTTON_SAVE,
@@ -183,6 +184,7 @@ enum class I18nKey {
     COMMAND_RESPONSE,
     FILE_TRANSFER_COMPLETED,
     FILE_TRANSFER_ERROR,
+    READ_RECEIPT_READ,
 
     // Status bar
     USERS_COUNT,

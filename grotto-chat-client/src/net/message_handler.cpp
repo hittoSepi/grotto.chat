@@ -35,6 +35,7 @@ void MessageHandler::dispatch(const Envelope& env) {
     case MT_AUTH_FAIL:      handle_auth_fail(env);      break;
     case MT_CHAT_ENVELOPE:  handle_chat(env);           break;
     case MT_TYPING:         handle_typing(env);         break;
+    case MT_READ_RECEIPT:   handle_read_receipt(env);   break;
     case MT_KEY_BUNDLE:     handle_key_bundle(env);     break;
     case MT_PRESENCE:       handle_presence(env);       break;
     case MT_VOICE_SIGNAL:      handle_voice_signal(env);      break;
@@ -199,6 +200,7 @@ void MessageHandler::handle_chat(const Envelope& env) {
     state_.ensure_channel(channel_id);
 
     Message msg;
+    msg.message_id   = chat.message_id();
     msg.sender_id   = chat.sender_id();
     msg.content     = plaintext;
     msg.timestamp_ms = static_cast<int64_t>(env.timestamp_ms());
@@ -252,9 +254,20 @@ void MessageHandler::handle_chat(const Envelope& env) {
         }
     }
 
+    const bool has_dm_candidate =
+        !channel_id.empty() &&
+        channel_id.front() != '#' &&
+        chat.sender_id() != cfg_.identity.user_id &&
+        !chat.message_id().empty();
+    const Message dm_candidate = has_dm_candidate ? msg : Message{};
+
     state_.post_ui([this, channel_id, m = std::move(msg)]() mutable {
         state_.push_message(channel_id, std::move(m));
     });
+
+    if (dm_read_candidate_fn_ && has_dm_candidate) {
+        dm_read_candidate_fn_(channel_id, dm_candidate);
+    }
 
     // Trigger link preview AFTER message is queued so preview appears below
     if (preview_fn_) {
@@ -300,16 +313,19 @@ void MessageHandler::handle_key_bundle(const Envelope& env) {
     auto it = pending_sends_.find(recipient_id);
     if (it == pending_sends_.end()) return;
 
-    std::vector<std::string> queued = std::move(it->second);
+    std::vector<PendingSend> queued = std::move(it->second);
     pending_sends_.erase(it);
 
     int sent = 0, failed = 0;
-    for (const auto& plaintext : queued) {
+    for (const auto& pending : queued) {
         ChatEnvelope chat = crypto_.encrypt(
-            cfg_.identity.user_id, recipient_id, plaintext,
+            cfg_.identity.user_id, recipient_id, pending.plaintext,
             [](const std::string&) { /* session exists now — no re-request needed */ });
 
         if (!chat.sender_id().empty()) {
+            if (!pending.message_id.empty()) {
+                chat.set_message_id(pending.message_id);
+            }
             send_envelope(MT_CHAT_ENVELOPE, chat);
             ++sent;
         } else {
@@ -324,9 +340,10 @@ void MessageHandler::handle_key_bundle(const Envelope& env) {
 }
 
 void MessageHandler::request_key(const std::string& recipient_id,
-                                  const std::string& plaintext) {
+                                 const std::string& plaintext,
+                                 const std::string& message_id) {
     bool first_request = pending_sends_.find(recipient_id) == pending_sends_.end();
-    pending_sends_[recipient_id].push_back(plaintext);
+    pending_sends_[recipient_id].push_back(PendingSend{plaintext, message_id});
 
     if (first_request) {
         // Only send KEY_REQUEST once per recipient (subsequent messages just queue)
@@ -424,6 +441,17 @@ void MessageHandler::handle_typing(const Envelope& env) {
     }
     if (typing_fn_) {
         typing_fn_(typing);
+    }
+}
+
+void MessageHandler::handle_read_receipt(const Envelope& env) {
+    ReadReceipt receipt;
+    if (!receipt.ParseFromString(env.payload())) {
+        spdlog::warn("Failed to parse ReadReceipt");
+        return;
+    }
+    if (read_receipt_fn_) {
+        read_receipt_fn_(receipt);
     }
 }
 
