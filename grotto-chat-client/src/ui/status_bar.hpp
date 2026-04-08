@@ -1,5 +1,6 @@
 #pragma once
 #include <ftxui/dom/elements.hpp>
+#include "state/app_state.hpp"
 #include <string>
 #include <vector>
 
@@ -8,6 +9,7 @@ namespace grotto::ui {
 struct StatusInfo {
     bool        connected      = false;
     bool        connecting     = false;
+    grotto::PresenceStatus local_presence = grotto::PresenceStatus::Offline;
     std::string local_user_id;
     std::string active_channel;
     bool        in_voice       = false;

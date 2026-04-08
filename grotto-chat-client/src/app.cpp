@@ -208,6 +208,17 @@ bool is_quota_error_message(std::string_view message) {
            message == "Server storage quota exceeded";
 }
 
+std::string dm_presence_notice(PresenceStatus status, std::string_view user_id) {
+    switch (status) {
+        case PresenceStatus::Away:
+            return std::string(user_id) + " is away right now.";
+        case PresenceStatus::Dnd:
+            return std::string(user_id) + " is in do not disturb right now.";
+        default:
+            return {};
+    }
+}
+
 std::string quota_preflight_message(std::string_view label, uint64_t file_size, uint64_t limit) {
     return "Upload blocked: file exceeds the " + std::string(label) + " (" +
            human_bytes(file_size) + " > " + human_bytes(limit) + ")";
@@ -1152,6 +1163,22 @@ void App::send_chat(const std::string& text) {
 
     const std::string& local_id = cfg_.identity.user_id;
     const std::string message_id = generate_message_id();
+
+    if (is_direct_target(active)) {
+        const auto peer_presence = state_.presence(active);
+        if (peer_presence == PresenceStatus::Away || peer_presence == PresenceStatus::Dnd) {
+            const auto last_notice = dm_presence_notice_status_.find(active);
+            if (last_notice == dm_presence_notice_status_.end() || last_notice->second != peer_presence) {
+                const std::string notice = dm_presence_notice(peer_presence, active);
+                if (!notice.empty()) {
+                    log_system_message(active, notice, false);
+                }
+                dm_presence_notice_status_[active] = peer_presence;
+            }
+        } else {
+            dm_presence_notice_status_.erase(active);
+        }
+    }
 
     // Show immediately in local UI
     Message local_msg;

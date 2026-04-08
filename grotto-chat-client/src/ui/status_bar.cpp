@@ -11,7 +11,13 @@ Element render_status_bar(const StatusInfo& info) {
     // Left side
     Elements left;
     if (info.connected) {
-        left.push_back(text("\u25CF ") | color(palette::online()));
+        auto status_color = palette::online();
+        if (info.local_presence == PresenceStatus::Away) {
+            status_color = palette::away_c();
+        } else if (info.local_presence == PresenceStatus::Dnd) {
+            status_color = palette::dnd_c();
+        }
+        left.push_back(text("\u25CF ") | color(status_color));
     } else if (info.connecting) {
         left.push_back(text("\u25D4 ") | color(palette::yellow()));
     } else {

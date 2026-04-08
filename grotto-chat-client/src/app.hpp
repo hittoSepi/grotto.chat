@@ -150,6 +150,7 @@ private:
     mutable std::unordered_map<std::string, std::unordered_map<std::string, std::chrono::steady_clock::time_point>> remote_typing_;
     mutable std::mutex pending_read_receipts_mu_;
     std::unordered_map<std::string, std::string> pending_read_receipts_;
+    std::unordered_map<std::string, PresenceStatus> dm_presence_notice_status_;
     std::string local_typing_target_;
     bool local_typing_active_ = false;
     std::chrono::steady_clock::time_point last_typing_sent_{};

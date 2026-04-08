@@ -14,10 +14,21 @@ namespace {
 const char* kIndicatorTalking = "\U0001F7E2";  // 🟢 Green circle
 const char* kIndicatorMuted   = "\U0001F7E1";  // 🟡 Yellow circle  
 const char* kIndicatorOff     = "\u26AA";       // ⚪ White circle
+const char* kPresenceDot      = "\u25CF";
+
+Color presence_dot_color(PresenceStatus presence) {
+    switch (presence) {
+        case PresenceStatus::Online: return palette::online();
+        case PresenceStatus::Away:   return palette::away_c();
+        case PresenceStatus::Dnd:    return palette::dnd_c();
+        case PresenceStatus::Offline:
+        default:                     return palette::offline_c();
+    }
+}
 
 Element render_user_entry(const ChannelUserInfo& user, const std::string& local_user_id) {
     std::string prefix = user.prefix();
-    std::string display = " " + prefix + user.user_id;  // 1-space left pad
+    std::string display = prefix + user.user_id;
     
     // Color based on role
     Color name_color;
@@ -40,7 +51,12 @@ Element render_user_entry(const ChannelUserInfo& user, const std::string& local_
         name_color = palette::cyan();
     }
     
-    return text(display) | color(name_color);
+    return hbox({
+        text(" "),
+        text(kPresenceDot) | color(presence_dot_color(user.presence)),
+        text(" "),
+        text(display) | color(name_color),
+    });
 }
 
 Element render_voice_user(const std::string& user_id, ChannelUserInfo::VoiceStatus status,
