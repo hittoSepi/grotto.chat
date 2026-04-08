@@ -54,3 +54,4 @@
 ---
 
 Vihje: Komento täydentyy `Tab`-näppäimellä. Kirjoita `/` ja paina Tab.
+`F3` files-panelissa `r` päivittää listan ja `o` avaa downloads-kansion.

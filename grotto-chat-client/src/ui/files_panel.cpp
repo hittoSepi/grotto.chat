@@ -5,6 +5,7 @@
 #include <ftxui/dom/elements.hpp>
 
 #include <algorithm>
+#include <ctime>
 #include <iomanip>
 #include <sstream>
 
@@ -44,9 +45,27 @@ std::string truncate_with_ellipsis(std::string text, int max_width) {
     return text.substr(0, static_cast<size_t>(max_width - 3)) + "...";
 }
 
+std::string format_uploaded_at(int64_t uploaded_at) {
+    if (uploaded_at <= 0) {
+        return "?";
+    }
+    std::time_t ts = static_cast<std::time_t>(uploaded_at);
+    std::tm tm_info{};
+#ifdef _WIN32
+    localtime_s(&tm_info, &ts);
+#else
+    localtime_r(&ts, &tm_info);
+#endif
+    char buffer[32];
+    if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M", &tm_info) == 0) {
+        return "?";
+    }
+    return buffer;
+}
+
 Element render_file_entry(const RemoteFileEntry& file, int width, bool selected) {
     std::string label = file.filename.empty() ? file.file_id : file.filename;
-    std::string meta = human_bytes(file.file_size);
+    std::string meta = human_bytes(file.file_size) + "  " + format_uploaded_at(file.uploaded_at);
     if (!file.sender_id.empty()) {
         meta += " <" + file.sender_id + ">";
     }
@@ -82,7 +101,7 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
         hbox({
             text("FILES " + std::to_string(files.size())) | bold | color(palette::fg_dark()),
             filler(),
-            text("Enter download") | color(palette::comment()),
+            text("[Enter] dl  [r] Refresh  [o] Open dl folder") | color(palette::comment()),
         }));
     content.push_back(separator() | color(palette::bg_highlight()));
 
@@ -98,7 +117,8 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
             current_y += 2;
         }
         content.push_back(separator() | color(palette::bg_highlight()));
-        content.push_back(text(" Up/Down move, double-click downloads") | color(palette::comment()));
+        content.push_back(text(" [Up/Down] move  [Enter] dl  [r] Refresh  [o] Open dl folder")
+                          | color(palette::comment()));
     }
 
     return vbox(std::move(content)) | bgcolor(palette::bg_dark());

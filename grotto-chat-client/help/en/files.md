@@ -21,6 +21,8 @@ Press `F3` to open the files panel for the current channel or DM. You can:
 - browse the available files
 - move selection with arrow keys when the input is empty
 - press `Enter` to download the selected file
+- press `r` to refresh the list manually
+- press `o` to open the local downloads folder
 - double-click a file with the mouse to download it directly
 
 ## Security

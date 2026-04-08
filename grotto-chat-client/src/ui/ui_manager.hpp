@@ -132,6 +132,8 @@ private:
     void move_file_selection(int delta);
     void activate_selected_file_download();
     void refresh_files_for_channel_if_needed(const std::string& channel_id);
+    void force_refresh_active_files();
+    void open_downloads_folder();
 
     AppState&           state_;
     ClientConfig&       cfg_;

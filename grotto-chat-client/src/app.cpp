@@ -1393,6 +1393,16 @@ void App::handle_file_list_response(const FileListResponse& response) {
         files.push_back(std::move(entry));
     }
 
+    std::sort(files.begin(), files.end(), [](const RemoteFileEntry& a, const RemoteFileEntry& b) {
+        if (a.uploaded_at != b.uploaded_at) {
+            return a.uploaded_at > b.uploaded_at;
+        }
+        if (a.filename != b.filename) {
+            return a.filename < b.filename;
+        }
+        return a.file_id < b.file_id;
+    });
+
     state_.post_ui([this, target, files]() {
         state_.set_channel_files(target, files);
     });

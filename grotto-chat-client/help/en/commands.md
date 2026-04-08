@@ -54,3 +54,4 @@
 ---
 
 Tip: Commands autocomplete with the `Tab` key. Type `/` and press Tab.
+In the `F3` files panel, use `r` to refresh and `o` to open downloads.

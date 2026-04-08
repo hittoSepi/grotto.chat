@@ -1059,6 +1059,26 @@ void UIManager::refresh_files_for_channel_if_needed(const std::string& channel_i
     files_refresh_handler_(channel_id);
 }
 
+void UIManager::force_refresh_active_files() {
+    if (!files_refresh_handler_ || side_panel_mode_ != SidePanelMode::Files) {
+        return;
+    }
+    const auto channel_id = state_.active_channel().value_or("");
+    if (channel_id.empty() || is_server_channel(channel_id)) {
+        return;
+    }
+    last_files_refresh_channel_ = channel_id;
+    files_refresh_handler_(channel_id);
+    show_toast("Refreshing files");
+}
+
+void UIManager::open_downloads_folder() {
+    std::error_code ec;
+    std::filesystem::create_directories("downloads", ec);
+    open_path("downloads");
+    show_toast("Opened downloads");
+}
+
 void UIManager::move_file_selection(int delta) {
     if (side_panel_mode_ != SidePanelMode::Files || delta == 0) {
         return;
@@ -1681,6 +1701,18 @@ void UIManager::run(SubmitFn on_submit,
                 notify();
             }
             return true;
+        }
+        if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+            if (event == Event::Character("r") || event == Event::Character("R")) {
+                force_refresh_active_files();
+                notify();
+                return true;
+            }
+            if (event == Event::Character("o") || event == Event::Character("O")) {
+                open_downloads_folder();
+                notify();
+                return true;
+            }
         }
         if (event == Event::Backspace) {
             tab_completer_.reset();
