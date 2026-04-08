@@ -628,7 +628,7 @@ void App::on_submit(const std::string& line) {
 void App::on_input_changed(const std::string& text) {
     const auto active = canonical_channel_id(state_.active_channel().value_or(""));
     const std::string target = typing_target_for_active_channel(active);
-    if (target.empty() || text.empty() || text[0] == '/') {
+    if (!cfg_.privacy.share_typing_indicators || target.empty() || text.empty() || text[0] == '/') {
         stop_local_typing();
         return;
     }
@@ -1391,6 +1391,7 @@ void App::switch_to_channel(const std::string& channel_id) {
 void App::open_settings() {
     // Get public key for display
     std::string pubkey_hex = get_public_key_hex();
+    const bool was_sharing_typing = cfg_.privacy.share_typing_indicators;
     
     // Create a new screen for settings (modal)
     ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
@@ -1403,6 +1404,9 @@ void App::open_settings() {
         case ui::SettingsResult::Saved:
             save_current_config();
             refresh_runtime_capabilities();
+            if (was_sharing_typing && !cfg_.privacy.share_typing_indicators) {
+                stop_local_typing();
+            }
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::SETTINGS_SAVED));
             break;
         case ui::SettingsResult::Cancelled:
@@ -1749,6 +1753,9 @@ void App::stop_local_typing() {
 
 void App::send_typing_update(const std::string& target, bool is_typing) {
     if (!net_client_ || !msg_handler_ || !msg_handler_->is_authenticated() || !net_client_->is_connected()) {
+        return;
+    }
+    if (is_typing && !cfg_.privacy.share_typing_indicators) {
         return;
     }
 

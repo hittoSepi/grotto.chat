@@ -61,6 +61,7 @@ constexpr bool kDefaultDesktopNotifications = true;
 constexpr bool kDefaultSoundAlerts = true;
 constexpr bool kDefaultNotifyMention = true;
 constexpr bool kDefaultNotifyDM = true;
+constexpr bool kDefaultShareTypingIndicators = true;
 constexpr bool kDefaultShowTimestamps = true;
 constexpr bool kDefaultShowUserColors = true;
 constexpr int kDefaultFontScale = 100;
@@ -74,6 +75,7 @@ std::string category_label(SettingsCategory cat) {
         case SettingsCategory::Voice: return i18n::tr(i18n::I18nKey::CATEGORY_VOICE);
         case SettingsCategory::Connection: return i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION);
         case SettingsCategory::Notifications: return i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS);
+        case SettingsCategory::Privacy: return i18n::tr(i18n::I18nKey::CATEGORY_PRIVACY);
         case SettingsCategory::Account: return i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT);
     }
     return "Unknown";
@@ -238,6 +240,9 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             case SettingsCategory::Notifications:
                 content = render_notifications();
                 break;
+            case SettingsCategory::Privacy:
+                content = render_privacy();
+                break;
             case SettingsCategory::Account:
                 content = render_account();
                 break;
@@ -309,7 +314,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             exit_closure();
             return true;
         }
-        // F1-F6 to switch categories
+        // F1-F7 to switch categories
         if (event == Event::F1) {
             active_category_ = SettingsCategory::General;
             return true;
@@ -331,6 +336,10 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             return true;
         }
         if (event == Event::F6) {
+            active_category_ = SettingsCategory::Privacy;
+            return true;
+        }
+        if (event == Event::F7) {
             active_category_ = SettingsCategory::Account;
             return true;
         }
@@ -362,6 +371,7 @@ void SettingsScreen::build_ui() {
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_VOICE) + " ", [this] { active_category_ = SettingsCategory::Voice; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION) + " ", [this] { active_category_ = SettingsCategory::Connection; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS) + " ", [this] { active_category_ = SettingsCategory::Notifications; }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_PRIVACY) + " ", [this] { active_category_ = SettingsCategory::Privacy; }),
         Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT) + " ", [this] { active_category_ = SettingsCategory::Account; }),
     });
     
@@ -421,6 +431,7 @@ void SettingsScreen::build_ui() {
     sound_alerts_cb_ = Checkbox(i18n::tr(i18n::I18nKey::SOUND_ALERTS), &sound_alerts_);
     mention_cb_ = Checkbox(i18n::tr(i18n::I18nKey::NOTIFY_ON_MENTION), &notify_on_mention_);
     dm_cb_ = Checkbox(i18n::tr(i18n::I18nKey::NOTIFY_ON_DM), &notify_on_dm_);
+    share_typing_indicators_cb_ = Checkbox(i18n::tr(i18n::I18nKey::SHARE_TYPING_INDICATORS), &share_typing_indicators_);
 
     // Account action buttons (created once, not per-render)
     export_button_persistent_ = Button(i18n::tr(i18n::I18nKey::BUTTON_EXPORT_SETTINGS), [this] { export_settings(); });
@@ -477,6 +488,7 @@ void SettingsScreen::build_ui() {
         sound_alerts_cb_,
         mention_cb_,
         dm_cb_,
+        share_typing_indicators_cb_,
         keywords_input_,
         nickname_input_,
         language_toggle_,
@@ -708,6 +720,14 @@ Element SettingsScreen::render_notifications() {
     });
 }
 
+Element SettingsScreen::render_privacy() {
+    return vbox({
+        share_typing_indicators_cb_->Render(),
+        text(""),
+        text(i18n::tr(i18n::I18nKey::PRIVACY_NOTE)) | color(palette::comment()) | dim,
+    });
+}
+
 Element SettingsScreen::render_account() {
     auto nickname_row = hbox({
         text(i18n::tr(i18n::I18nKey::NICKNAME_LABEL)) | color(palette::fg_dark()),
@@ -826,6 +846,9 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     notify_on_mention_ = cfg.notifications.notify_on_mention;
     notify_on_dm_ = cfg.notifications.notify_on_dm;
     mention_keywords_ = cfg.notifications.mention_keywords;
+
+    // Privacy
+    share_typing_indicators_ = cfg.privacy.share_typing_indicators;
     
     // Account
     nickname_ = cfg.identity.user_id;
@@ -902,6 +925,9 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
     cfg.notifications.notify_on_mention = notify_on_mention_;
     cfg.notifications.notify_on_dm = notify_on_dm_;
     cfg.notifications.mention_keywords = mention_keywords_;
+
+    // Privacy
+    cfg.privacy.share_typing_indicators = share_typing_indicators_;
     
     // Account
     if (!nickname_.empty() && nickname_ != cfg.identity.user_id) {
@@ -962,6 +988,7 @@ void SettingsScreen::reset_to_defaults() {
     notify_on_mention_ = kDefaultNotifyMention;
     notify_on_dm_ = kDefaultNotifyDM;
     mention_keywords_ = nickname_;
+    share_typing_indicators_ = kDefaultShareTypingIndicators;
 }
 
 void SettingsScreen::export_settings() {
@@ -1004,6 +1031,7 @@ void SettingsScreen::export_settings() {
         data["notifications"]["sound"] = sound_alerts_;
         data["notifications"]["on_mention"] = notify_on_mention_;
         data["notifications"]["keywords"] = mention_keywords_;
+        data["privacy"]["share_typing_indicators"] = share_typing_indicators_;
         
         std::ofstream ofs(export_path);
         ofs << data;
@@ -1111,6 +1139,13 @@ void SettingsScreen::import_settings() {
             if (notif.contains("sound")) sound_alerts_ = toml::find<bool>(notif, "sound");
             if (notif.contains("on_mention")) notify_on_mention_ = toml::find<bool>(notif, "on_mention");
             if (notif.contains("keywords")) mention_keywords_ = toml::find<std::string>(notif, "keywords");
+        }
+
+        if (data.contains("privacy")) {
+            auto& privacy = data.at("privacy");
+            if (privacy.contains("share_typing_indicators")) {
+                share_typing_indicators_ = toml::find<bool>(privacy, "share_typing_indicators");
+            }
         }
         
         spdlog::info("Settings imported from: {}", import_path.string());

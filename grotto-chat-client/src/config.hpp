@@ -82,6 +82,10 @@ struct NotificationConfig {
     std::string mention_keywords;          // Comma-separated list
 };
 
+struct PrivacyConfig {
+    bool        share_typing_indicators = true;
+};
+
 struct ClientConfig {
     ServerConfig       server;
     IdentityConfig     identity;
@@ -91,6 +95,7 @@ struct ClientConfig {
     TlsConfig          tls;
     ConnectionConfig   connection;
     NotificationConfig notifications;
+    PrivacyConfig      privacy;
 
     // Derived: platform-specific config directory
     std::filesystem::path config_dir;

@@ -141,6 +141,13 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (n.contains("mention_keywords"))      cfg.notifications.mention_keywords      = toml::find<std::string>(n, "mention_keywords");
         }
 
+        if (data.contains("privacy")) {
+            auto& p = data.at("privacy");
+            if (p.contains("share_typing_indicators")) {
+                cfg.privacy.share_typing_indicators = toml::find<bool>(p, "share_typing_indicators");
+            }
+        }
+
     } catch (const std::exception& e) {
         spdlog::error("Failed to parse config '{}': {}", path.string(), e.what());
     }
@@ -299,6 +306,9 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["notifications"]["notify_on_dm"] = cfg.notifications.notify_on_dm;
     data["notifications"]["mention_keywords"] = cfg.notifications.mention_keywords;
 
+    // Patch privacy section
+    data["privacy"]["share_typing_indicators"] = cfg.privacy.share_typing_indicators;
+
     try {
         std::filesystem::create_directories(path.parent_path());
         std::ofstream ofs(path);
@@ -370,6 +380,8 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["notifications"]["notify_on_mention"] = cfg.notifications.notify_on_mention;
         data["notifications"]["notify_on_dm"] = cfg.notifications.notify_on_dm;
         data["notifications"]["mention_keywords"] = cfg.notifications.mention_keywords;
+
+        data["privacy"]["share_typing_indicators"] = cfg.privacy.share_typing_indicators;
         
         std::filesystem::create_directories(path.parent_path());
         std::ofstream ofs(path);
@@ -468,6 +480,13 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             if (n.contains("notify_on_mention")) cfg.notifications.notify_on_mention = toml::find<bool>(n, "notify_on_mention");
             if (n.contains("notify_on_dm")) cfg.notifications.notify_on_dm = toml::find<bool>(n, "notify_on_dm");
             if (n.contains("mention_keywords")) cfg.notifications.mention_keywords = toml::find<std::string>(n, "mention_keywords");
+        }
+
+        if (data.contains("privacy")) {
+            auto& p = data.at("privacy");
+            if (p.contains("share_typing_indicators")) {
+                cfg.privacy.share_typing_indicators = toml::find<bool>(p, "share_typing_indicators");
+            }
         }
         
         spdlog::info("Settings imported from: {}", path.string());

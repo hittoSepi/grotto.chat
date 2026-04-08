@@ -17,6 +17,7 @@ enum class SettingsCategory {
     Voice,
     Connection,
     Notifications,
+    Privacy,
     Account
 };
 
@@ -57,6 +58,7 @@ private:
     ftxui::Element render_voice();
     ftxui::Element render_connection();
     ftxui::Element render_notifications();
+    ftxui::Element render_privacy();
     ftxui::Element render_account();
 
     // UI State
@@ -134,6 +136,9 @@ private:
     bool notify_on_dm_;
     std::string mention_keywords_;
 
+    // === Privacy Settings ===
+    bool share_typing_indicators_ = true;
+
     // === Account Settings ===
     std::string nickname_;
     std::string public_key_hex_;
@@ -186,6 +191,7 @@ private:
     ftxui::Component sound_alerts_cb_;
     ftxui::Component mention_cb_;
     ftxui::Component dm_cb_;
+    ftxui::Component share_typing_indicators_cb_;
 
     // Account action buttons (must persist across renders)
     ftxui::Component export_button_persistent_;

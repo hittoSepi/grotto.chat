@@ -38,6 +38,7 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::CATEGORY_VOICE, "Voice"},
     {I18nKey::CATEGORY_CONNECTION, "Connection"},
     {I18nKey::CATEGORY_NOTIFICATIONS, "Notifications"},
+    {I18nKey::CATEGORY_PRIVACY, "Privacy"},
     {I18nKey::CATEGORY_ACCOUNT, "Account"},
 
     // Settings labels
@@ -68,6 +69,8 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::NOTIFICATION_SETTINGS, "Notification Settings"},
     {I18nKey::MENTION_SETTINGS, "Mention Settings"},
     {I18nKey::MENTION_KEYWORDS_HINT, "  Comma-separated keywords (e.g.: nick1, nick2, word1)"},
+    {I18nKey::PRIVACY_SETTINGS, "Privacy"},
+    {I18nKey::PRIVACY_NOTE, "These settings control what your client shares with others."},
     {I18nKey::NICKNAME_LABEL, "Nickname: "},
     {I18nKey::NICKNAME_HINT, "  This nickname will be used for new connections."},
     {I18nKey::PUBLIC_KEY_LABEL, "Public Key (Ed25519):"},
@@ -111,6 +114,7 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::SOUND_ALERTS, "Enable sound alerts"},
     {I18nKey::NOTIFY_ON_MENTION, "Notify on mentions"},
     {I18nKey::NOTIFY_ON_DM, "Notify on direct messages"},
+    {I18nKey::SHARE_TYPING_INDICATORS, "Share typing indicators"},
 
     // Settings buttons
     {I18nKey::BUTTON_SAVE, "[ SAVE ]"},
@@ -244,6 +248,7 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::CATEGORY_VOICE, "Ääni"},
     {I18nKey::CATEGORY_CONNECTION, "Yhteys"},
     {I18nKey::CATEGORY_NOTIFICATIONS, "Ilmoitukset"},
+    {I18nKey::CATEGORY_PRIVACY, "Yksityisyys"},
     {I18nKey::CATEGORY_ACCOUNT, "Tili"},
 
     // Settings labels
@@ -274,6 +279,8 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::NOTIFICATION_SETTINGS, "Ilmoitusasetukset"},
     {I18nKey::MENTION_SETTINGS, "Maininta-asetukset"},
     {I18nKey::MENTION_KEYWORDS_HINT, "  Pilkulla erotetut sanat (esim.: nim1, nim2, sana1)"},
+    {I18nKey::PRIVACY_SETTINGS, "Yksityisyys"},
+    {I18nKey::PRIVACY_NOTE, "Nämä asetukset ohjaavat, mitä clienttisi jakaa muille."},
     {I18nKey::NICKNAME_LABEL, "Nimimerkki: "},
     {I18nKey::NICKNAME_HINT, "  Tätä nimimerkkiä käytetään uusissa yhteyksissä."},
     {I18nKey::PUBLIC_KEY_LABEL, "Julkinen avain (Ed25519):"},
@@ -317,6 +324,7 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::SOUND_ALERTS, "Ota äänihälytykset käyttöön"},
     {I18nKey::NOTIFY_ON_MENTION, "Ilmoita maininnoista"},
     {I18nKey::NOTIFY_ON_DM, "Ilmoita yksityisviesteistä"},
+    {I18nKey::SHARE_TYPING_INDICATORS, "Jaa kirjoitusindikaattorit"},
 
     // Settings buttons
     {I18nKey::BUTTON_SAVE, "[ TALLENNA ]"},
