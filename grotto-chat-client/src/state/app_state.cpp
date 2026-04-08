@@ -339,6 +339,38 @@ void AppState::set_voice_room_users(const std::string& channel_id, const std::ve
     }
 }
 
+void AppState::set_direct_message_users(const std::string& channel_id,
+                                        const std::string& local_user_id,
+                                        const std::string& peer_user_id) {
+    std::unique_lock lk(mu_);
+    auto& ch_users = channel_users_[channel_id];
+    ch_users.clear();
+
+    auto build_user = [this](const std::string& user_id, bool is_local) {
+        ChannelUserInfo info;
+        info.user_id = user_id;
+        info.role = UserRole::Regular;
+        info.presence = is_local ? PresenceStatus::Online : PresenceStatus::Offline;
+
+        auto pres_it = online_users_.find(user_id);
+        if (pres_it != online_users_.end()) {
+            info.presence = pres_it->second;
+        }
+        auto voice_it = user_voice_status_.find(user_id);
+        if (voice_it != user_voice_status_.end()) {
+            info.voice_status = voice_it->second;
+        }
+        return info;
+    };
+
+    if (!local_user_id.empty()) {
+        ch_users[local_user_id] = build_user(local_user_id, true);
+    }
+    if (!peer_user_id.empty() && peer_user_id != local_user_id) {
+        ch_users[peer_user_id] = build_user(peer_user_id, false);
+    }
+}
+
 void AppState::add_voice_room_user(const std::string& channel_id, const std::string& user_id) {
     std::unique_lock lk(mu_);
     voice_room_users_[channel_id].insert(user_id);

@@ -191,6 +191,11 @@ void apply_theme(const std::string& theme_name) {
 
 SettingsScreen::SettingsScreen() = default;
 
+void SettingsScreen::set_active_category(SettingsCategory category) {
+    active_category_ = category;
+    active_category_index_ = static_cast<int>(category);
+}
+
 SettingsResult SettingsScreen::show(ClientConfig& cfg,
                                     ftxui::ScreenInteractive& screen,
                                     const std::string& public_key_hex,
@@ -317,31 +322,31 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
         }
         // F1-F7 to switch categories
         if (event == Event::F1) {
-            active_category_ = SettingsCategory::General;
+            set_active_category(SettingsCategory::General);
             return true;
         }
         if (event == Event::F2) {
-            active_category_ = SettingsCategory::Appearance;
+            set_active_category(SettingsCategory::Appearance);
             return true;
         }
         if (event == Event::F3) {
-            active_category_ = SettingsCategory::Voice;
+            set_active_category(SettingsCategory::Voice);
             return true;
         }
         if (event == Event::F4) {
-            active_category_ = SettingsCategory::Connection;
+            set_active_category(SettingsCategory::Connection);
             return true;
         }
         if (event == Event::F5) {
-            active_category_ = SettingsCategory::Notifications;
+            set_active_category(SettingsCategory::Notifications);
             return true;
         }
         if (event == Event::F6) {
-            active_category_ = SettingsCategory::Privacy;
+            set_active_category(SettingsCategory::Privacy);
             return true;
         }
         if (event == Event::F7) {
-            active_category_ = SettingsCategory::Account;
+            set_active_category(SettingsCategory::Account);
             return true;
         }
         return false;
@@ -367,13 +372,13 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
 void SettingsScreen::build_ui() {
     // Sidebar category buttons
     sidebar_container_ = Container::Vertical({
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_GENERAL) + " ", [this] { active_category_ = SettingsCategory::General; }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE) + " ", [this] { active_category_ = SettingsCategory::Appearance; }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_VOICE) + " ", [this] { active_category_ = SettingsCategory::Voice; }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION) + " ", [this] { active_category_ = SettingsCategory::Connection; }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS) + " ", [this] { active_category_ = SettingsCategory::Notifications; }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_PRIVACY) + " ", [this] { active_category_ = SettingsCategory::Privacy; }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT) + " ", [this] { active_category_ = SettingsCategory::Account; }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_GENERAL) + " ", [this] { set_active_category(SettingsCategory::General); }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE) + " ", [this] { set_active_category(SettingsCategory::Appearance); }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_VOICE) + " ", [this] { set_active_category(SettingsCategory::Voice); }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION) + " ", [this] { set_active_category(SettingsCategory::Connection); }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS) + " ", [this] { set_active_category(SettingsCategory::Notifications); }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_PRIVACY) + " ", [this] { set_active_category(SettingsCategory::Privacy); }),
+        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT) + " ", [this] { set_active_category(SettingsCategory::Account); }),
     });
     
     // Input components
@@ -456,15 +461,24 @@ void SettingsScreen::build_ui() {
         reset_to_defaults();
     });
 
-    // Main container - all interactive components must be in the tree
-    container_ = Container::Vertical({
-        sidebar_container_,
-        theme_toggle_,
-        timestamp_format_input_,
-        max_messages_input_,
+    general_container_ = Container::Vertical({
+        copy_selection_on_release_cb_,
+        inline_images_cb_,
         image_columns_input_,
         image_rows_input_,
         terminal_graphics_toggle_,
+    });
+
+    appearance_container_ = Container::Vertical({
+        theme_toggle_,
+        timestamp_format_input_,
+        max_messages_input_,
+        language_toggle_,
+        show_timestamps_cb_,
+        show_user_colors_cb_,
+    });
+
+    voice_container_ = Container::Vertical({
         voice_input_device_dropdown_,
         voice_output_device_dropdown_,
         voice_mode_dropdown_,
@@ -477,30 +491,58 @@ void SettingsScreen::build_ui() {
         voice_limiter_threshold_slider_,
         voice_input_volume_slider_,
         voice_output_volume_slider_,
-        copy_selection_on_release_cb_,
-        inline_images_cb_,
-        show_timestamps_cb_,
-        show_user_colors_cb_,
+    });
+
+    connection_container_ = Container::Vertical({
         reconnect_delay_input_,
         timeout_input_,
         auto_reconnect_cb_,
         tls_verify_cb_,
         cert_pin_input_,
+    });
+
+    notifications_container_ = Container::Vertical({
         desktop_notif_cb_,
         sound_alerts_cb_,
         mention_cb_,
         dm_cb_,
+        keywords_input_,
+    });
+
+    privacy_container_ = Container::Vertical({
         share_typing_indicators_cb_,
         share_read_receipts_cb_,
-        keywords_input_,
+    });
+
+    account_container_ = Container::Vertical({
         nickname_input_,
-        language_toggle_,
         export_button_persistent_,
         import_button_persistent_,
         logout_button_persistent_,
+    });
+
+    content_container_ = Container::Tab({
+        general_container_,
+        appearance_container_,
+        voice_container_,
+        connection_container_,
+        notifications_container_,
+        privacy_container_,
+        account_container_,
+    }, &active_category_index_);
+
+    actions_container_ = Container::Horizontal({
         save_button_,
         cancel_button_,
         reset_button_,
+    });
+
+    container_ = Container::Horizontal({
+        sidebar_container_,
+        Container::Vertical({
+            content_container_,
+            actions_container_,
+        }),
     });
 }
 

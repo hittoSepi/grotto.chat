@@ -99,6 +99,10 @@ public:
     // Set users for a specific channel (e.g., from NAMES reply)
     void set_channel_users(const std::string& channel_id, 
                            const std::vector<ChannelUserInfo>& users);
+    // Force a DM user list to contain exactly the local user and the peer.
+    void set_direct_message_users(const std::string& channel_id,
+                                  const std::string& local_user_id,
+                                  const std::string& peer_user_id);
     // Auto-populate channel users from online users (for testing/initial load)
     void ensure_channel_users_from_online(const std::string& channel_id);
     // Add/update a user in a channel

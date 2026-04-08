@@ -1167,9 +1167,13 @@ void UIManager::activate_selected_file_delete() {
 }
 
 Element UIManager::build_main_content(const std::string& active_ch, int msg_rows, int term_cols) {
-    // Ensure channel users are populated (from online users if not already set)
+    // Ensure channel users are populated.
     if (!active_ch.empty()) {
-        state_.ensure_channel_users_from_online(active_ch);
+        if (!is_server_channel(active_ch) && active_ch.front() != '#') {
+            state_.set_direct_message_users(active_ch, state_.local_user_id(), active_ch);
+        } else {
+            state_.ensure_channel_users_from_online(active_ch);
+        }
     }
 
     const bool show_user_list = !user_list_config_.collapsed && !is_server_channel(active_ch);

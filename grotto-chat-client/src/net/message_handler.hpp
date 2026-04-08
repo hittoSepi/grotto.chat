@@ -6,10 +6,12 @@
 #include "grotto.pb.h"
 
 #include <functional>
+#include <mutex>
 #include <memory>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // Forward declarations
@@ -114,6 +116,7 @@ private:
     void send_envelope(MessageType type, const google::protobuf::Message& msg);
     void send_hello();
     void push_system(const std::string& text);
+    void request_key_bundle_only(const std::string& recipient_id);
 
     AppState&             state_;
     crypto::CryptoEngine& crypto_;
@@ -144,7 +147,9 @@ private:
         std::string plaintext;
         std::string message_id;
     };
+    std::mutex pending_sends_mu_;
     std::unordered_map<std::string, std::vector<PendingSend>> pending_sends_;
+    std::unordered_set<std::string> pending_repair_requests_;
 };
 
 } // namespace grotto::net

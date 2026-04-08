@@ -46,6 +46,7 @@ public:
 
 private:
     void build_ui();
+    void set_active_category(SettingsCategory category);
     void save_settings_to_config(ClientConfig& cfg);
     void load_settings_from_config(const ClientConfig& cfg);
     void reset_to_defaults();
@@ -63,6 +64,7 @@ private:
 
     // UI State
     SettingsCategory active_category_ = SettingsCategory::General;
+    int active_category_index_ = 0;
     bool saved_ = false;
     bool cancelled_ = false;
     bool logout_ = false;
@@ -148,6 +150,14 @@ private:
     ftxui::Component container_;
     ftxui::Component sidebar_container_;
     ftxui::Component content_container_;
+    ftxui::Component general_container_;
+    ftxui::Component appearance_container_;
+    ftxui::Component voice_container_;
+    ftxui::Component connection_container_;
+    ftxui::Component notifications_container_;
+    ftxui::Component privacy_container_;
+    ftxui::Component account_container_;
+    ftxui::Component actions_container_;
     ftxui::Component save_button_;
     ftxui::Component cancel_button_;
     ftxui::Component reset_button_;

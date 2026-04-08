@@ -130,7 +130,11 @@ void MessageHandler::on_auth_ok() {
 void MessageHandler::on_transport_disconnected() {
     authenticated_ = false;
     state_.set_connecting(false);
-    pending_sends_.clear();
+    {
+        std::lock_guard lk(pending_sends_mu_);
+        pending_sends_.clear();
+        pending_repair_requests_.clear();
+    }
     crypto_.reset_all_dm_sessions();
 }
 
@@ -178,6 +182,12 @@ void MessageHandler::handle_chat(const Envelope& env) {
         } else {
             plaintext = "[decryption failed]";
             decrypted = true;
+            const bool is_direct_message =
+                chat.recipient_id().empty() || chat.recipient_id().front() != '#';
+            if (is_direct_message && !chat.sender_id().empty() &&
+                chat.sender_id() != cfg_.identity.user_id) {
+                request_key_bundle_only(chat.sender_id());
+            }
         }
     }
 
@@ -227,31 +237,9 @@ void MessageHandler::handle_chat(const Envelope& env) {
             state_.add_channel_user(channel_id, info);
         }
     }
-    // For DMs: ensure both participants appear in the user list
-    else if (!channel_id.empty() && channel_id[0] != '#' && !sender.empty()) {
-        // Add the sender (the other person) if not already present
-        if (sender != cfg_.identity.user_id) {
-            auto existing = state_.channel_user(channel_id, sender);
-            if (!existing.has_value()) {
-                ChannelUserInfo info;
-                info.user_id = sender;
-                info.role = UserRole::Regular;
-                info.presence = PresenceStatus::Online;
-                state_.add_channel_user(channel_id, info);
-            }
-        }
-        // Also ensure the recipient (other person) is in the list
-        std::string other = chat.recipient_id();
-        if (other != cfg_.identity.user_id && !other.empty()) {
-            auto existing = state_.channel_user(channel_id, other);
-            if (!existing.has_value()) {
-                ChannelUserInfo info;
-                info.user_id = other;
-                info.role = UserRole::Regular;
-                info.presence = PresenceStatus::Online;
-                state_.add_channel_user(channel_id, info);
-            }
-        }
+    // For DMs: keep the user list pinned to exactly local user + peer.
+    else if (!channel_id.empty() && channel_id[0] != '#') {
+        state_.set_direct_message_users(channel_id, cfg_.identity.user_id, channel_id);
     }
 
     const bool has_dm_candidate =
@@ -310,11 +298,17 @@ void MessageHandler::handle_key_bundle(const Envelope& env) {
     }
 
     // Flush all pending plaintexts queued while waiting for this bundle
-    auto it = pending_sends_.find(recipient_id);
-    if (it == pending_sends_.end()) return;
-
-    std::vector<PendingSend> queued = std::move(it->second);
-    pending_sends_.erase(it);
+    std::vector<PendingSend> queued;
+    {
+        std::lock_guard lk(pending_sends_mu_);
+        pending_repair_requests_.erase(recipient_id);
+        auto it = pending_sends_.find(recipient_id);
+        if (it == pending_sends_.end()) {
+            return;
+        }
+        queued = std::move(it->second);
+        pending_sends_.erase(it);
+    }
 
     int sent = 0, failed = 0;
     for (const auto& pending : queued) {
@@ -342,8 +336,12 @@ void MessageHandler::handle_key_bundle(const Envelope& env) {
 void MessageHandler::request_key(const std::string& recipient_id,
                                  const std::string& plaintext,
                                  const std::string& message_id) {
-    bool first_request = pending_sends_.find(recipient_id) == pending_sends_.end();
-    pending_sends_[recipient_id].push_back(PendingSend{plaintext, message_id});
+    bool first_request = false;
+    {
+        std::lock_guard lk(pending_sends_mu_);
+        first_request = pending_sends_.find(recipient_id) == pending_sends_.end();
+        pending_sends_[recipient_id].push_back(PendingSend{plaintext, message_id});
+    }
 
     if (first_request) {
         // Only send KEY_REQUEST once per recipient (subsequent messages just queue)
@@ -355,10 +353,17 @@ void MessageHandler::request_key(const std::string& recipient_id,
         // Timeout: if KEY_BUNDLE doesn't arrive in 10s, notify user and clean up
         std::thread([this, rid = recipient_id]() {
             std::this_thread::sleep_for(std::chrono::seconds(10));
-            auto it = pending_sends_.find(rid);
-            if (it != pending_sends_.end()) {
-                int count = static_cast<int>(it->second.size());
+            int count = 0;
+            {
+                std::lock_guard lk(pending_sends_mu_);
+                auto it = pending_sends_.find(rid);
+                if (it == pending_sends_.end()) {
+                    return;
+                }
+                count = static_cast<int>(it->second.size());
                 pending_sends_.erase(it);
+            }
+            if (count > 0) {
                 push_system(i18n::tr(i18n::I18nKey::COULD_NOT_ESTABLISH_SESSION, rid) +
                             " (timeout) — " + std::to_string(count) + " message(s) dropped");
                 spdlog::warn("KEY_BUNDLE timeout for '{}', {} messages dropped", rid, count);
@@ -442,6 +447,32 @@ void MessageHandler::handle_typing(const Envelope& env) {
     if (typing_fn_) {
         typing_fn_(typing);
     }
+}
+
+void MessageHandler::request_key_bundle_only(const std::string& recipient_id) {
+    bool should_request = false;
+    {
+        std::lock_guard lk(pending_sends_mu_);
+        if (pending_sends_.find(recipient_id) == pending_sends_.end() &&
+            pending_repair_requests_.insert(recipient_id).second) {
+            should_request = true;
+        }
+    }
+
+    if (!should_request) {
+        return;
+    }
+
+    KeyRequest kr;
+    kr.set_user_id(recipient_id);
+    send_envelope(MT_KEY_REQUEST, kr);
+    spdlog::info("Requested fresh KEY_BUNDLE for '{}' after DM decryption failure", recipient_id);
+
+    std::thread([this, rid = recipient_id]() {
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+        std::lock_guard lk(pending_sends_mu_);
+        pending_repair_requests_.erase(rid);
+    }).detach();
 }
 
 void MessageHandler::handle_read_receipt(const Envelope& env) {
