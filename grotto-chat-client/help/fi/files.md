@@ -7,6 +7,7 @@
 `/files` päivittää aktiivisen kanavan tai DM:n tiedostolistan ja avaa files-panelin.
 `/downloads` avaa paikallisen downloads-kansion.
 `/quota` näyttää nykyisen tiedostotilan käytön ja rajat.
+`/rmfile <id>` poistaa itse lähettämäsi tiedoston.
 
 Esimerkki:
 ```
@@ -22,6 +23,7 @@ Paina `F3` avataksesi nykyisen kanavan tai DM:n files-panelin. Siellä voit:
 - selata tiedostoja
 - liikkua nuolinäppäimillä kun input-rivi on tyhjä
 - ladata valitun tiedoston `Enter`-näppäimellä
+- poistaa valitun tiedoston `Del`-näppäimellä jos sinulla on siihen oikeus
 - päivittää listan `r`-näppäimellä
 - avata paikallisen downloads-kansion `o`-näppäimellä
 - ladata tiedoston hiirellä tuplaklikkaamalla

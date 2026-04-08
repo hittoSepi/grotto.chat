@@ -82,6 +82,9 @@ private:
     void handle_file_changed(const FileChanged& changed);
     void request_remote_files_for_target(const std::string& target, bool echo_to_chat = false);
     void download_remote_file(const RemoteFileEntry& file);
+    void delete_remote_file(const RemoteFileEntry& file);
+    void request_quota_summary();
+    std::string files_panel_quota_summary() const;
 
     struct FileTransferPolicyState {
         bool received = false;
@@ -122,6 +125,8 @@ private:
     FileTransferPolicyState file_transfer_policy_;
     mutable std::mutex remote_file_mu_;
     std::unordered_set<std::string> pending_file_list_echo_targets_;
+    mutable std::mutex quota_summary_mu_;
+    std::string quota_summary_text_;
 
     // Flag to indicate if app should exit (for settings logout)
     bool should_exit_ = false;

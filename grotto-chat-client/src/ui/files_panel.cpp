@@ -91,6 +91,7 @@ Element render_file_entry(const RemoteFileEntry& file, int width, bool selected)
 Element render_files_panel(const std::vector<RemoteFileEntry>& files,
                            int width,
                            const std::optional<std::string>& selected_file_id,
+                           const std::string& quota_summary,
                            std::vector<FileHitRegion>& out_file_positions,
                            int base_x,
                            int base_y) {
@@ -101,8 +102,11 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
         hbox({
             text("FILES " + std::to_string(files.size())) | bold | color(palette::fg_dark()),
             filler(),
-            text("[Enter] dl  [r] Refresh  [o] Open dl folder") | color(palette::comment()),
+            text("[Enter] dl  [Del] rm  [r] Refresh  [o] Open dl folder") | color(palette::comment()),
         }));
+    if (!quota_summary.empty()) {
+        content.push_back(text(" " + quota_summary) | color(palette::comment()));
+    }
     content.push_back(separator() | color(palette::bg_highlight()));
 
     int current_y = base_y + 2;
@@ -117,7 +121,7 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
             current_y += 2;
         }
         content.push_back(separator() | color(palette::bg_highlight()));
-        content.push_back(text(" [Up/Down] move  [Enter] dl  [r] Refresh  [o] Open dl folder")
+        content.push_back(text(" [Up/Down] move  [Enter] dl  [Del] rm  [r] Refresh  [o] Open dl folder")
                           | color(palette::comment()));
     }
 

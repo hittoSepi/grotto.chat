@@ -497,11 +497,20 @@ bool App::init(const std::filesystem::path& config_path,
     ui_->set_transfer_summary_provider([this]() {
         return build_transfer_summary();
     });
+    ui_->set_quota_summary_provider([this]() {
+        return files_panel_quota_summary();
+    });
+    ui_->set_quota_refresh_handler([this]() {
+        request_quota_summary();
+    });
     ui_->set_files_refresh_handler([this](const std::string& target) {
         request_remote_files_for_target(target, false);
     });
     ui_->set_file_download_handler([this](const RemoteFileEntry& file) {
         download_remote_file(file);
+    });
+    ui_->set_file_delete_handler([this](const RemoteFileEntry& file) {
+        delete_remote_file(file);
     });
     msg_handler_->set_file_transfer_manager(file_mgr_.get());
 
@@ -869,6 +878,13 @@ void App::handle_command(const ParsedCommand& cmd) {
         std::filesystem::create_directories(downloads_dir);
         ui::open_path(downloads_dir.string());
         ui_->push_system_msg("Opened downloads folder: " + downloads_dir.string());
+    } else if (cmd.name == "/rmfile") {
+        if (cmd.args.empty()) {
+            ui_->push_system_msg("Usage: /rmfile <file-id>");
+            return;
+        }
+        msg_handler_->send_command("rmfile", {cmd.args[0]});
+        log_server_event("file delete requested: " + cmd.args[0], false);
     } else if (cmd.name == "/quota") {
         msg_handler_->send_command("quota", {});
         log_server_event("quota requested", false);
@@ -1156,6 +1172,21 @@ void App::handle_command_response(const CommandResponse& response) {
     const std::string command = ascii_lower_copy(response.command());
     std::string prefix = response.success() ? "[ok] " : "[fail] ";
     log_server_event(prefix + command + ": " + response.message(), false);
+
+    if (command == "quota" && response.success()) {
+        std::string summary = response.message();
+        const auto newline = summary.find('\n');
+        if (newline != std::string::npos) {
+            summary = summary.substr(newline + 1);
+            std::replace(summary.begin(), summary.end(), '\n', ' ');
+            summary = std::regex_replace(summary, std::regex(R"(\s+)"), " ");
+        }
+        {
+            std::lock_guard lk(quota_summary_mu_);
+            quota_summary_text_ = summary;
+        }
+        if (ui_) ui_->notify();
+    }
 
     // Show failed commands also in the active channel for visibility
     if (!response.success()) {
@@ -1476,6 +1507,7 @@ void App::handle_file_changed(const FileChanged& changed) {
     }
 
     request_remote_files_for_target(target, false);
+    request_quota_summary();
 }
 
 void App::request_remote_files_for_target(const std::string& target, bool echo_to_chat) {
@@ -1528,6 +1560,29 @@ void App::download_remote_file(const RemoteFileEntry& file) {
             " (transfer " + tid + ", see /transfers)");
     }
     ui_->notify();
+}
+
+void App::delete_remote_file(const RemoteFileEntry& file) {
+    if (!msg_handler_ || !msg_handler_->is_authenticated() || !ui_) {
+        return;
+    }
+
+    const std::string label = file.filename.empty() ? file.file_id : file.filename;
+    msg_handler_->send_command("rmfile", {file.file_id});
+    ui_->push_system_msg("Delete requested: " + label + " (" + file.file_id + ")");
+    ui_->notify();
+}
+
+void App::request_quota_summary() {
+    if (!msg_handler_ || !msg_handler_->is_authenticated()) {
+        return;
+    }
+    msg_handler_->send_command("quota", {});
+}
+
+std::string App::files_panel_quota_summary() const {
+    std::lock_guard lk(quota_summary_mu_);
+    return quota_summary_text_;
 }
 
 std::string App::get_public_key_hex() const {

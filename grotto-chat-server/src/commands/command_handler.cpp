@@ -123,6 +123,7 @@ CommandHandler::CommandHandler(
     command_map_["msg"] = [this](auto& args, auto s) { return cmd_msg(args, s); };
     command_map_["query"] = [this](auto& args, auto s) { return cmd_msg(args, s); };
     command_map_["quota"] = [this](auto& args, auto s) { return cmd_quota(args, s); };
+    command_map_["rmfile"] = [this](auto& args, auto s) { return cmd_rmfile(args, s); };
     command_map_["resetdb"] = [this](auto& args, auto s) { return cmd_resetdb(args, s); };
 }
 
@@ -873,6 +874,40 @@ CommandResponse CommandHandler::cmd_quota(const std::vector<std::string>& args, 
             << " / " << quota_limit_label(max_total_storage_bytes_);
 
     return make_response(true, message.str(), "quota");
+}
+
+CommandResponse CommandHandler::cmd_rmfile(const std::vector<std::string>& args, SessionPtr session) {
+    if (args.empty()) {
+        return make_response(false, "Usage: /rmfile <file-id>", "rmfile");
+    }
+
+    const auto metadata = file_store_.getFile(args[0]);
+    if (!metadata.has_value()) {
+        return make_response(false, "File not found: " + args[0], "rmfile");
+    }
+
+    const auto& user_id = session->user_id();
+    const bool sender_match = (metadata->sender_id == user_id);
+    const bool channel_operator = !metadata->channel_id.empty() && is_operator(metadata->channel_id, user_id);
+    if (!sender_match && !channel_operator) {
+        return make_response(false, "Permission denied for file delete", "rmfile");
+    }
+
+    if (!file_store_.deleteFile(metadata->file_id)) {
+        return make_response(false, "Failed to delete file: " + metadata->file_id, "rmfile");
+    }
+
+    FileChanged changed;
+    changed.set_file_id(metadata->file_id);
+    changed.set_recipient_id(metadata->recipient_id);
+    changed.set_channel_id(metadata->channel_id);
+
+    Envelope env;
+    env.set_type(MT_FILE_CHANGED);
+    changed.SerializeToString(env.mutable_payload());
+    broadcast_(env, nullptr);
+
+    return make_response(true, "Deleted file " + metadata->filename, "rmfile");
 }
 
 // ============================================================================

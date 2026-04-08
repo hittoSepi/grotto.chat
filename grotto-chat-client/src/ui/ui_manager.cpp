@@ -390,6 +390,7 @@ void UIManager::toggle_files_panel() {
     }
     side_panel_mode_ = SidePanelMode::Files;
     last_files_refresh_channel_.clear();
+    refresh_quota_summary();
     if (auto active = state_.active_channel()) {
         refresh_files_for_channel_if_needed(*active);
     }
@@ -398,6 +399,7 @@ void UIManager::toggle_files_panel() {
 void UIManager::show_files_panel() {
     side_panel_mode_ = SidePanelMode::Files;
     last_files_refresh_channel_.clear();
+    refresh_quota_summary();
     if (auto active = state_.active_channel()) {
         refresh_files_for_channel_if_needed(*active);
     }
@@ -1069,7 +1071,15 @@ void UIManager::force_refresh_active_files() {
     }
     last_files_refresh_channel_ = channel_id;
     files_refresh_handler_(channel_id);
+    refresh_quota_summary();
     show_toast("Refreshing files");
+}
+
+void UIManager::refresh_quota_summary() {
+    if (!quota_refresh_handler_ || side_panel_mode_ != SidePanelMode::Files) {
+        return;
+    }
+    quota_refresh_handler_();
 }
 
 void UIManager::open_downloads_folder() {
@@ -1130,6 +1140,30 @@ void UIManager::activate_selected_file_download() {
     }
     set_selected_file_id(channel_id, it->file_id);
     file_download_handler_(*it);
+}
+
+void UIManager::activate_selected_file_delete() {
+    if (side_panel_mode_ != SidePanelMode::Files || !file_delete_handler_) {
+        return;
+    }
+    const auto channel_id = state_.active_channel().value_or("");
+    if (channel_id.empty()) {
+        return;
+    }
+    const auto files = state_.channel_files(channel_id);
+    if (files.empty()) {
+        return;
+    }
+
+    const auto selected = selected_file_id(channel_id).value_or(files.front().file_id);
+    auto it = std::find_if(files.begin(), files.end(), [&](const RemoteFileEntry& file) {
+        return file.file_id == selected;
+    });
+    if (it == files.end()) {
+        it = files.begin();
+    }
+    set_selected_file_id(channel_id, it->file_id);
+    file_delete_handler_(*it);
 }
 
 Element UIManager::build_main_content(const std::string& active_ch, int msg_rows, int term_cols) {
@@ -1246,6 +1280,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
         auto files_el = render_files_panel(files,
                                            side_panel_width,
                                            selected_file_id(active_ch),
+                                           quota_summary_provider_ ? quota_summary_provider_() : std::string{},
                                            file_positions_,
                                            next_x,
                                            mouse_tracker_.message_region().y);
@@ -1708,6 +1743,11 @@ void UIManager::run(SubmitFn on_submit,
                 notify();
                 return true;
             }
+            if (event == Event::Character("d") || event == Event::Character("D")) {
+                activate_selected_file_delete();
+                notify();
+                return true;
+            }
             if (event == Event::Character("o") || event == Event::Character("O")) {
                 open_downloads_folder();
                 notify();
@@ -1720,6 +1760,11 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (event == Event::Delete) {
+            if (input_line_.empty() && side_panel_mode_ == SidePanelMode::Files) {
+                activate_selected_file_delete();
+                notify();
+                return true;
+            }
             tab_completer_.reset();
             input_line_.del_forward();
             return true;

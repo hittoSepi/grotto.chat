@@ -51,8 +51,9 @@
 `/files`                   refresh files for the active channel/DM and open the files panel (alias: `/ls`)  
 `/downloads`               open the local downloads folder (alias: `/dir`)  
 `/quota`                   show your current file storage usage and limits  
+`/rmfile <id>`             delete one of your uploaded files (or a channel file if you are an operator)  
 
 ---
 
 Tip: Commands autocomplete with the `Tab` key. Type `/` and press Tab.
-In the `F3` files panel, use `r` to refresh and `o` to open downloads.
+In the `F3` files panel, use `r` to refresh, `Del` to remove, and `o` to open downloads.

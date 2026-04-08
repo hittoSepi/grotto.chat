@@ -86,6 +86,7 @@ private:
     CommandResponse cmd_quit(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_msg(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_quota(const std::vector<std::string>& args, SessionPtr session);
+    CommandResponse cmd_rmfile(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_resetdb(const std::vector<std::string>& args, SessionPtr session);
 
     // Helper functions

@@ -64,6 +64,15 @@ public:
     void set_file_download_handler(std::function<void(const RemoteFileEntry&)> handler) {
         file_download_handler_ = std::move(handler);
     }
+    void set_file_delete_handler(std::function<void(const RemoteFileEntry&)> handler) {
+        file_delete_handler_ = std::move(handler);
+    }
+    void set_quota_summary_provider(std::function<std::string()> provider) {
+        quota_summary_provider_ = std::move(provider);
+    }
+    void set_quota_refresh_handler(std::function<void()> handler) {
+        quota_refresh_handler_ = std::move(handler);
+    }
 
     // Wake the FTXUI event loop after AppState changes.
     // Called internally by AppState::post_ui() wiring.
@@ -131,8 +140,10 @@ private:
     void set_selected_file_id(const std::string& channel_id, std::string file_id);
     void move_file_selection(int delta);
     void activate_selected_file_download();
+    void activate_selected_file_delete();
     void refresh_files_for_channel_if_needed(const std::string& channel_id);
     void force_refresh_active_files();
+    void refresh_quota_summary();
     void open_downloads_folder();
 
     AppState&           state_;
@@ -174,6 +185,9 @@ private:
     std::function<std::string()> transfer_summary_provider_;
     std::function<void(const std::string&)> files_refresh_handler_;
     std::function<void(const RemoteFileEntry&)> file_download_handler_;
+    std::function<void(const RemoteFileEntry&)> file_delete_handler_;
+    std::function<std::string()> quota_summary_provider_;
+    std::function<void()> quota_refresh_handler_;
     std::string toast_text_;
     std::chrono::steady_clock::time_point toast_until_{};
     bool quit_confirm_visible_ = false;

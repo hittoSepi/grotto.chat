@@ -51,8 +51,9 @@
 `/files`                   päivitä aktiivisen kanavan/DM:n tiedostot ja avaa files-paneli (alias: `/ls`)  
 `/downloads`               avaa paikallinen downloads-kansio (alias: `/dir`)  
 `/quota`                   näytä nykyinen tiedostotilan käyttö ja rajat  
+`/rmfile <id>`             poista oma lähettämäsi tiedosto (tai kanavatiedosto jos olet operaattori)  
 
 ---
 
 Vihje: Komento täydentyy `Tab`-näppäimellä. Kirjoita `/` ja paina Tab.
-`F3` files-panelissa `r` päivittää listan ja `o` avaa downloads-kansion.
+`F3` files-panelissa `r` päivittää listan, `Del` poistaa ja `o` avaa downloads-kansion.

@@ -64,6 +64,14 @@ TEST_CASE("parse_command recognizes quota command", "[command-parser]") {
     CHECK(parsed->args.empty());
 }
 
+TEST_CASE("parse_command recognizes rmfile command", "[command-parser]") {
+    const auto parsed = grotto::parse_command("/rmfile abc123");
+    REQUIRE(parsed.has_value());
+    REQUIRE(parsed->name == "/rmfile");
+    REQUIRE(parsed->args.size() == 1);
+    CHECK(parsed->args[0] == "abc123");
+}
+
 TEST_CASE("detect_local_file_from_paste accepts quoted existing file path", "[command-parser]") {
     const auto dir = make_temp_dir("quoted");
     const auto path = dir / "my file.txt";
