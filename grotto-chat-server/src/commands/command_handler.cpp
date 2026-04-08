@@ -3,11 +3,15 @@
 #include "db/database.hpp"
 #include "db/user_store.hpp"
 #include "db/offline_store.hpp"
+#include "db/file_store.hpp"
 #include "utils/channel_utils.hpp"
 #include "utils/nickname_utils.hpp"
 #include <spdlog/spdlog.h>
 #include <sodium.h>
 #include <algorithm>
+#include <array>
+#include <iomanip>
+#include <sstream>
 
 namespace grotto::commands {
 
@@ -46,6 +50,30 @@ std::string normalize_channel_argument(const std::string& input) {
     return utils::is_valid_channel_name(channel) ? channel : std::string();
 }
 
+std::string human_bytes(uint64_t bytes) {
+    static constexpr std::array<const char*, 5> kUnits = {"B", "KB", "MB", "GB", "TB"};
+    double value = static_cast<double>(bytes);
+    std::size_t unit_index = 0;
+    while (value >= 1024.0 && unit_index + 1 < kUnits.size()) {
+        value /= 1024.0;
+        ++unit_index;
+    }
+
+    std::ostringstream oss;
+    if (unit_index == 0) {
+        oss << bytes << ' ' << kUnits[unit_index];
+    } else if (value >= 10.0) {
+        oss << std::fixed << std::setprecision(0) << value << ' ' << kUnits[unit_index];
+    } else {
+        oss << std::fixed << std::setprecision(1) << value << ' ' << kUnits[unit_index];
+    }
+    return oss.str();
+}
+
+std::string quota_limit_label(uint64_t limit) {
+    return limit == 0 ? std::string("unlimited") : human_bytes(limit);
+}
+
 } // namespace
 
 // Helper to create CommandResponse
@@ -62,12 +90,18 @@ CommandHandler::CommandHandler(
     BroadcastFunc broadcast,
     db::Database& db,
     db::UserStore& user_store,
-    db::OfflineStore& offline_store)
+    db::OfflineStore& offline_store,
+    db::FileStore& file_store,
+    uint64_t max_total_storage_bytes,
+    uint64_t max_user_storage_bytes)
     : find_session_(std::move(find_session))
     , broadcast_(std::move(broadcast))
     , db_(db)
     , user_store_(user_store)
     , offline_store_(offline_store)
+    , file_store_(file_store)
+    , max_total_storage_bytes_(max_total_storage_bytes)
+    , max_user_storage_bytes_(max_user_storage_bytes)
 {
     // Register commands
     command_map_["join"] = [this](auto& args, auto s) { return cmd_join(args, s); };
@@ -88,6 +122,7 @@ CommandHandler::CommandHandler(
     command_map_["quit"] = [this](auto& args, auto s) { return cmd_quit(args, s); };
     command_map_["msg"] = [this](auto& args, auto s) { return cmd_msg(args, s); };
     command_map_["query"] = [this](auto& args, auto s) { return cmd_msg(args, s); };
+    command_map_["quota"] = [this](auto& args, auto s) { return cmd_quota(args, s); };
     command_map_["resetdb"] = [this](auto& args, auto s) { return cmd_resetdb(args, s); };
 }
 
@@ -820,6 +855,24 @@ CommandResponse CommandHandler::cmd_msg(const std::vector<std::string>& args, Se
 
     spdlog::debug("Private message from {} to {}: {}", session->user_id(), target_id, message);
     return make_response(true, "-> " + target + ": " + message, "msg");
+}
+
+CommandResponse CommandHandler::cmd_quota(const std::vector<std::string>& args, SessionPtr session) {
+    if (!args.empty()) {
+        return make_response(false, "Usage: /quota", "quota");
+    }
+
+    const auto user_reserved = file_store_.getUserReservedBytes(session->user_id());
+    const auto total_reserved = file_store_.getReservedBytes();
+
+    std::ostringstream message;
+    message << "File storage quotas:\n";
+    message << "Your usage: " << human_bytes(user_reserved)
+            << " / " << quota_limit_label(max_user_storage_bytes_) << "\n";
+    message << "Server usage: " << human_bytes(total_reserved)
+            << " / " << quota_limit_label(max_total_storage_bytes_);
+
+    return make_response(true, message.str(), "quota");
 }
 
 // ============================================================================

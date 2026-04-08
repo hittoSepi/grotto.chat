@@ -67,7 +67,8 @@ void Listener::run() {
             this->broadcast(env, exclude);
         };
         command_handler_ = std::make_unique<commands::CommandHandler>(
-            find_session, broadcast, *db_, user_store_, offline_store_);
+            find_session, broadcast, *db_, user_store_, offline_store_, *file_store_,
+            max_total_storage_bytes_, max_user_storage_bytes_);
         spdlog::info("Command handler initialized");
 
         voice_room_mgr_ = std::make_unique<voice::VoiceRoomManager>(

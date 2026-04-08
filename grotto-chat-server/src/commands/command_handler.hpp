@@ -14,7 +14,7 @@
 
 // Forward declarations
 namespace grotto::net { class Session; }
-namespace grotto::db { class Database; class OfflineStore; }
+namespace grotto::db { class Database; class OfflineStore; class FileStore; }
 
 namespace grotto::commands {
 
@@ -44,7 +44,10 @@ public:
         BroadcastFunc broadcast,
         db::Database& db,
         db::UserStore& user_store,
-        db::OfflineStore& offline_store);
+        db::OfflineStore& offline_store,
+        db::FileStore& file_store,
+        uint64_t max_total_storage_bytes,
+        uint64_t max_user_storage_bytes);
 
     // Handle an incoming IRC command from a session
     CommandResponse handle_command(const IrcCommand& cmd, SessionPtr session);
@@ -82,6 +85,7 @@ private:
     CommandResponse cmd_password(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_quit(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_msg(const std::vector<std::string>& args, SessionPtr session);
+    CommandResponse cmd_quota(const std::vector<std::string>& args, SessionPtr session);
     CommandResponse cmd_resetdb(const std::vector<std::string>& args, SessionPtr session);
 
     // Helper functions
@@ -96,6 +100,9 @@ private:
     db::Database& db_;
     db::UserStore& user_store_;
     db::OfflineStore& offline_store_;
+    db::FileStore& file_store_;
+    uint64_t max_total_storage_bytes_ = 0;
+    uint64_t max_user_storage_bytes_ = 0;
 
     // Channel state
     std::unordered_map<std::string, ChannelState> channels_;  // name -> state

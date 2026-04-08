@@ -869,6 +869,9 @@ void App::handle_command(const ParsedCommand& cmd) {
         std::filesystem::create_directories(downloads_dir);
         ui::open_path(downloads_dir.string());
         ui_->push_system_msg("Opened downloads folder: " + downloads_dir.string());
+    } else if (cmd.name == "/quota") {
+        msg_handler_->send_command("quota", {});
+        log_server_event("quota requested", false);
     } else if (cmd.name == "/upload") {
         if (cmd.args.empty()) {
             ui_->push_system_msg("Usage: /upload <local-file-path>");

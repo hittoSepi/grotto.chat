@@ -57,6 +57,13 @@ TEST_CASE("parse_command recognizes files alias", "[command-parser]") {
     CHECK(parsed->args.empty());
 }
 
+TEST_CASE("parse_command recognizes quota command", "[command-parser]") {
+    const auto parsed = grotto::parse_command("/quota");
+    REQUIRE(parsed.has_value());
+    REQUIRE(parsed->name == "/quota");
+    CHECK(parsed->args.empty());
+}
+
 TEST_CASE("detect_local_file_from_paste accepts quoted existing file path", "[command-parser]") {
     const auto dir = make_temp_dir("quoted");
     const auto path = dir / "my file.txt";
