@@ -158,6 +158,56 @@ std::vector<VisibleLayoutHit> current_visible_hits(AppState& state,
         ch_state, *ch, state.local_user_id(), cfg.ui.timestamp_format, visible_rows, message_width);
 }
 
+std::vector<int> build_selectable_row_ordinals(const std::vector<VisibleLayoutHit>& visible) {
+    std::vector<int> ordinals;
+    ordinals.reserve(visible.size());
+    int current = -1;
+    for (const auto& row : visible) {
+        if (row.block_kind == LayoutBlockKind::Image || row.has_inline_image) {
+            ordinals.push_back(-1);
+            continue;
+        }
+        ++current;
+        ordinals.push_back(current);
+    }
+    return ordinals;
+}
+
+int map_screen_row_to_selectable_row(const std::vector<int>& ordinals, int screen_row, bool prefer_forward) {
+    if (ordinals.empty()) {
+        return -1;
+    }
+    const int clamped = std::clamp(screen_row, 0, static_cast<int>(ordinals.size()) - 1);
+    if (ordinals[static_cast<size_t>(clamped)] >= 0) {
+        return ordinals[static_cast<size_t>(clamped)];
+    }
+
+    if (prefer_forward) {
+        for (int i = clamped + 1; i < static_cast<int>(ordinals.size()); ++i) {
+            if (ordinals[static_cast<size_t>(i)] >= 0) {
+                return ordinals[static_cast<size_t>(i)];
+            }
+        }
+        for (int i = clamped - 1; i >= 0; --i) {
+            if (ordinals[static_cast<size_t>(i)] >= 0) {
+                return ordinals[static_cast<size_t>(i)];
+            }
+        }
+    } else {
+        for (int i = clamped - 1; i >= 0; --i) {
+            if (ordinals[static_cast<size_t>(i)] >= 0) {
+                return ordinals[static_cast<size_t>(i)];
+            }
+        }
+        for (int i = clamped + 1; i < static_cast<int>(ordinals.size()); ++i) {
+            if (ordinals[static_cast<size_t>(i)] >= 0) {
+                return ordinals[static_cast<size_t>(i)];
+            }
+        }
+    }
+    return -1;
+}
+
 std::optional<std::string> find_url_in_text(const std::string& text) {
     static const std::regex url_re(R"(((?:https?://|www\.)\S+))");
     std::smatch match;
@@ -881,6 +931,10 @@ void UIManager::copy_message_selection_to_clipboard() {
     selected_lines.reserve(static_cast<size_t>(bottom_line - top_line + 1));
     bool has_selected_characters = false;
     for (int i = top_line; i <= bottom_line; ++i) {
+        if (visible[static_cast<size_t>(i)].block_kind == LayoutBlockKind::Image ||
+            visible[static_cast<size_t>(i)].has_inline_image) {
+            continue;
+        }
         const std::string& line = visible[static_cast<size_t>(i)].plain_text;
         const int line_cols = visible_width(line);
         int from = (i == top_line) ? top_col : 0;
@@ -917,6 +971,10 @@ void UIManager::copy_message_selection_to_clipboard() {
     if (!has_selected_characters || !has_non_space_text(selected)) {
         selected.clear();
         for (int i = top_line; i <= bottom_line; ++i) {
+            if (visible[static_cast<size_t>(i)].block_kind == LayoutBlockKind::Image ||
+                visible[static_cast<size_t>(i)].has_inline_image) {
+                continue;
+            }
             if (!selected.empty()) {
                 selected.push_back('\n');
             }

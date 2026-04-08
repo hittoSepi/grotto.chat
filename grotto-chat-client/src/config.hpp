@@ -87,6 +87,11 @@ struct PrivacyConfig {
     bool        share_read_receipts = true;
 };
 
+struct SessionConfig {
+    std::vector<std::string> remembered_channels;
+    std::vector<std::string> remembered_direct_messages;
+};
+
 struct ClientConfig {
     ServerConfig       server;
     IdentityConfig     identity;
@@ -97,6 +102,7 @@ struct ClientConfig {
     ConnectionConfig   connection;
     NotificationConfig notifications;
     PrivacyConfig      privacy;
+    SessionConfig      session;
 
     // Derived: platform-specific config directory
     std::filesystem::path config_dir;

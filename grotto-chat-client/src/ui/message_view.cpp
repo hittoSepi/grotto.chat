@@ -339,7 +339,8 @@ Element render_messages(const ChannelState& state,
         if (selected_start_row >= 0 &&
             selected_end_row >= selected_start_row &&
             visible_row >= selected_start_row &&
-            visible_row <= selected_end_row) {
+            visible_row <= selected_end_row &&
+            row.block_kind != LayoutBlockKind::Image) {
             const int line_cols = visible_width(row.plain_text);
             int from_col = 0;
             int to_col = line_cols;

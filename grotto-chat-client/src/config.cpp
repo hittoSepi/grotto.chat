@@ -151,6 +151,28 @@ ClientConfig load_config(const std::filesystem::path& path) {
             }
         }
 
+        if (data.contains("session")) {
+            auto& s = data.at("session");
+            if (s.contains("remembered_channels")) {
+                cfg.session.remembered_channels = toml::find<std::vector<std::string>>(s, "remembered_channels");
+            }
+            if (s.contains("remembered_direct_messages")) {
+                cfg.session.remembered_direct_messages = toml::find<std::vector<std::string>>(s, "remembered_direct_messages");
+            }
+        }
+
+        if (data.contains("session")) {
+            auto& s = data.at("session");
+            if (s.contains("remembered_channels")) {
+                cfg.session.remembered_channels =
+                    toml::find<std::vector<std::string>>(s, "remembered_channels");
+            }
+            if (s.contains("remembered_direct_messages")) {
+                cfg.session.remembered_direct_messages =
+                    toml::find<std::vector<std::string>>(s, "remembered_direct_messages");
+            }
+        }
+
     } catch (const std::exception& e) {
         spdlog::error("Failed to parse config '{}': {}", path.string(), e.what());
     }
@@ -313,6 +335,18 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["privacy"]["share_typing_indicators"] = cfg.privacy.share_typing_indicators;
     data["privacy"]["share_read_receipts"] = cfg.privacy.share_read_receipts;
 
+    toml::array remembered_channels;
+    for (const auto& channel : cfg.session.remembered_channels) {
+        remembered_channels.push_back(channel);
+    }
+    data["session"]["remembered_channels"] = remembered_channels;
+
+    toml::array remembered_direct_messages;
+    for (const auto& dm : cfg.session.remembered_direct_messages) {
+        remembered_direct_messages.push_back(dm);
+    }
+    data["session"]["remembered_direct_messages"] = remembered_direct_messages;
+
     try {
         std::filesystem::create_directories(path.parent_path());
         std::ofstream ofs(path);
@@ -384,9 +418,21 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["notifications"]["notify_on_mention"] = cfg.notifications.notify_on_mention;
         data["notifications"]["notify_on_dm"] = cfg.notifications.notify_on_dm;
         data["notifications"]["mention_keywords"] = cfg.notifications.mention_keywords;
-
+        
         data["privacy"]["share_typing_indicators"] = cfg.privacy.share_typing_indicators;
         data["privacy"]["share_read_receipts"] = cfg.privacy.share_read_receipts;
+
+        toml::array remembered_channels;
+        for (const auto& channel : cfg.session.remembered_channels) {
+            remembered_channels.push_back(channel);
+        }
+        data["session"]["remembered_channels"] = remembered_channels;
+
+        toml::array remembered_direct_messages;
+        for (const auto& dm : cfg.session.remembered_direct_messages) {
+            remembered_direct_messages.push_back(dm);
+        }
+        data["session"]["remembered_direct_messages"] = remembered_direct_messages;
         
         std::filesystem::create_directories(path.parent_path());
         std::ofstream ofs(path);

@@ -222,12 +222,11 @@ PreviewResult LinkPreviewer::fetch_sync(const std::string& url) {
         (is_likely_image_url(url) || to_lower_ascii(content_type).starts_with("image/"))) {
         result.is_image = true;
         result.title = "[image] " + url;
-        result.description = content_type.empty() ? "direct image link" : content_type;
+        result.description.clear();
         result.thumbnail = build_image_thumbnail(body);
         result.image_preview = render_image_preview(url, result.thumbnail);
         if (result.image_preview.empty()) {
-            result.description += (result.description.empty() ? "" : " ");
-            result.description += "(inline thumbnail unavailable)";
+            result.description = "(inline thumbnail unavailable)";
         }
         result.success = true;
         return result;

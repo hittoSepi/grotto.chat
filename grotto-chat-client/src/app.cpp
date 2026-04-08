@@ -30,6 +30,7 @@ namespace grotto {
 namespace {
 
 constexpr size_t kMaxPlaintextMessageBytes = 4096;
+constexpr std::size_t kMaxRememberedTargets = 24;
 constexpr auto kTypingIdleTimeout = std::chrono::seconds(3);
 constexpr auto kTypingRefreshInterval = std::chrono::seconds(2);
 constexpr auto kTypingRemoteTtl = std::chrono::seconds(5);
@@ -426,6 +427,7 @@ bool App::init(const std::filesystem::path& config_path,
     // ── State & UI ────────────────────────────────────────────────────────
     state_.set_local_user_id(cfg_.identity.user_id);
     state_.ensure_channel("server");
+    restore_remembered_targets();
 
     // Wire AppState::post_ui to also wake the FTXUI event loop
     ui_ = std::make_unique<ui::UIManager>(state_, cfg_);
@@ -897,6 +899,7 @@ void App::handle_command(const ParsedCommand& cmd) {
         }
         state_.ensure_channel(target);
         state_.set_active_channel(target);
+        remember_target(target);
         send_chat(text);
     } else if (cmd.name == "/call" && !cmd.args.empty()) {
         voice_->call(cmd.args[0]);
@@ -1193,18 +1196,25 @@ void App::trigger_previews(const std::string& channel_id, const std::string& tex
     for (; it != std::sregex_iterator{}; ++it) {
         std::string url = (*it)[0].str();
         spdlog::debug("preview: fetching {}", url);
-        previewer_->fetch(url, [this, channel_id](PreviewResult r) {
+        const std::string original_text = trim_ascii_whitespace(text);
+        previewer_->fetch(url, [this, channel_id, original_text](PreviewResult r) {
             spdlog::debug("preview: result for {} success={} title='{}'", r.url, r.success, r.title);
             if (!r.success) return;
-            state_.post_ui([this, channel_id, r = std::move(r)]() mutable {
+            state_.post_ui([this, channel_id, original_text, r = std::move(r)]() mutable {
                 Message pm;
                 pm.type      = r.is_image ? Message::Type::Preview : Message::Type::System;
                 pm.sender_id = "preview";
                 if (r.is_image) {
-                    pm.content = r.title;
-                    pm.render_parts.push_back({MessageRenderPart::Kind::Text, r.title, std::nullopt});
+                    const bool original_is_same_url = (original_text == r.url);
+                    if (!original_is_same_url) {
+                        pm.content = r.title;
+                        pm.render_parts.push_back({MessageRenderPart::Kind::Text, r.title, std::nullopt});
+                    }
                     if (!r.description.empty()) {
-                        pm.content += "\n" + r.description;
+                        if (!pm.content.empty()) {
+                            pm.content += "\n";
+                        }
+                        pm.content += r.description;
                         pm.render_parts.push_back({MessageRenderPart::Kind::Text, r.description, std::nullopt});
                     }
                     if (!r.thumbnail.rgba.empty()) {
@@ -1234,6 +1244,64 @@ void App::persist_message(const std::string& channel_id, const Message& msg) {
     row.timestamp_ms = msg.timestamp_ms;
     row.type         = static_cast<int>(msg.type);
     store_->save_message(row);
+    if (msg.type == Message::Type::Chat) {
+        remember_target(channel_id);
+    }
+}
+
+void App::restore_remembered_targets() {
+    for (const auto& channel : cfg_.session.remembered_channels) {
+        const auto target = sanitize_channel_name(channel);
+        if (target && !is_server_channel(*target)) {
+            state_.ensure_channel(*target);
+        }
+    }
+    for (const auto& dm : cfg_.session.remembered_direct_messages) {
+        const std::string target = canonical_channel_id(trim_ascii_whitespace(dm));
+        if (!target.empty() && is_direct_target(target)) {
+            state_.ensure_channel(target);
+            state_.set_direct_message_users(target, cfg_.identity.user_id, target);
+        }
+    }
+}
+
+void App::remember_target(const std::string& channel_id) {
+    const std::string target = canonical_channel_id(trim_ascii_whitespace(channel_id));
+    if (target.empty() || is_server_channel(target)) {
+        return;
+    }
+
+    auto remember_into = [](std::vector<std::string>& targets, const std::string& value) {
+        targets.erase(std::remove(targets.begin(), targets.end(), value), targets.end());
+        targets.push_back(value);
+        if (targets.size() > kMaxRememberedTargets) {
+            targets.erase(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(targets.size() - kMaxRememberedTargets));
+        }
+    };
+
+    if (is_channel_target(target)) {
+        remember_into(cfg_.session.remembered_channels, target);
+    } else if (is_direct_target(target)) {
+        remember_into(cfg_.session.remembered_direct_messages, target);
+    } else {
+        return;
+    }
+    save_current_config();
+}
+
+void App::forget_target(const std::string& channel_id) {
+    const std::string target = canonical_channel_id(trim_ascii_whitespace(channel_id));
+    if (target.empty() || is_server_channel(target)) {
+        return;
+    }
+
+    auto erase_from = [&target](std::vector<std::string>& targets) {
+        targets.erase(std::remove(targets.begin(), targets.end(), target), targets.end());
+    };
+
+    erase_from(cfg_.session.remembered_channels);
+    erase_from(cfg_.session.remembered_direct_messages);
+    save_current_config();
 }
 
 void App::log_system_message(const std::string& channel_id,
@@ -1318,6 +1386,7 @@ void App::handle_command_response(const CommandResponse& response) {
                 state_.ensure_channel(target);
                 state_.set_active_channel(target);
             });
+            remember_target(*target);
             if (ui_) ui_->notify();
         }
         return;
@@ -1372,6 +1441,7 @@ void App::handle_command_response(const CommandResponse& response) {
             state_.post_ui([this, target = *target]() {
                 state_.remove_channel(target);
             });
+            forget_target(*target);
             if (ui_) ui_->notify();
         }
     }
@@ -1422,6 +1492,7 @@ void App::switch_to_channel(const std::string& channel_id) {
         ch_state.messages.back().type == Message::Type::System &&
         ch_state.messages.back().content == switch_message;
     state_.set_active_channel(canonical_id);
+    remember_target(canonical_id);
     if (!duplicate_switch_message) {
         ui_->push_system_msg(switch_message);
     }

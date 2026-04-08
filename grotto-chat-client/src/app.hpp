@@ -65,6 +65,9 @@ private:
     void clear_pending_channel_commands();
     bool has_pending_command(const std::deque<std::string>& queue,
                              const std::string& target) const;
+    void restore_remembered_targets();
+    void remember_target(const std::string& channel_id);
+    void forget_target(const std::string& channel_id);
 
     // Open settings screen
     void open_settings();
