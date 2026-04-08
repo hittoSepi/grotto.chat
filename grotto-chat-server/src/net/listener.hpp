@@ -114,9 +114,15 @@ private:
     void do_accept();
     void on_signal(boost::system::error_code ec, int signal_number);
     void cleanup_dead_sessions();
+    struct PresenceState {
+        PresenceUpdate::Status status = PresenceUpdate::OFFLINE;
+        std::string status_text;
+        int64_t status_since_ms = 0;
+    };
+
     void send_presence_snapshot(
         const std::shared_ptr<Session>& session,
-        const std::vector<std::pair<std::string, PresenceUpdate::Status>>& snapshot);
+        const std::vector<std::pair<std::string, PresenceState>>& snapshot);
 
     using Strand = boost::asio::strand<boost::asio::io_context::executor_type>;
     using Acceptor = boost::asio::ip::tcp::acceptor;
@@ -144,7 +150,7 @@ private:
     // Active sessions
     std::unordered_map<std::string, std::shared_ptr<Session>> sessions_by_user_;
     std::unordered_map<std::shared_ptr<Session>, std::string> users_by_session_;
-    std::unordered_map<std::string, PresenceUpdate::Status> user_presence_;
+    std::unordered_map<std::string, PresenceState> user_presence_;
     mutable std::mutex sessions_mutex_;
 
     // Config limits

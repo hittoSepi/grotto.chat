@@ -167,9 +167,10 @@ int AppState::unread_count(const std::string& channel_id) const {
 
 // ── Presence ──────────────────────────────────────────────────────────────────
 
-void AppState::set_presence(const std::string& user_id, PresenceStatus status) {
+void AppState::set_presence(const std::string& user_id, PresenceStatus status,
+                            std::string status_text, int64_t status_since_ms) {
     std::unique_lock lk(mu_);
-    online_users_[user_id] = status;
+    online_users_[user_id] = PresenceInfo{status, std::move(status_text), status_since_ms};
     // Sync presence into all channel user lists
     for (auto& [ch_id, users] : channel_users_) {
         auto it = users.find(user_id);
@@ -182,14 +183,20 @@ void AppState::set_presence(const std::string& user_id, PresenceStatus status) {
 PresenceStatus AppState::presence(const std::string& user_id) const {
     std::shared_lock lk(mu_);
     auto it = online_users_.find(user_id);
-    return it != online_users_.end() ? it->second : PresenceStatus::Offline;
+    return it != online_users_.end() ? it->second.status : PresenceStatus::Offline;
+}
+
+PresenceInfo AppState::presence_info(const std::string& user_id) const {
+    std::shared_lock lk(mu_);
+    auto it = online_users_.find(user_id);
+    return it != online_users_.end() ? it->second : PresenceInfo{};
 }
 
 std::vector<std::string> AppState::online_users() const {
     std::shared_lock lk(mu_);
     std::vector<std::string> result;
-    for (auto& [id, status] : online_users_) {
-        if (status != PresenceStatus::Offline) result.push_back(id);
+    for (auto& [id, presence] : online_users_) {
+        if (presence.status != PresenceStatus::Offline) result.push_back(id);
     }
     std::sort(result.begin(), result.end());
     return result;
@@ -207,7 +214,7 @@ void AppState::set_channel_users(const std::string& channel_id,
         // Sync with current presence and voice status
         auto pres_it = online_users_.find(u.user_id);
         if (pres_it != online_users_.end()) {
-            info.presence = pres_it->second;
+            info.presence = pres_it->second.status;
         }
         auto voice_it = user_voice_status_.find(u.user_id);
         if (voice_it != user_voice_status_.end()) {
@@ -223,7 +230,7 @@ void AppState::add_channel_user(const std::string& channel_id, const ChannelUser
     // Sync with current presence
     auto pres_it = online_users_.find(user.user_id);
     if (pres_it != online_users_.end()) {
-        info.presence = pres_it->second;
+        info.presence = pres_it->second.status;
     }
     // Sync with voice status
     auto voice_it = user_voice_status_.find(user.user_id);
@@ -289,12 +296,12 @@ void AppState::ensure_channel_users_from_online(const std::string& channel_id) {
     
     // Create users from online_users_ with Regular role
     auto& ch_users = channel_users_[channel_id];
-    for (const auto& [uid, status] : online_users_) {
-        if (status != PresenceStatus::Offline) {
+    for (const auto& [uid, presence] : online_users_) {
+        if (presence.status != PresenceStatus::Offline) {
             ChannelUserInfo info;
             info.user_id = uid;
             info.role = UserRole::Regular;
-            info.presence = status;
+            info.presence = presence.status;
             ch_users[uid] = std::move(info);
         }
     }
@@ -354,7 +361,7 @@ void AppState::set_direct_message_users(const std::string& channel_id,
 
         auto pres_it = online_users_.find(user_id);
         if (pres_it != online_users_.end()) {
-            info.presence = pres_it->second;
+            info.presence = pres_it->second.status;
         }
         auto voice_it = user_voice_status_.find(user_id);
         if (voice_it != user_voice_status_.end()) {

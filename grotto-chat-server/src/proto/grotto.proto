@@ -148,6 +148,8 @@ message PresenceUpdate {
     DND     = 3;
   }
   Status status = 2;
+  string status_text = 3;
+  int64 status_since_ms = 4;
 }
 
 message TypingUpdate {

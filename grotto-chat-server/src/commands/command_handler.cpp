@@ -887,10 +887,10 @@ CommandResponse CommandHandler::cmd_away(const std::vector<std::string>& args, S
         return make_response(false, "Session unavailable", "away");
     }
     const std::string& user_id = session->user_id();
-    if (update_presence_) {
-        update_presence_(user_id, PresenceUpdate::AWAY, nullptr);
-    }
     const std::string reason = join_command_args(args);
+    if (update_presence_) {
+        update_presence_(user_id, PresenceUpdate::AWAY, reason, nullptr);
+    }
     return make_response(true,
                          reason.empty() ? "Status set to away"
                                         : "Status set to away: " + reason,
@@ -905,7 +905,7 @@ CommandResponse CommandHandler::cmd_back(const std::vector<std::string>& args, S
         return make_response(false, "Session unavailable", "back");
     }
     if (update_presence_) {
-        update_presence_(session->user_id(), PresenceUpdate::ONLINE, nullptr);
+        update_presence_(session->user_id(), PresenceUpdate::ONLINE, "", nullptr);
     }
     return make_response(true, "Status set to online", "back");
 }
@@ -914,10 +914,10 @@ CommandResponse CommandHandler::cmd_dnd(const std::vector<std::string>& args, Se
     if (!session) {
         return make_response(false, "Session unavailable", "dnd");
     }
-    if (update_presence_) {
-        update_presence_(session->user_id(), PresenceUpdate::DND, nullptr);
-    }
     const std::string reason = join_command_args(args);
+    if (update_presence_) {
+        update_presence_(session->user_id(), PresenceUpdate::DND, reason, nullptr);
+    }
     return make_response(true,
                          reason.empty() ? "Status set to do not disturb"
                                         : "Status set to do not disturb: " + reason,

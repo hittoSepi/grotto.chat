@@ -17,6 +17,12 @@ namespace grotto {
 
 enum class PresenceStatus { Offline, Online, Away, Dnd };
 
+struct PresenceInfo {
+    PresenceStatus status = PresenceStatus::Offline;
+    std::string status_text;
+    int64_t status_since_ms = 0;
+};
+
 // User role/prefix for display
 enum class UserRole { Regular, Voice, Admin };
 
@@ -91,8 +97,10 @@ public:
     int  unread_count(const std::string& channel_id) const;
 
     // ── Presence ─────────────────────────────────────────────────────────
-    void set_presence(const std::string& user_id, PresenceStatus status);
+    void set_presence(const std::string& user_id, PresenceStatus status,
+                      std::string status_text = {}, int64_t status_since_ms = 0);
     PresenceStatus presence(const std::string& user_id) const;
+    PresenceInfo presence_info(const std::string& user_id) const;
     std::vector<std::string> online_users() const;
 
     // ── Channel User List (for user list panel) ──────────────────────────
@@ -161,7 +169,7 @@ private:
     std::unordered_map<std::string, ChannelState> channels_;
     std::string active_channel_;
 
-    std::unordered_map<std::string, PresenceStatus> online_users_;
+    std::unordered_map<std::string, PresenceInfo> online_users_;
 
     VoiceState voice_state_;
     std::unordered_map<std::string, std::unordered_set<std::string>> voice_room_users_;

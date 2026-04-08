@@ -21,7 +21,7 @@ namespace grotto::commands {
 using SessionPtr = std::shared_ptr<net::Session>;
 using SessionFinder = std::function<SessionPtr(const std::string&)>;
 using BroadcastFunc = std::function<void(const Envelope&, SessionPtr)>;
-using PresenceUpdateFn = std::function<void(const std::string&, PresenceUpdate::Status, SessionPtr)>;
+using PresenceUpdateFn = std::function<void(const std::string&, PresenceUpdate::Status, const std::string&, SessionPtr)>;
 
 // Channel state with operators and settings
 struct ChannelState {

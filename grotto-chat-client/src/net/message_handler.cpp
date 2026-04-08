@@ -396,9 +396,11 @@ void MessageHandler::handle_presence(const Envelope& env) {
     default:                       status = PresenceStatus::Offline; break;
     }
 
-    const std::string& uid = update.user_id();
-    state_.post_ui([this, uid, status]() {
-        state_.set_presence(uid, status);
+    const std::string uid = update.user_id();
+    const std::string status_text = update.status_text();
+    const int64_t status_since_ms = update.status_since_ms();
+    state_.post_ui([this, uid, status, status_text, status_since_ms]() {
+        state_.set_presence(uid, status, status_text, status_since_ms);
         std::string text;
         switch (status) {
         case PresenceStatus::Online:
@@ -413,6 +415,9 @@ void MessageHandler::handle_presence(const Envelope& env) {
         default:
             text = uid + " went offline";
             break;
+        }
+        if ((status == PresenceStatus::Away || status == PresenceStatus::Dnd) && !status_text.empty()) {
+            text += ": " + status_text;
         }
         push_system(text);
     });

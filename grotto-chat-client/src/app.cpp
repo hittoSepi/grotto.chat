@@ -21,6 +21,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <ctime>
 #include <optional>
 #include <sstream>
 #include <string_view>
@@ -208,15 +209,59 @@ bool is_quota_error_message(std::string_view message) {
            message == "Server storage quota exceeded";
 }
 
-std::string dm_presence_notice(PresenceStatus status, std::string_view user_id) {
-    switch (status) {
-        case PresenceStatus::Away:
-            return std::string(user_id) + " is away right now.";
-        case PresenceStatus::Dnd:
-            return std::string(user_id) + " is in do not disturb right now.";
-        default:
-            return {};
+std::string format_presence_since_time(int64_t status_since_ms) {
+    if (status_since_ms <= 0) {
+        return {};
     }
+
+    const std::time_t raw_time = static_cast<std::time_t>(status_since_ms / 1000);
+    std::tm local_tm{};
+#ifdef _WIN32
+    if (localtime_s(&local_tm, &raw_time) != 0) {
+        return {};
+    }
+#else
+    if (localtime_r(&raw_time, &local_tm) == nullptr) {
+        return {};
+    }
+#endif
+
+    char buffer[16]{};
+    if (std::strftime(buffer, sizeof(buffer), "%H:%M", &local_tm) == 0) {
+        return {};
+    }
+    return std::string(buffer);
+}
+
+std::string dm_presence_notice(const PresenceInfo& presence, std::string_view user_id) {
+    if (presence.status != PresenceStatus::Away && presence.status != PresenceStatus::Dnd) {
+        return {};
+    }
+
+    std::string notice = "• " + std::string(user_id);
+    if (presence.status == PresenceStatus::Away) {
+        notice += " is away right now";
+    } else {
+        notice += " is in do not disturb right now";
+    }
+
+    if (!presence.status_text.empty()) {
+        notice += ": '" + presence.status_text + "'";
+    }
+
+    const std::string since = format_presence_since_time(presence.status_since_ms);
+    if (!since.empty()) {
+        notice += " (" + since + ")";
+    }
+    return notice;
+}
+
+std::string dm_presence_notice_key(const PresenceInfo& presence) {
+    if (presence.status != PresenceStatus::Away && presence.status != PresenceStatus::Dnd) {
+        return {};
+    }
+    return std::to_string(static_cast<int>(presence.status)) + "|" +
+           presence.status_text + "|" + std::to_string(presence.status_since_ms);
 }
 
 std::string quota_preflight_message(std::string_view label, uint64_t file_size, uint64_t limit) {
@@ -1165,18 +1210,19 @@ void App::send_chat(const std::string& text) {
     const std::string message_id = generate_message_id();
 
     if (is_direct_target(active)) {
-        const auto peer_presence = state_.presence(active);
-        if (peer_presence == PresenceStatus::Away || peer_presence == PresenceStatus::Dnd) {
-            const auto last_notice = dm_presence_notice_status_.find(active);
-            if (last_notice == dm_presence_notice_status_.end() || last_notice->second != peer_presence) {
+        const auto peer_presence = state_.presence_info(active);
+        if (peer_presence.status == PresenceStatus::Away || peer_presence.status == PresenceStatus::Dnd) {
+            const std::string notice_key = dm_presence_notice_key(peer_presence);
+            const auto last_notice = dm_presence_notice_keys_.find(active);
+            if (last_notice == dm_presence_notice_keys_.end() || last_notice->second != notice_key) {
                 const std::string notice = dm_presence_notice(peer_presence, active);
                 if (!notice.empty()) {
                     log_system_message(active, notice, false);
                 }
-                dm_presence_notice_status_[active] = peer_presence;
+                dm_presence_notice_keys_[active] = notice_key;
             }
         } else {
-            dm_presence_notice_status_.erase(active);
+            dm_presence_notice_keys_.erase(active);
         }
     }
 

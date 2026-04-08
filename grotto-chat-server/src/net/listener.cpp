@@ -8,6 +8,15 @@
 
 namespace grotto::net {
 
+namespace {
+
+int64_t unix_time_ms_now() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+}
+
 Listener::Listener(
     boost::asio::io_context& ioc,
     boost::asio::ssl::context& ssl_ctx,
@@ -68,19 +77,26 @@ void Listener::run() {
         };
         auto update_presence = [this](const std::string& user_id,
                                       PresenceUpdate::Status status,
+                                      const std::string& status_text,
                                       std::shared_ptr<Session> exclude) {
             {
                 std::lock_guard<std::mutex> lock(sessions_mutex_);
                 if (status == PresenceUpdate::OFFLINE) {
                     user_presence_.erase(user_id);
                 } else {
-                    user_presence_[user_id] = status;
+                    user_presence_[user_id] = PresenceState{
+                        status,
+                        status_text,
+                        unix_time_ms_now(),
+                    };
                 }
             }
 
             PresenceUpdate presence;
             presence.set_user_id(user_id);
             presence.set_status(status);
+            presence.set_status_text(status_text);
+            presence.set_status_since_ms(unix_time_ms_now());
             this->broadcast_presence(presence, exclude);
         };
         command_handler_ = std::make_unique<commands::CommandHandler>(
@@ -213,7 +229,7 @@ void Listener::shutdown() {
 
 void Listener::on_session_authenticated(std::shared_ptr<Session> session) {
     const std::string& user_id = session->user_id();
-    std::vector<std::pair<std::string, PresenceUpdate::Status>> presence_snapshot;
+    std::vector<std::pair<std::string, PresenceState>> presence_snapshot;
 
     {
         std::lock_guard<std::mutex> lock(sessions_mutex_);
@@ -231,11 +247,15 @@ void Listener::on_session_authenticated(std::shared_ptr<Session> session) {
         // Add new session
         sessions_by_user_[user_id] = session;
         users_by_session_[session] = user_id;
-        user_presence_[user_id] = PresenceUpdate::ONLINE;
+        user_presence_[user_id] = PresenceState{
+            PresenceUpdate::ONLINE,
+            "",
+            unix_time_ms_now(),
+        };
 
         presence_snapshot.reserve(user_presence_.size());
-        for (const auto& [online_user_id, status] : user_presence_) {
-            presence_snapshot.emplace_back(online_user_id, status);
+        for (const auto& [online_user_id, presence] : user_presence_) {
+            presence_snapshot.emplace_back(online_user_id, presence);
         }
 
         spdlog::info("User {} authenticated. Total sessions: {}",
@@ -269,6 +289,8 @@ void Listener::on_session_disconnected(std::shared_ptr<Session> session, const s
         PresenceUpdate presence;
         presence.set_user_id(disconnected_user_id);
         presence.set_status(PresenceUpdate::OFFLINE);
+        presence.set_status_text("");
+        presence.set_status_since_ms(unix_time_ms_now());
         broadcast_presence(presence, nullptr);
 
         // Remove from voice rooms
@@ -364,15 +386,17 @@ void Listener::broadcast_presence(const PresenceUpdate& update,
 
 void Listener::send_presence_snapshot(
     const std::shared_ptr<Session>& session,
-    const std::vector<std::pair<std::string, PresenceUpdate::Status>>& snapshot) {
+    const std::vector<std::pair<std::string, PresenceState>>& snapshot) {
     if (!session) {
         return;
     }
 
-    for (const auto& [online_user_id, status] : snapshot) {
+    for (const auto& [online_user_id, presence] : snapshot) {
         PresenceUpdate update;
         update.set_user_id(online_user_id);
-        update.set_status(status);
+        update.set_status(presence.status);
+        update.set_status_text(presence.status_text);
+        update.set_status_since_ms(presence.status_since_ms);
 
         Envelope env;
         env.set_seq(0);

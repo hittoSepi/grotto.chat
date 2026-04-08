@@ -26,7 +26,7 @@ namespace palette {
 
     inline ftxui::Color online()       { return green(); }
     inline ftxui::Color away_c()       { return yellow(); }
-    inline ftxui::Color dnd_c()        { return orange(); }
+    inline ftxui::Color dnd_c()        { return ftxui::Color::RGB(0xff,0x3b,0x30); }
     inline ftxui::Color offline_c()    { return comment(); }
     inline ftxui::Color unread_badge() { return yellow(); }
     inline ftxui::Color error_c()      { return orange(); }
