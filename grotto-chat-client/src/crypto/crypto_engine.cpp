@@ -588,6 +588,12 @@ void CryptoEngine::reset_dm_session(const std::string& peer_id) {
     spdlog::info("Reset DM session with '{}'", peer_id);
 }
 
+void CryptoEngine::forget_peer_identity(const std::string& peer_id) {
+    if (peer_id.empty() || !local_store_) return;
+    local_store_->delete_peer_identity(peer_id);
+    spdlog::info("Forgot stored peer identity for '{}'", peer_id);
+}
+
 void CryptoEngine::reset_all_dm_sessions() {
     if (!local_store_) return;
     local_store_->delete_all_sessions();

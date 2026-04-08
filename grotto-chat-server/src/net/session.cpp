@@ -632,6 +632,7 @@ void Session::handle_auth_response(const AuthResponse& auth) {
 
     const std::vector<uint8_t> presented_key(
         auth.identity_pub().begin(), auth.identity_pub().end());
+    bool identity_key_reset = false;
 
     if (!existing) {
         // New user — register
@@ -674,6 +675,7 @@ void Session::handle_auth_response(const AuthResponse& auth) {
                     // Password verified — update identity key
                     us.clear_key_material(auth.user_id());
                     us.update_identity_key(auth.user_id(), presented_key);
+                    identity_key_reset = true;
                     spdlog::info("[{}] Identity key reset via password for user: {}",
                                  remote_endpoint_, auth.user_id());
 
@@ -730,6 +732,20 @@ void Session::handle_auth_response(const AuthResponse& auth) {
 
     send_envelope(MT_AUTH_OK, Empty());
     set_state(SessionState::Established);
+
+    if (identity_key_reset) {
+        IdentityReset reset;
+        reset.set_user_id(user_id_);
+        Envelope reset_env;
+        reset_env.set_seq(next_seq_++);
+        reset_env.set_timestamp_ms(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+        reset_env.set_type(MT_IDENTITY_RESET);
+        reset_env.set_payload(reset.SerializeAsString());
+        server_ctx_.broadcast(reset_env, shared_from_this());
+        spdlog::info("[{}] Broadcast identity reset for user {}",
+                     remote_endpoint_, user_id_);
+    }
 
     if (!server_ctx_.voice_ice_servers().empty()) {
         VoiceIceConfig voice_cfg;

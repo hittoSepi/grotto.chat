@@ -37,6 +37,7 @@ void MessageHandler::dispatch(const Envelope& env) {
     case MT_TYPING:         handle_typing(env);         break;
     case MT_READ_RECEIPT:   handle_read_receipt(env);   break;
     case MT_KEY_BUNDLE:     handle_key_bundle(env);     break;
+    case MT_IDENTITY_RESET: handle_identity_reset(env); break;
     case MT_PRESENCE:       handle_presence(env);       break;
     case MT_VOICE_SIGNAL:      handle_voice_signal(env);      break;
     case MT_VOICE_ROOM_JOIN:   handle_voice_room_join(env);   break;
@@ -436,6 +437,28 @@ void MessageHandler::handle_voice_room_state(const Envelope& env) {
         state_.set_voice_state(vs);
         state_.set_voice_room_users(state.channel_id(), participants);
     });
+}
+
+void MessageHandler::handle_identity_reset(const Envelope& env) {
+    IdentityReset reset;
+    if (!reset.ParseFromString(env.payload()) || reset.user_id().empty()) {
+        spdlog::warn("Failed to parse IdentityReset");
+        return;
+    }
+
+    if (reset.user_id() == cfg_.identity.user_id) {
+        return;
+    }
+
+    crypto_.reset_dm_session(reset.user_id());
+    crypto_.forget_peer_identity(reset.user_id());
+    {
+        std::lock_guard lk(pending_sends_mu_);
+        pending_sends_.erase(reset.user_id());
+        pending_repair_requests_.erase(reset.user_id());
+    }
+    spdlog::info("Received identity reset for '{}'; cleared local DM session and peer identity",
+                 reset.user_id());
 }
 
 void MessageHandler::handle_typing(const Envelope& env) {

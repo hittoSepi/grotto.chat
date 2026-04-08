@@ -82,6 +82,7 @@ public:
     // on the next connection.
     void reset_group_sessions() { sent_skdm_channels_.clear(); }
     void reset_dm_session(const std::string& peer_id);
+    void forget_peer_identity(const std::string& peer_id);
     void reset_all_dm_sessions();
 
     const Identity& identity() const { return identity_; }

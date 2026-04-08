@@ -95,6 +95,7 @@ private:
     void handle_typing(const Envelope& env);
     void handle_read_receipt(const Envelope& env);
     void handle_key_bundle(const Envelope& env);
+    void handle_identity_reset(const Envelope& env);
     void handle_presence(const Envelope& env);
     void handle_voice_signal(const Envelope& env);
     void handle_voice_room_join(const Envelope& env);

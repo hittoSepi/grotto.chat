@@ -25,6 +25,7 @@ enum MessageType {
   MT_KEY_UPLOAD       = 20;  // Client → Server: upload pre-keys
   MT_KEY_REQUEST      = 21;  // Client → Server: fetch user's key bundle
   MT_KEY_BUNDLE       = 22;  // Server → Client: key bundle response
+  MT_IDENTITY_RESET   = 23;  // Server → Client: peer identity key changed
 
   // Presence
   MT_PRESENCE         = 30;  // Presence updates (online/away/offline)
@@ -119,6 +120,10 @@ message KeyUpload {
 
 message KeyRequest {
   string user_id = 1;  // Whose keys to fetch
+}
+
+message IdentityReset {
+  string user_id = 1;  // User whose identity key changed
 }
 
 // Chat relay (server only forwards, never decrypts)
