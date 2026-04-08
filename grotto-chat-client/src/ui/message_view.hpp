@@ -10,6 +10,8 @@
 namespace grotto::ui {
 
 ftxui::Element render_messages(const ChannelState& state,
+                               const std::string& channel_id,
+                               const std::string& local_user_id,
                                const std::string& timestamp_format,
                                int visible_rows,
                                int width,
@@ -20,6 +22,8 @@ ftxui::Element render_messages(const ChannelState& state,
 
 std::vector<GraphicsDrawCommand> collect_visible_draw_commands(
     const ChannelState& state,
+    const std::string& channel_id,
+    const std::string& local_user_id,
     const std::string& timestamp_format,
     int visible_rows,
     int width,
@@ -28,6 +32,8 @@ std::vector<GraphicsDrawCommand> collect_visible_draw_commands(
 
 std::vector<VisibleLayoutHit> collect_visible_layout_hits(
     const ChannelState& state,
+    const std::string& channel_id,
+    const std::string& local_user_id,
     const std::string& timestamp_format,
     int visible_rows,
     int width);

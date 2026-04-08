@@ -194,6 +194,7 @@ std::vector<LayoutRow> render_text_block(const Message& msg,
 
 std::vector<LayoutRow> render_one_message(const Message& msg,
                                           int message_index,
+                                          bool show_delivery_status,
                                           const std::string& ts_fmt,
                                           int width) {
     std::vector<LayoutRow> rows;
@@ -242,10 +243,12 @@ std::vector<LayoutRow> render_one_message(const Message& msg,
         ++block_index;
     }
 
-    if (msg.type == Message::Type::Chat && msg.read_by_remote) {
+    if (msg.type == Message::Type::Chat && show_delivery_status) {
         const std::string ts_prefix(ts.size(), ' ');
         const std::string nick_prefix(visible_width("<" + msg.sender_id + "> "), ' ');
-        const std::string label = i18n::tr(i18n::I18nKey::READ_RECEIPT_READ);
+        const bool is_read = msg.read_by_remote;
+        const std::string label = i18n::tr(
+            is_read ? i18n::I18nKey::READ_RECEIPT_READ : i18n::I18nKey::READ_RECEIPT_SENT);
         rows.push_back({
             message_index,
             block_index,
@@ -256,7 +259,7 @@ std::vector<LayoutRow> render_one_message(const Message& msg,
             hbox({
                 text(ts_prefix) | color(palette::comment()),
                 text(nick_prefix),
-                text(label) | color(palette::comment()) | dim,
+                text(label) | color(is_read ? palette::green() : palette::comment()) | dim,
             }),
         });
     }
@@ -265,11 +268,34 @@ std::vector<LayoutRow> render_one_message(const Message& msg,
 }
 
 std::vector<LayoutRow> flatten_message_rows(const ChannelState& state,
+                                            const std::string& channel_id,
+                                            const std::string& local_user_id,
                                             const std::string& timestamp_format,
                                             int width) {
     std::vector<LayoutRow> all_rows;
+    const bool is_direct_channel =
+        !channel_id.empty() && channel_id != "server" && channel_id.front() != '#';
+    int latest_outgoing_dm_index = -1;
+    if (is_direct_channel && !local_user_id.empty()) {
+        for (size_t i = 0; i < state.messages.size(); ++i) {
+            const auto& msg = state.messages[i];
+            if (msg.type == Message::Type::Chat && msg.sender_id == local_user_id) {
+                latest_outgoing_dm_index = static_cast<int>(i);
+            }
+        }
+    }
     for (size_t i = 0; i < state.messages.size(); ++i) {
-        auto rows = render_one_message(state.messages[i], static_cast<int>(i), timestamp_format, width);
+        const bool show_delivery_status =
+            is_direct_channel &&
+            static_cast<int>(i) == latest_outgoing_dm_index &&
+            state.messages[i].type == Message::Type::Chat &&
+            state.messages[i].sender_id == local_user_id;
+        auto rows = render_one_message(
+            state.messages[i],
+            static_cast<int>(i),
+            show_delivery_status,
+            timestamp_format,
+            width);
         all_rows.insert(all_rows.end(),
                         std::make_move_iterator(rows.begin()),
                         std::make_move_iterator(rows.end()));
@@ -286,6 +312,8 @@ std::pair<int, int> visible_row_window(int total, int visible_rows, int scroll_o
 } // anonymous namespace
 
 Element render_messages(const ChannelState& state,
+                        const std::string& channel_id,
+                        const std::string& local_user_id,
                         const std::string& timestamp_format,
                         int visible_rows,
                         int width,
@@ -297,7 +325,7 @@ Element render_messages(const ChannelState& state,
         return text(i18n::tr(i18n::I18nKey::NO_MESSAGES)) | color(palette::comment()) | center;
     }
 
-    auto all_rows = flatten_message_rows(state, timestamp_format, width);
+    auto all_rows = flatten_message_rows(state, channel_id, local_user_id, timestamp_format, width);
     if (all_rows.empty()) {
         return text(i18n::tr(i18n::I18nKey::NO_MESSAGES)) | color(palette::comment()) | center;
     }
@@ -350,6 +378,8 @@ Element render_messages(const ChannelState& state,
 
 std::vector<VisibleLayoutHit> collect_visible_layout_hits(
     const ChannelState& state,
+    const std::string& channel_id,
+    const std::string& local_user_id,
     const std::string& timestamp_format,
     int visible_rows,
     int width) {
@@ -358,7 +388,7 @@ std::vector<VisibleLayoutHit> collect_visible_layout_hits(
         return hits;
     }
 
-    auto all_rows = flatten_message_rows(state, timestamp_format, width);
+    auto all_rows = flatten_message_rows(state, channel_id, local_user_id, timestamp_format, width);
     if (all_rows.empty()) {
         return hits;
     }
@@ -381,6 +411,8 @@ std::vector<VisibleLayoutHit> collect_visible_layout_hits(
 
 std::vector<GraphicsDrawCommand> collect_visible_draw_commands(
     const ChannelState& state,
+    const std::string& channel_id,
+    const std::string& local_user_id,
     const std::string& timestamp_format,
     int visible_rows,
     int width,
@@ -391,7 +423,7 @@ std::vector<GraphicsDrawCommand> collect_visible_draw_commands(
         return commands;
     }
 
-    auto all_rows = flatten_message_rows(state, timestamp_format, width);
+    auto all_rows = flatten_message_rows(state, channel_id, local_user_id, timestamp_format, width);
     if (all_rows.empty()) {
         return commands;
     }

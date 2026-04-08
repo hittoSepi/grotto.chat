@@ -155,7 +155,7 @@ std::vector<VisibleLayoutHit> current_visible_hits(AppState& state,
     int visible_rows = mouse_tracker.message_region().height;
     int message_width = effective_message_width(mouse_tracker, user_list_config, term_cols, side_panel_width);
     return collect_visible_layout_hits(
-        ch_state, cfg.ui.timestamp_format, visible_rows, message_width);
+        ch_state, *ch, state.local_user_id(), cfg.ui.timestamp_format, visible_rows, message_width);
 }
 
 std::optional<std::string> find_url_in_text(const std::string& text) {
@@ -850,7 +850,7 @@ void UIManager::copy_message_selection_to_clipboard() {
             side_panel_width_,
             screen_.dimx()));
     auto visible = collect_visible_layout_hits(
-        ch_state, cfg_.ui.timestamp_format, visible_rows, message_width);
+        ch_state, *ch, state_.local_user_id(), cfg_.ui.timestamp_format, visible_rows, message_width);
     if (visible.empty()) {
         return;
     }
@@ -1224,6 +1224,8 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     Element msg_el = active_ch.empty()
         ? text("") | flex
         : render_messages(ch_state,
+                          active_ch,
+                          state_.local_user_id(),
                           cfg_.ui.timestamp_format,
                           msg_rows,
                           msg_width,
@@ -1239,6 +1241,8 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     pending_graphics_frame_.commands = active_ch.empty()
         ? std::vector<GraphicsDrawCommand>{}
         : collect_visible_draw_commands(ch_state,
+                                        active_ch,
+                                        state_.local_user_id(),
                                         cfg_.ui.timestamp_format,
                                         msg_rows,
                                         msg_width,

@@ -181,14 +181,23 @@ void MessageHandler::handle_chat(const Envelope& env) {
             plaintext = result.plaintext;
             decrypted = true;
         } else {
-            plaintext = "[decryption failed]";
-            decrypted = true;
             const bool is_direct_message =
                 chat.recipient_id().empty() || chat.recipient_id().front() != '#';
             if (is_direct_message && !chat.sender_id().empty() &&
                 chat.sender_id() != cfg_.identity.user_id) {
-                request_key_bundle_only(chat.sender_id());
+                const std::string dm_channel_id =
+                    (chat.recipient_id() == cfg_.identity.user_id) ? chat.sender_id() : chat.recipient_id();
+                if (request_key_bundle_only(chat.sender_id()) && !dm_channel_id.empty()) {
+                    push_system_to_channel(
+                        dm_channel_id,
+                        i18n::tr(i18n::I18nKey::REPAIRING_SECURE_SESSION, chat.sender_id()));
+                }
+                spdlog::warn("Suppressed transient DM decrypt failure from '{}' while session repair is in progress",
+                             chat.sender_id());
+                return;
             }
+            plaintext = "[decryption failed]";
+            decrypted = true;
         }
     }
 
@@ -472,7 +481,7 @@ void MessageHandler::handle_typing(const Envelope& env) {
     }
 }
 
-void MessageHandler::request_key_bundle_only(const std::string& recipient_id) {
+bool MessageHandler::request_key_bundle_only(const std::string& recipient_id) {
     bool should_request = false;
     {
         std::lock_guard lk(pending_sends_mu_);
@@ -483,7 +492,7 @@ void MessageHandler::request_key_bundle_only(const std::string& recipient_id) {
     }
 
     if (!should_request) {
-        return;
+        return false;
     }
 
     KeyRequest kr;
@@ -496,6 +505,7 @@ void MessageHandler::request_key_bundle_only(const std::string& recipient_id) {
         std::lock_guard lk(pending_sends_mu_);
         pending_repair_requests_.erase(rid);
     }).detach();
+    return true;
 }
 
 void MessageHandler::handle_read_receipt(const Envelope& env) {
@@ -670,6 +680,19 @@ void MessageHandler::push_system(const std::string& text) {
     state_.post_ui([this, m = std::move(msg)]() mutable {
         state_.ensure_channel("server");
         state_.push_message("server", std::move(m));
+    });
+}
+
+void MessageHandler::push_system_to_channel(const std::string& channel_id, const std::string& text) {
+    Message msg;
+    msg.type         = Message::Type::System;
+    msg.content      = text;
+    msg.sender_id    = "system";
+    msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    state_.post_ui([this, channel_id, m = std::move(msg)]() mutable {
+        state_.ensure_channel(channel_id);
+        state_.push_message(channel_id, std::move(m));
     });
 }
 

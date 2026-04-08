@@ -183,11 +183,13 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::FAILED_ESTABLISH_SESSION, "Failed to establish session with {0} (key mismatch?)"},
     {I18nKey::FAILED_SEND_MESSAGES, "Failed to send {0} message(s) to {1}"},
     {I18nKey::COULD_NOT_ESTABLISH_SESSION, "Could not establish session with {0}"},
+    {I18nKey::REPAIRING_SECURE_SESSION, "Refreshing secure session with {0}..."},
     {I18nKey::USER_NOT_FOUND, "User not found: {0}"},
     {I18nKey::SERVER_ERROR, "Server error: {0}"},
     {I18nKey::COMMAND_RESPONSE, "Command {0}: {1}"},
     {I18nKey::FILE_TRANSFER_COMPLETED, "File transfer completed: {0}"},
     {I18nKey::FILE_TRANSFER_ERROR, "File transfer error: {0}"},
+    {I18nKey::READ_RECEIPT_SENT, "Sent"},
     {I18nKey::READ_RECEIPT_READ, "Read"},
 
     // Status bar
@@ -395,11 +397,13 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::FAILED_ESTABLISH_SESSION, "Istunnon muodostaminen käyttäjän {0} kanssa epäonnistui (avain ei täsmää?)"},
     {I18nKey::FAILED_SEND_MESSAGES, "{0} viestin lähetys käyttäjälle {1} epäonnistui"},
     {I18nKey::COULD_NOT_ESTABLISH_SESSION, "Istunnon muodostaminen käyttäjän {0} kanssa ei onnistunut"},
+    {I18nKey::REPAIRING_SECURE_SESSION, "Päivitetään suojattua yhteyttä käyttäjään {0}..."},
     {I18nKey::USER_NOT_FOUND, "Käyttäjää ei löytynyt: {0}"},
     {I18nKey::SERVER_ERROR, "Palvelinvirhe: {0}"},
     {I18nKey::COMMAND_RESPONSE, "Komento {0}: {1}"},
     {I18nKey::FILE_TRANSFER_COMPLETED, "Tiedostonsiirto valmis: {0}"},
     {I18nKey::FILE_TRANSFER_ERROR, "Tiedostonsiirtovirhe: {0}"},
+    {I18nKey::READ_RECEIPT_SENT, "Lähetetty"},
     {I18nKey::READ_RECEIPT_READ, "Luettu"},
 
     // Status bar

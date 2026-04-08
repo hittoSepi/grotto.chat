@@ -117,7 +117,8 @@ private:
     void send_envelope(MessageType type, const google::protobuf::Message& msg);
     void send_hello();
     void push_system(const std::string& text);
-    void request_key_bundle_only(const std::string& recipient_id);
+    void push_system_to_channel(const std::string& channel_id, const std::string& text);
+    bool request_key_bundle_only(const std::string& recipient_id);
 
     AppState&             state_;
     crypto::CryptoEngine& crypto_;
