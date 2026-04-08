@@ -1407,6 +1407,7 @@ void App::switch_to_channel_by_index(int index) {
 void App::switch_to_channel(const std::string& channel_id) {
     stop_local_typing();
     auto canonical_id = canonical_channel_id(channel_id);
+    const std::string switch_message = i18n::tr(i18n::I18nKey::SWITCHED_TO, canonical_id);
     const auto current_active = canonical_channel_id(state_.active_channel().value_or(""));
     if (!canonical_id.empty() && canonical_id == current_active) {
         if (ui_ && ui_->is_files_panel_visible() && !is_server_channel(canonical_id)) {
@@ -1415,8 +1416,15 @@ void App::switch_to_channel(const std::string& channel_id) {
         return;
     }
     state_.ensure_channel(canonical_id);
+    const auto ch_state = state_.channel_snapshot(canonical_id);
+    const bool duplicate_switch_message =
+        !ch_state.messages.empty() &&
+        ch_state.messages.back().type == Message::Type::System &&
+        ch_state.messages.back().content == switch_message;
     state_.set_active_channel(canonical_id);
-    ui_->push_system_msg(i18n::tr(i18n::I18nKey::SWITCHED_TO, canonical_id));
+    if (!duplicate_switch_message) {
+        ui_->push_system_msg(switch_message);
+    }
     if (ui_ && ui_->is_files_panel_visible() && !is_server_channel(canonical_id)) {
         request_remote_files_for_target(canonical_id, false);
     }

@@ -123,7 +123,8 @@ std::vector<LayoutRow> render_text_block(const Message& msg,
                                          int block_index,
                                          const std::string& ts_prefix,
                                          int width,
-                                         const std::string& text_content) {
+                                         const std::string& text_content,
+                                         bool dim_message = false) {
     std::vector<LayoutRow> rows;
 
     if (msg.type == Message::Type::System || msg.type == Message::Type::VoiceEvent ||
@@ -174,6 +175,16 @@ std::vector<LayoutRow> render_text_block(const Message& msg,
     for (size_t i = 0; i < content_lines.size(); ++i) {
         const std::string current_ts = (i == 0 ? ts_prefix : std::string(ts_prefix.size(), ' '));
         const std::string nick_prefix = (i == 0 ? nick : continuation_prefix);
+        auto nick_el = text(nick_prefix);
+        if (i == 0) {
+            nick_el = std::move(nick_el) | ftxui::color(dim_message ? palette::fg_dark() : nick_color(msg.sender_id));
+        } else {
+            nick_el = std::move(nick_el) | color(dim_message ? palette::fg_dark() : palette::fg());
+        }
+        auto content_el = std::move(content_lines[i]) | flex;
+        if (dim_message) {
+            content_el = std::move(content_el) | color(palette::fg_dark()) | dim;
+        }
         rows.push_back({
             message_index,
             block_index,
@@ -183,9 +194,8 @@ std::vector<LayoutRow> render_text_block(const Message& msg,
             false,
             hbox({
                 text(current_ts) | color(palette::comment()),
-                text(nick_prefix) |
-                    (i == 0 ? ftxui::color(nick_color(msg.sender_id)) : color(palette::fg())),
-                std::move(content_lines[i]) | flex,
+                std::move(nick_el),
+                std::move(content_el),
             }),
         });
     }
@@ -236,32 +246,17 @@ std::vector<LayoutRow> render_one_message(const Message& msg,
         }
 
         auto text_rows = render_text_block(
-            msg, message_index, block_index, ts_prefix, std::max(1, width), part.text);
+            msg,
+            message_index,
+            block_index,
+            ts_prefix,
+            std::max(1, width),
+            part.text,
+            show_delivery_status && !msg.read_by_remote);
         rows.insert(rows.end(),
                     std::make_move_iterator(text_rows.begin()),
                     std::make_move_iterator(text_rows.end()));
         ++block_index;
-    }
-
-    if (msg.type == Message::Type::Chat && show_delivery_status) {
-        const std::string ts_prefix(ts.size(), ' ');
-        const std::string nick_prefix(visible_width("<" + msg.sender_id + "> "), ' ');
-        const bool is_read = msg.read_by_remote;
-        const std::string label = i18n::tr(
-            is_read ? i18n::I18nKey::READ_RECEIPT_READ : i18n::I18nKey::READ_RECEIPT_SENT);
-        rows.push_back({
-            message_index,
-            block_index,
-            LayoutBlockKind::Text,
-            ts_prefix + nick_prefix + label,
-            std::nullopt,
-            false,
-            hbox({
-                text(ts_prefix) | color(palette::comment()),
-                text(nick_prefix),
-                text(label) | color(is_read ? palette::green() : palette::comment()) | dim,
-            }),
-        });
     }
 
     return rows;
