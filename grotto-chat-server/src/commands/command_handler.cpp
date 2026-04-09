@@ -12,6 +12,7 @@
 #include <array>
 #include <iomanip>
 #include <sstream>
+#include <chrono>
 
 namespace grotto::commands {
 
@@ -91,6 +92,34 @@ std::string join_command_args(const std::vector<std::string>& args) {
         joined += args[i];
     }
     return joined;
+}
+
+std::string format_status_since(int64_t status_since_ms) {
+    if (status_since_ms <= 0) {
+        return {};
+    }
+
+    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    if (now_ms <= status_since_ms) {
+        return "just now";
+    }
+
+    uint64_t delta_seconds = static_cast<uint64_t>((now_ms - status_since_ms) / 1000);
+    const uint64_t hours = delta_seconds / 3600;
+    delta_seconds %= 3600;
+    const uint64_t minutes = delta_seconds / 60;
+    const uint64_t seconds = delta_seconds % 60;
+
+    std::ostringstream oss;
+    if (hours > 0) {
+        oss << hours << "h ";
+    }
+    if (hours > 0 || minutes > 0) {
+        oss << minutes << "m ";
+    }
+    oss << seconds << "s ago";
+    return oss.str();
 }
 
 } // namespace
@@ -374,12 +403,16 @@ CommandResponse CommandHandler::cmd_whois(const std::vector<std::string>& args, 
     }
 
     std::string status = "offline";
+    std::string status_since_label = "Offline since";
     if (presence_status == PresenceUpdate::ONLINE) {
         status = "online";
+        status_since_label = "Online since";
     } else if (presence_status == PresenceUpdate::AWAY) {
         status = "away";
+        status_since_label = "Away since";
     } else if (presence_status == PresenceUpdate::DND) {
         status = "do not disturb";
+        status_since_label = "Do not disturb since";
     }
 
     std::ostringstream out;
@@ -390,7 +423,7 @@ CommandResponse CommandHandler::cmd_whois(const std::vector<std::string>& args, 
         out << "Status text: " << status_text << "\n";
     }
     if (status_since_ms > 0) {
-        out << "Status since ms: " << status_since_ms << "\n";
+        out << status_since_label << ": " << format_status_since(status_since_ms) << "\n";
     }
     if (!channels.empty()) {
         out << "Channels: ";
