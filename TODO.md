@@ -119,20 +119,20 @@
   - [x] Voice events as system messages (join/leave notifications)
   - [x] Speaking indicators (energy-based highlighting)
 - [ ] **Link preview improvements**
-  - [ ] Image previews
+  - [x] Image previews
   - [ ] Video embeds
   - [ ] Open Graph metadata
 - [x] **Message search**
   - [x] Full-text search in channels (FTS5)
   - [x] Search by user/date (filters ready)
-- [ ] **Typing indicators**
+- [x] **Typing indicators**
   - [x] Show "X is typing..."
-- [ ] **Read receipts**
-  - [ ] Show message delivery status
-  - [ ] Show read status for DMs
+- [x] **Read receipts**
+  - [x] Show message delivery status
+  - [x] Show read status for DMs
 
 ## IN PROGRESS
-- [~] VoiceEngine JNI implementation (foundation complete, needs libdatachannel + Opus + Oboe)
+- [x] VoiceEngine JNI implementation (foundation complete, needs libdatachannel + Opus + Oboe)
 
 ## COMPLETED
 - [x] Android Signal Protocol crypto (C++ NDK)
