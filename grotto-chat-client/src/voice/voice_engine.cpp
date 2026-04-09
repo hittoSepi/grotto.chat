@@ -1012,6 +1012,17 @@ void VoiceEngine::mix_output(float* out, uint32_t frames) {
             if (peer->playout_fifo.size() >= frames) {
                 break;
             }
+            const int buffered_jitter_frames = peer->jitter_buf.buffered_count();
+            if (buffered_jitter_frames >= clamp_jitter_buffer_frames(cfg_.voice.jitter_buffer_frames) &&
+                peer->jitter_buf.resync_to_oldest()) {
+                spdlog::debug("Resynced jitter buffer for {} after underrun (buffered_frames={})",
+                              pid,
+                              buffered_jitter_frames);
+                if (auto frame = peer->jitter_buf.pop()) {
+                    peer->playout_fifo.push(*frame);
+                    continue;
+                }
+            }
             if (peer->connected && peer->rx_packets > 0) {
                 peer->playout_fifo.push(peer->codec.decode_plc());
             }

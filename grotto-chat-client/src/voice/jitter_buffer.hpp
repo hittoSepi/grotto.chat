@@ -26,6 +26,7 @@ public:
     std::optional<std::vector<float>> pop();
 
     void reset();
+    bool resync_to_oldest();
 
     int buffered_count() const;
     bool is_primed() const;

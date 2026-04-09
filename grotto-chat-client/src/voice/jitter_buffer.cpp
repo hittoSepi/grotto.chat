@@ -53,6 +53,18 @@ void JitterBuffer::reset() {
     next_seq_ = 0;
 }
 
+bool JitterBuffer::resync_to_oldest() {
+    std::lock_guard lk(mu_);
+    if (frames_.empty()) {
+        primed_ = false;
+        return false;
+    }
+
+    primed_ = true;
+    next_seq_ = frames_.begin()->first;
+    return true;
+}
+
 int JitterBuffer::buffered_count() const {
     std::lock_guard lk(mu_);
     return static_cast<int>(frames_.size());
