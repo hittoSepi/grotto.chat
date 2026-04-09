@@ -38,4 +38,10 @@ std::vector<VisibleLayoutHit> collect_visible_layout_hits(
     int visible_rows,
     int width);
 
+int count_render_rows(const ChannelState& state,
+                      const std::string& channel_id,
+                      const std::string& local_user_id,
+                      const std::string& timestamp_format,
+                      int width);
+
 } // namespace grotto::ui

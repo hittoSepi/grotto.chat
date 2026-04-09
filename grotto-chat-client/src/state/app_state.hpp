@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -88,7 +89,9 @@ public:
     void remove_channel(const std::string& channel_id);
 
     // Scroll
-    void scroll_up(const std::string& channel_id, int lines);
+    void scroll_up(const std::string& channel_id,
+                   int lines,
+                   int max_offset = std::numeric_limits<int>::max());
     void scroll_down(const std::string& channel_id, int lines);
     void scroll_to_bottom(const std::string& channel_id);
 

@@ -327,7 +327,9 @@ std::vector<LayoutRow> flatten_message_rows(const ChannelState& state,
 }
 
 std::pair<int, int> visible_row_window(int total, int visible_rows, int scroll_offset) {
-    const int bottom_idx = std::clamp(total - 1 - scroll_offset, 0, std::max(0, total - 1));
+    const int max_scroll_offset = std::max(0, total - std::max(1, visible_rows));
+    const int clamped_scroll_offset = std::clamp(scroll_offset, 0, max_scroll_offset);
+    const int bottom_idx = std::clamp(total - 1 - clamped_scroll_offset, 0, std::max(0, total - 1));
     const int top_idx = std::max(0, bottom_idx - visible_rows + 1);
     return {top_idx, bottom_idx};
 }
@@ -479,6 +481,18 @@ std::vector<GraphicsDrawCommand> collect_visible_draw_commands(
     }
 
     return commands;
+}
+
+int count_render_rows(const ChannelState& state,
+                      const std::string& channel_id,
+                      const std::string& local_user_id,
+                      const std::string& timestamp_format,
+                      int width) {
+    if (state.messages.empty()) {
+        return 0;
+    }
+    auto all_rows = flatten_message_rows(state, channel_id, local_user_id, timestamp_format, width);
+    return static_cast<int>(all_rows.size());
 }
 
 } // namespace grotto::ui

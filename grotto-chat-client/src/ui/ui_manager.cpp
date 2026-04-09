@@ -158,6 +158,25 @@ std::vector<VisibleLayoutHit> current_visible_hits(AppState& state,
         ch_state, *ch, state.local_user_id(), cfg.ui.timestamp_format, visible_rows, message_width);
 }
 
+int current_max_scroll_offset(AppState& state,
+                              const MouseTracker& mouse_tracker,
+                              const UserListConfig& user_list_config,
+                              const ClientConfig& cfg,
+                              int term_cols,
+                              int side_panel_width) {
+    auto ch = state.active_channel();
+    if (!ch) {
+        return 0;
+    }
+
+    const auto ch_state = state.channel_snapshot(*ch);
+    const int visible_rows = std::max(1, mouse_tracker.message_region().height);
+    const int message_width = effective_message_width(mouse_tracker, user_list_config, term_cols, side_panel_width);
+    const int total_rows = count_render_rows(
+        ch_state, *ch, state.local_user_id(), cfg.ui.timestamp_format, message_width);
+    return std::max(0, total_rows - visible_rows);
+}
+
 std::vector<int> build_selectable_row_ordinals(const std::vector<VisibleLayoutHit>& visible) {
     std::vector<int> ordinals;
     ordinals.reserve(visible.size());
@@ -551,7 +570,10 @@ bool UIManager::handle_mouse_event(const Event& event) {
     if (mouse.button == Mouse::WheelUp || mouse.button == Mouse::WheelDown) {
         if (auto ch = state_.active_channel()) {
             if (mouse.button == Mouse::WheelUp) {
-                state_.scroll_up(*ch, MouseConfig::kWheelScrollLines);
+                state_.scroll_up(*ch,
+                                 MouseConfig::kWheelScrollLines,
+                                 current_max_scroll_offset(
+                                     state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx(), side_panel_width_));
             } else {
                 state_.scroll_down(*ch, MouseConfig::kWheelScrollLines);
             }
@@ -2060,7 +2082,12 @@ void UIManager::run(SubmitFn on_submit,
             return true;
         }
         if (event == Event::PageUp) {
-            if (auto ch = state_.active_channel()) state_.scroll_up(*ch, 10);
+            if (auto ch = state_.active_channel()) {
+                state_.scroll_up(*ch,
+                                 10,
+                                 current_max_scroll_offset(
+                                     state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx(), side_panel_width_));
+            }
             return true;
         }
         if (event == Event::PageDown) {

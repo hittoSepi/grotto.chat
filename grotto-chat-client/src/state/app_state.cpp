@@ -132,11 +132,12 @@ void AppState::remove_channel(const std::string& channel_id) {
     }
 }
 
-void AppState::scroll_up(const std::string& channel_id, int lines) {
+void AppState::scroll_up(const std::string& channel_id, int lines, int max_offset) {
     std::unique_lock lk(mu_);
     auto it = channels_.find(channel_id);
     if (it == channels_.end()) return;
-    it->second.scroll_offset += lines;
+    const int next = it->second.scroll_offset + std::max(0, lines);
+    it->second.scroll_offset = std::clamp(next, 0, std::max(0, max_offset));
 }
 
 void AppState::scroll_down(const std::string& channel_id, int lines) {
