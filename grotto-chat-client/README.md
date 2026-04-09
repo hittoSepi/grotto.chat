@@ -248,6 +248,22 @@ The helper scripts support the same path:
 .\build.cmd check
 ```
 
+### Error Scenario QA
+
+Repeatable reconnect / shutdown QA prep:
+
+```bash
+cmake --build build --target qa-error-scenarios
+```
+
+On Visual Studio generators:
+
+```powershell
+cmake --build build --config Release --target qa-error-scenarios
+```
+
+This target prepares an isolated QA config under `build/qa-error-scenarios/`, writes a checklist file, and prints the exact launch command for the built client. The detailed checklist lives in [docs/error-scenario-qa.md](./docs/error-scenario-qa.md).
+
 ### Running multiple instances on the same machine
 
 Each instance needs its own config directory to avoid sharing identity keys and SQLite databases. Use `--config`:

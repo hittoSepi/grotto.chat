@@ -365,12 +365,8 @@ std::string transfer_progress_label(const client::file::TransferInfo& info) {
 App::App() = default;
 
 App::~App() {
-    if (ui_) {
-        save_current_config();
-    }
-    ioc_.stop();
-    if (io_thread_.joinable()) io_thread_.join();
-    if (previewer_) previewer_->stop();
+    begin_shutdown(false);
+    finish_shutdown();
 }
 
 bool App::init(const std::filesystem::path& config_path,
@@ -530,14 +526,23 @@ bool App::init(const std::filesystem::path& config_path,
 
     net::NetCallbacks cb;
     cb.on_message = [this](const Envelope& env) {
+        if (shutdown_started_.load()) {
+            return;
+        }
         msg_handler_->dispatch(env);
         // Wake UI for any received message
         if (ui_) ui_->notify();
     };
     cb.on_trace = [this](const std::string& text, bool reset_attempt_timer, bool activate_server) {
+        if (shutdown_started_.load()) {
+            return;
+        }
         trace_connection_phase(text, reset_attempt_timer, activate_server);
     };
     cb.on_connected = [this]() {
+        if (shutdown_started_.load()) {
+            return;
+        }
         // Send HELLO
         Hello hello;
         hello.set_protocol_version(1);
@@ -550,6 +555,9 @@ bool App::init(const std::filesystem::path& config_path,
         trace_connection_phase("HELLO sent", false, true);
     };
     cb.on_disconnected = [this](const std::string& reason) {
+        if (shutdown_started_.load()) {
+            return;
+        }
         state_.set_connected(false);
         state_.set_connecting(cfg_.connection.auto_reconnect);
         msg_handler_->on_transport_disconnected();
@@ -689,7 +697,7 @@ int App::run() {
     ui_->run(
         [this](const std::string& line) { on_submit(line); },
         [this](const std::string& text) { on_input_changed(text); },
-        [this]()                         { ioc_.stop(); },
+        [this]()                         { begin_shutdown(false); },
         [this](int idx)                  { switch_to_channel_by_index(idx); },
         [this](int delta)                { switch_channel(delta); },
         [this](bool active)              { voice_->set_ptt_active(active); },
@@ -697,11 +705,9 @@ int App::run() {
         [this](const std::string& ch)    { on_active_channel_changed(ch); }
     );
 
-    // ── Shutdown ─────────────────────────────────────────────────────────
-    ioc_.stop();
+    begin_shutdown(false);
     work.reset();
-    if (io_thread_.joinable()) io_thread_.join();
-    if (previewer_) previewer_->stop();
+    finish_shutdown();
 
     return should_exit_ ? 1 : 0;
 }
@@ -762,9 +768,7 @@ void App::on_input_changed(const std::string& text) {
 
 void App::handle_command(const ParsedCommand& cmd) {
     if (cmd.name == "/quit" || cmd.name == "/exit") {
-        // Fully exit: disconnect from server + close UI
-        ioc_.stop();
-        ui_->request_exit();
+        begin_shutdown(true);
         return;
     }
     if (cmd.name == "/disconnect") {
@@ -1671,11 +1675,96 @@ void App::open_settings() {
         case ui::SettingsResult::Logout:
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::LOGGING_OUT));
             should_exit_ = true;
-            // Trigger exit
-            ioc_.stop();
+            begin_shutdown(true, false);
             break;
     }
     ui_->notify();
+}
+
+void App::shutdown_voice_session() {
+    if (!voice_ || !voice_->in_voice()) {
+        return;
+    }
+
+    const auto snapshot = state_.voice_snapshot();
+    if (snapshot.active_channel.empty()) {
+        voice_->hangup();
+        return;
+    }
+
+    if (!snapshot.active_channel.empty() && snapshot.active_channel.front() == '#') {
+        voice_->leave_room();
+    } else {
+        voice_->hangup();
+    }
+}
+
+void App::begin_shutdown(bool request_ui_exit, bool persist_config) {
+    const bool first_shutdown = !shutdown_started_.exchange(true);
+
+    if (persist_config && ui_ && !config_saved_) {
+        save_current_config();
+        config_saved_ = true;
+    }
+
+    if (first_shutdown) {
+        stop_local_typing();
+        typing_idle_timer_.cancel();
+        typing_cleanup_timer_.cancel();
+        auto_away_timer_.cancel();
+        clear_pending_channel_commands();
+        {
+            std::lock_guard lk(typing_mu_);
+            remote_typing_.clear();
+        }
+        {
+            std::lock_guard lk(pending_read_receipts_mu_);
+            pending_read_receipts_.clear();
+        }
+
+        shutdown_voice_session();
+
+        if (msg_handler_) {
+            msg_handler_->on_transport_disconnected();
+            msg_handler_->set_net_client(nullptr);
+            msg_handler_->set_voice_engine(nullptr);
+            msg_handler_->set_file_transfer_manager(nullptr);
+        }
+
+        if (net_client_) {
+            net_client_->stop();
+        }
+
+        ioc_.stop();
+    }
+
+    if (request_ui_exit && ui_) {
+        ui_->request_exit();
+    }
+}
+
+void App::finish_shutdown() {
+    if (previewer_) {
+        previewer_->stop();
+        previewer_.reset();
+    }
+
+    if (io_thread_.joinable()) {
+        io_thread_.join();
+    }
+
+    if (file_mgr_) {
+        file_mgr_->set_send_function({});
+        file_mgr_.reset();
+    }
+
+    if (voice_) {
+        voice_->set_send_signal({});
+        voice_->set_send_room_msg({});
+        voice_.reset();
+    }
+
+    net_client_.reset();
 }
 
 std::string App::build_transfer_summary() const {

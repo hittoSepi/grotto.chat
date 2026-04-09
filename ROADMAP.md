@@ -20,11 +20,11 @@ Tarkeys: Kriittinen
   - Reconnect/auth-safe outbound queue viesteille
   - Yhteyden tila ja jonossa olevat lahetykset status barissa
 
-- [ ] **Graceful shutdown**
-  - Voice engine cleanup
-  - Database flush
-  - Network socket close ilman roikkuvia reunatapauksia
-  - Sulkeminen kesken preview/file/voice-toiminnan
+- [x] **Graceful shutdown**
+  - Yksi keskitetty app shutdown-polku
+  - Voice/preview/network/file cleanup samassa jarjestyksessa
+  - Socket close + reconnect stop ilman roikkuvia reunatapauksia
+  - `/quit`, UI-exit ja logout kulkevat saman sulkupolun kautta
 
 - [ ] **Crypto state recovery**
   - Session desync -tapaukset loppuun asti
@@ -40,7 +40,10 @@ Tarkeys: Kriittinen
 - [ ] Yhteensopivuustestit Android-clientin kanssa
 - [ ] Memory leak check (ASan / Valgrind)
 - [ ] Thread safety audit
-- [ ] Error-scenario QA: server alas, verkko poikki, reconnect-loop, decrypt failure
+- [~] Error-scenario QA
+  - [x] Repeatable QA harness / checklist target (`qa-error-scenarios`)
+  - [ ] Aja server alas / reconnect / shutdown / transfer -skenaariot lapi release-ehdokkaalla
+  - [ ] Aja sama polku Windows- ja Linux-buildilla
 
 ### 3. Release Packaging & Docs
 Status: 🚧 Keskenerainen  
@@ -114,7 +117,6 @@ Voice nykytilassa:
 Katso tarkempi bugilista: [grotto-chat-client/BUGS.md](./grotto-chat-client/BUGS.md)
 
 Avoimet release-riskit:
-- Graceful shutdown edge caset
 - Long-running session stability
 - Platform build matrixa ei ole viela ajettu loppuun
 
@@ -122,10 +124,10 @@ Avoimet release-riskit:
 
 ## Current Priorities
 
-1. Graceful shutdown
-2. Error-scenario QA ja platform build testit
-3. Crypto state recovery / session repair polish
-4. Release packaging + troubleshooting docs
+1. Error-scenario QA ja platform build testit
+2. Crypto state recovery / session repair polish
+3. Release packaging + troubleshooting docs
+4. UI scaling / post-release UX-poiminnat
 
 ---
 

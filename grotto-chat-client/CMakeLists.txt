@@ -455,3 +455,25 @@ add_custom_target(check
     COMMENT "Build and run grotto-chat-client tests"
 )
 
+if(WIN32)
+    add_custom_target(qa-error-scenarios
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/run-error-qa.ps1"
+            -BuildDir "${CMAKE_BINARY_DIR}"
+            -SkipBuild
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS grotto-client check
+        USES_TERMINAL
+        COMMENT "Prepare repeatable client error-scenario QA workspace"
+    )
+else()
+    add_custom_target(qa-error-scenarios
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/scripts/run-error-qa.sh"
+            "${CMAKE_BINARY_DIR}"
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS grotto-client check
+        USES_TERMINAL
+        COMMENT "Prepare repeatable client error-scenario QA workspace"
+    )
+endif()
+

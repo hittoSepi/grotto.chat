@@ -428,6 +428,21 @@ Tarkeaa:
 - Linux-skripti tekee `Release`-buildin `-DCMAKE_BUILD_TYPE=Release`
 - Windows-skripti buildaa `Release`-konfiguraation
 - `check`-argumentti ajaa kanonisen CMake-targetin, joka rakentaa kaikki rekisteroidyt testit ja suorittaa `ctest --output-on-failure`
+- `qa`-argumentti ajaa buildin, `check`-targetin ja valmistelee toistettavan virhetilanne-QA:n
+
+Virhetilanne-QA:n valmistelu onnistuu myos suoraan CMake-targetilla:
+
+```bash
+cmake --build build --target qa-error-scenarios
+```
+
+Visual Studio -generaattorilla:
+
+```powershell
+cmake --build build --config Release --target qa-error-scenarios
+```
+
+Target luo erillisen QA-ympariston hakemistoon `build/qa-error-scenarios/` ja kirjoittaa reconnect-, shutdown- ja transfer-skenaarioiden checklistin sinne. Tarkempi ohje: `docs/error-scenario-qa.md`.
 
 Jos haluat hallita buildia tarkasti tai debugata configure-vaihetta, kayta mieluummin suoria `cmake`-komentoja kuin skripteja.
 

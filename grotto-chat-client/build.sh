@@ -4,9 +4,13 @@ set -euo pipefail
 build_dir="build"
 backup_dir="${build_dir}-old"
 run_check=0
+run_qa=0
 
 if [[ "${1:-}" == "check" || "${1:-}" == "test" ]]; then
   run_check=1
+elif [[ "${1:-}" == "qa" ]]; then
+  run_check=1
+  run_qa=1
 fi
 
 if [[ -d "$build_dir" ]]; then
@@ -29,6 +33,11 @@ cmake --build "$build_dir"
 if [[ "$run_check" -eq 1 ]]; then
   echo "Running test check..."
   cmake --build "$build_dir" --target check
+fi
+
+if [[ "$run_qa" -eq 1 ]]; then
+  echo "Preparing error-scenario QA workspace..."
+  cmake --build "$build_dir" --target qa-error-scenarios
 fi
 
 echo "Build completed successfully."

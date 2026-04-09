@@ -24,6 +24,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <atomic>
 #include <unordered_set>
 #include <vector>
 
@@ -106,6 +107,9 @@ private:
     void flush_pending_read_receipt_for_channel(const std::string& channel_id);
     void schedule_remote_typing_cleanup();
     void prune_remote_typing_locked(std::chrono::steady_clock::time_point now) const;
+    void begin_shutdown(bool request_ui_exit = true, bool persist_config = true);
+    void finish_shutdown();
+    void shutdown_voice_session();
 
     struct FileTransferPolicyState {
         bool received = false;
@@ -164,6 +168,8 @@ private:
 
     // Flag to indicate if app should exit (for settings logout)
     bool should_exit_ = false;
+    std::atomic_bool shutdown_started_{false};
+    bool config_saved_ = false;
 };
 
 } // namespace grotto

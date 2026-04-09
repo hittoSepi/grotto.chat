@@ -52,6 +52,15 @@ void NetClient::start() {
 void NetClient::stop() {
     stopping_.store(true);
     reconnect_timer_.cancel();
+    asio::post(strand_, [this]() {
+        send_notify_.cancel();
+        if (active_socket_) {
+            boost::system::error_code ec;
+            active_socket_->lowest_layer().cancel(ec);
+            active_socket_->lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+            active_socket_->lowest_layer().close(ec);
+        }
+    });
 }
 
 asio::awaitable<void> NetClient::run() {
