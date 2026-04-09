@@ -33,7 +33,14 @@
 
 ## Työkalut
 
-`/search <haku>`           etsi viestihistoriasta  
+`/search <haku>`           etsi viestihistoriasta (tukee FTS5-syntaksia)  
+  Esimerkkejä:  
+    /search moi              etsi "moi" nykyiseltä kanavalta  
+    /search moi maailma      etsi viestejä jotka sisältävät molemmat sanat  
+    /search "moi maailma"    etsi tarkkaa fraasia  
+    /search user:Sepi        etsi käyttäjän Sepi viestejä  
+    /search day:2026-04-09   etsi tietyn päivämäärän viestejä  
+    /search moi user:Sepi    yhdistetty haku (sana + käyttäjäfiltteri)  
 `/clear`                   tyhjennä viestinäkymä  
 `/settings`                avaa asetusnäyttö  
 `/version`                 näytä clientin ja serverin versio (alias: `/ver`)  

@@ -33,7 +33,14 @@
 
 ## Tools
 
-`/search <query>`          search message history  
+`/search <query>`          search message history (supports FTS5 syntax)  
+  Examples:  
+    /search hello            search for "hello" in current channel  
+    /search hello world      search for messages containing both words  
+    /search "hello world"    search for exact phrase  
+    /search user:Alice       search messages from user Alice  
+    /search day:2026-04-09   search messages from specific date  
+    /search hello user:Bob   combined search (word + user filter)  
 `/clear`                   clear message view  
 `/settings`                open settings screen  
 `/version`                 show client and server version (alias: `/ver`)  
@@ -60,4 +67,4 @@
 ---
 
 Tip: Commands autocomplete with the `Tab` key. Type `/` and press Tab.
-In the `F3` files panel, use `Ctrl+F` to filter, `s` to change sorting, `r` to refresh, `Del` to remove, and `o` to open downloads.
+*In the `F3` files panel, use `Ctrl+F` to filter, `s` to change sorting, `r` to refresh, `Del` to remove, and `o` to open downloads.*
