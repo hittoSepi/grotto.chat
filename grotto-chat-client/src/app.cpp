@@ -1651,6 +1651,14 @@ void App::open_settings() {
         case ui::SettingsResult::Saved:
             save_current_config();
             refresh_runtime_capabilities();
+            if (previewer_) {
+                previewer_->update_settings(
+                    cfg_.preview.fetch_timeout,
+                    cfg_.preview.max_cache,
+                    cfg_.preview.inline_images,
+                    cfg_.preview.image_columns,
+                    cfg_.preview.image_rows);
+            }
             if (was_sharing_typing && !cfg_.privacy.share_typing_indicators) {
                 stop_local_typing();
             }

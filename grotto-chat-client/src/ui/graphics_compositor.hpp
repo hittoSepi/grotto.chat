@@ -16,6 +16,7 @@ struct GraphicsFrame {
 
 class GraphicsCompositor {
 public:
+    void prepare_for_frame(const GraphicsFrame& frame);
     void commit(GraphicsFrame frame);
     void invalidate_all();
 

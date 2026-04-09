@@ -1,5 +1,4 @@
 #include "ui/terminal_image.hpp"
-
 #include <curl/curl.h>
 #include <stb_image.h>
 
@@ -33,6 +32,12 @@ struct QuantizedImage {
     int height = 0;
     std::vector<uint8_t> palette_rgb;
     std::vector<uint8_t> indices;
+};
+
+struct RgbColor {
+    uint8_t r = 0;
+    uint8_t g = 0;
+    uint8_t b = 0;
 };
 
 std::string base64_encode(const unsigned char* data, size_t len) {
@@ -73,8 +78,28 @@ std::string to_lower_ascii(std::string value) {
     return value;
 }
 
+bool env_flag_enabled(const char* name) {
+    const char* raw = std::getenv(name);
+    if (!raw) {
+        return false;
+    }
+    const std::string value = to_lower_ascii(raw);
+    return value == "1" || value == "true" || value == "yes" || value == "on";
+}
+
+RgbColor ui_background_rgb() {
+    return {
+        static_cast<uint8_t>(0x14),
+        static_cast<uint8_t>(0x16),
+        static_cast<uint8_t>(0x1b),
+    };
+}
+
 bool sixel_supported_environment() {
     if (std::getenv("WT_SESSION")) {
+        return true;
+    }
+    if (env_flag_enabled("GROTTO_FORCE_SIXEL")) {
         return true;
     }
     if (const char* term = std::getenv("TERM")) {
@@ -333,6 +358,9 @@ QuantizedImage quantize_rgba(const unsigned char* rgba, int width, int height) {
 
     constexpr int kPaletteSide = 6;
     constexpr int kPaletteSize = kPaletteSide * kPaletteSide * kPaletteSide;
+    constexpr uint8_t kTransparentIndex = 0xFF;
+    constexpr uint8_t kAlphaTransparencyCutoff = 96;
+    const RgbColor bg = ui_background_rgb();
     result.palette_rgb.resize(static_cast<size_t>(kPaletteSize * 3), 0);
     for (int r = 0; r < kPaletteSide; ++r) {
         for (int g = 0; g < kPaletteSide; ++g) {
@@ -352,9 +380,20 @@ QuantizedImage quantize_rgba(const unsigned char* rgba, int width, int height) {
         for (int x = 0; x < width; ++x) {
             const size_t src_idx = static_cast<size_t>((y * width + x) * 4);
             const uint8_t alpha = rgba[src_idx + 3];
-            const uint8_t r = static_cast<uint8_t>((rgba[src_idx + 0] * alpha) / 255);
-            const uint8_t g = static_cast<uint8_t>((rgba[src_idx + 1] * alpha) / 255);
-            const uint8_t b = static_cast<uint8_t>((rgba[src_idx + 2] * alpha) / 255);
+            if (alpha < kAlphaTransparencyCutoff) {
+                result.indices[static_cast<size_t>(y * width + x)] = kTransparentIndex;
+                continue;
+            }
+            const uint32_t inv_alpha = 255U - alpha;
+            const uint8_t r = static_cast<uint8_t>(
+                (static_cast<uint32_t>(rgba[src_idx + 0]) * alpha +
+                 static_cast<uint32_t>(bg.r) * inv_alpha) / 255U);
+            const uint8_t g = static_cast<uint8_t>(
+                (static_cast<uint32_t>(rgba[src_idx + 1]) * alpha +
+                 static_cast<uint32_t>(bg.g) * inv_alpha) / 255U);
+            const uint8_t b = static_cast<uint8_t>(
+                (static_cast<uint32_t>(rgba[src_idx + 2]) * alpha +
+                 static_cast<uint32_t>(bg.b) * inv_alpha) / 255U);
             const int index = (quantize_channel(r) * kPaletteSide + quantize_channel(g)) * kPaletteSide +
                               quantize_channel(b);
             result.indices[static_cast<size_t>(y * width + x)] = static_cast<uint8_t>(index);
@@ -391,7 +430,7 @@ bool encode_sixel_image(const unsigned char* rgba,
     }
 
     output->clear();
-    *output += "\033Pq";
+    *output += "\033P0;1;0q";
 
     const int palette_size = static_cast<int>(image.palette_rgb.size() / 3);
     for (int i = 0; i < palette_size; ++i) {
@@ -411,6 +450,9 @@ bool encode_sixel_image(const unsigned char* rgba,
             for (int x = 0; x < image.width; ++x) {
                 const uint8_t index =
                     image.indices[static_cast<size_t>((band_y + dy) * image.width + x)];
+                if (index == 0xFF) {
+                    continue;
+                }
                 if (!used[index]) {
                     used[index] = true;
                     band_colors.push_back(index);
@@ -656,6 +698,22 @@ void clear_inline_graphics_layer() {
         clear_kitty_inline_images();
         std::cout.flush();
     }
+}
+
+void clear_inline_graphics_commands(const std::vector<GraphicsDrawCommand>& commands) {
+    for (const auto& cmd : commands) {
+        if (cmd.backend != GraphicsBackendKind::Sixel ||
+            cmd.width <= 0 ||
+            cmd.height <= 0) {
+            continue;
+        }
+
+        for (int row = 0; row < cmd.height; ++row) {
+            move_cursor_to_cell(cmd.viewport_x, cmd.viewport_y + row);
+            std::cout << std::string(static_cast<size_t>(cmd.width), ' ');
+        }
+    }
+    std::cout.flush();
 }
 
 void draw_inline_graphics_commands(const std::vector<GraphicsDrawCommand>& commands) {

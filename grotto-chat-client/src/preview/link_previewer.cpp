@@ -95,6 +95,19 @@ LinkPreviewer::~LinkPreviewer() {
     curl_global_cleanup();
 }
 
+void LinkPreviewer::update_settings(int fetch_timeout_s,
+                                    int max_cache,
+                                    bool inline_images,
+                                    int image_columns,
+                                    int image_rows) {
+    std::lock_guard lk(settings_mu_);
+    fetch_timeout_s_ = fetch_timeout_s;
+    max_cache_ = max_cache;
+    inline_images_ = inline_images;
+    image_columns_ = image_columns;
+    image_rows_ = image_rows;
+}
+
 void LinkPreviewer::start() {
     stopping_ = false;
     thread_ = std::thread([this] { worker_loop(); });
@@ -177,6 +190,13 @@ size_t LinkPreviewer::write_callback(char* ptr, size_t size, size_t nmemb, void*
 PreviewResult LinkPreviewer::fetch_sync(const std::string& url) {
     PreviewResult result;
     result.url = url;
+    int fetch_timeout_s = 5;
+    bool inline_images = true;
+    {
+        std::lock_guard lk(settings_mu_);
+        fetch_timeout_s = fetch_timeout_s_;
+        inline_images = inline_images_;
+    }
 
     // Only allow http/https
     if (url.find("http://") != 0 && url.find("https://") != 0) {
@@ -192,7 +212,7 @@ PreviewResult LinkPreviewer::fetch_sync(const std::string& url) {
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, static_cast<long>(kMaxRedirects));
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(fetch_timeout_s_));
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(fetch_timeout_s));
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
     curl_easy_setopt(curl, CURLOPT_USERAGENT,
@@ -218,7 +238,7 @@ PreviewResult LinkPreviewer::fetch_sync(const std::string& url) {
         return result;
     }
 
-    if (inline_images_ &&
+    if (inline_images &&
         (is_likely_image_url(url) || to_lower_ascii(content_type).starts_with("image/"))) {
         result.is_image = true;
         result.title = "[image] " + url;
@@ -301,8 +321,16 @@ InlineImageThumbnail LinkPreviewer::build_image_thumbnail(const std::string& bod
         return {};
     }
 
-    const int out_cols = std::max(8, image_columns_);
-    const int max_rows = std::max(4, image_rows_);
+    int image_columns = 40;
+    int image_rows = 16;
+    {
+        std::lock_guard lk(settings_mu_);
+        image_columns = image_columns_;
+        image_rows = image_rows_;
+    }
+
+    const int out_cols = std::max(8, image_columns);
+    const int max_rows = std::max(4, image_rows);
     const float aspect = static_cast<float>(height) / static_cast<float>(width);
     const int out_rows = std::clamp(
         static_cast<int>(std::round(aspect * static_cast<float>(out_cols) * 0.5f)),
@@ -316,7 +344,12 @@ InlineImageThumbnail LinkPreviewer::build_image_thumbnail(const std::string& bod
 std::string LinkPreviewer::render_image_preview(const std::string& url,
                                                 const InlineImageThumbnail& thumbnail) const {
     (void)url;
-    if (!inline_images_ || thumbnail.rgba.empty() || thumbnail.width <= 0 || thumbnail.height <= 0) {
+    bool inline_images = true;
+    {
+        std::lock_guard lk(settings_mu_);
+        inline_images = inline_images_;
+    }
+    if (!inline_images || thumbnail.rgba.empty() || thumbnail.width <= 0 || thumbnail.height <= 0) {
         return {};
     }
 

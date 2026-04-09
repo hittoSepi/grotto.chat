@@ -99,11 +99,29 @@ bool GraphicsCompositor::needs_full_clear(const GraphicsFrame& frame) const {
            frame.viewport_height != last_frame_.viewport_height;
 }
 
+void GraphicsCompositor::prepare_for_frame(const GraphicsFrame& frame) {
+    const bool had_sixel = had_native_graphics_ &&
+                           first_native_backend(last_frame_) == GraphicsBackendKind::Sixel;
+    if (!had_sixel) {
+        return;
+    }
+
+    const bool frame_changed = needs_full_clear(frame) ||
+                               !same_backend_commands(frame, last_frame_, GraphicsBackendKind::Sixel);
+    if (!frame_changed) {
+        return;
+    }
+
+    clear_inline_graphics_commands(filter_commands(last_frame_, GraphicsBackendKind::Sixel));
+}
+
 void GraphicsCompositor::commit(GraphicsFrame frame) {
     const TerminalInlineProtocol protocol = terminal_inline_protocol_for_compositor();
     const GraphicsBackendKind active_backend = backend_for_protocol(protocol);
     const bool native_enabled = active_backend != GraphicsBackendKind::ColorBlocks;
     const bool has_active_commands = has_backend_commands(frame, active_backend);
+    const bool backend_changed = had_native_graphics_ &&
+                                 first_native_backend(last_frame_) != active_backend;
 
     if (needs_full_clear(frame)) {
         requires_full_clear_ = true;
@@ -115,6 +133,19 @@ void GraphicsCompositor::commit(GraphicsFrame frame) {
         }
         last_frame_ = std::move(frame);
         had_native_graphics_ = false;
+        requires_full_clear_ = false;
+        return;
+    }
+
+    if (active_backend == GraphicsBackendKind::Sixel) {
+        if (backend_changed) {
+            clear_inline_graphics_layer();
+        }
+        if (has_active_commands) {
+            draw_inline_graphics_commands(filter_commands(frame, active_backend));
+        }
+        last_frame_ = std::move(frame);
+        had_native_graphics_ = has_active_commands;
         requires_full_clear_ = false;
         return;
     }
@@ -132,9 +163,6 @@ void GraphicsCompositor::commit(GraphicsFrame frame) {
         requires_full_clear_ = false;
         return;
     }
-
-    const bool backend_changed = had_native_graphics_ &&
-                                 first_native_backend(last_frame_) != active_backend;
 
     if (backend_changed || requires_full_clear_) {
         clear_inline_graphics_layer();

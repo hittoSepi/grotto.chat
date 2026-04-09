@@ -22,6 +22,7 @@
 #include <string>
 #include <optional>
 #include <chrono>
+#include <cstdint>
 #include <thread>
 #include <unordered_map>
 
@@ -198,6 +199,7 @@ private:
     std::string last_active_channel_;
     GraphicsCompositor graphics_compositor_;
     GraphicsFrame pending_graphics_frame_;
+    uint64_t graphics_commit_sequence_ = 0;
     std::thread::id ui_thread_id_{};
     std::function<std::string()> transfer_summary_provider_;
     std::function<void(const std::string&)> files_refresh_handler_;

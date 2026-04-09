@@ -36,6 +36,7 @@ bool display_inline_image(ftxui::ScreenInteractive& screen,
                           const InlineImageThumbnail& thumbnail,
                           const std::string& title = {});
 void clear_inline_graphics_layer();
+void clear_inline_graphics_commands(const std::vector<GraphicsDrawCommand>& commands);
 void draw_inline_graphics_commands(const std::vector<GraphicsDrawCommand>& commands);
 
 } // namespace grotto::ui

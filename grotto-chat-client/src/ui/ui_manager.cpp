@@ -513,7 +513,11 @@ bool UIManager::handle_mouse_event(const Event& event) {
             mouse_tracker_.update_selection(mouse.x, mouse.y);
             return true;
         }
-        
+
+        if (terminal_inline_protocol_for_compositor() == TerminalInlineProtocol::Sixel) {
+            return true;
+        }
+
         return false;  // Let FTXUI handle hover visual updates
     }
     
@@ -1410,7 +1414,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     pending_graphics_frame_.viewport_y = mouse_tracker_.message_region().y;
     pending_graphics_frame_.viewport_width = msg_width;
     pending_graphics_frame_.viewport_height = msg_rows;
-    pending_graphics_frame_.commands = active_ch.empty()
+    pending_graphics_frame_.commands = (active_ch.empty() || quit_confirm_visible_)
         ? std::vector<GraphicsDrawCommand>{}
         : collect_visible_draw_commands(ch_state,
                                         active_ch,
@@ -1836,7 +1840,15 @@ void UIManager::run(SubmitFn on_submit,
 
         int rows = screen_.dimx() > 0 ? screen_.dimy() : 24;
         auto document = build_document(rows);
-        graphics_compositor_.commit(pending_graphics_frame_);
+        graphics_compositor_.prepare_for_frame(pending_graphics_frame_);
+        const uint64_t commit_sequence = ++graphics_commit_sequence_;
+        auto frame = pending_graphics_frame_;
+        screen_.Post([this, frame = std::move(frame), commit_sequence]() mutable {
+            if (commit_sequence != graphics_commit_sequence_) {
+                return;
+            }
+            graphics_compositor_.commit(std::move(frame));
+        });
         return document;
     });
 

@@ -45,6 +45,13 @@ public:
     // Stop and join the background thread.
     void stop();
 
+    // Update preview sizing/options without recreating the worker.
+    void update_settings(int fetch_timeout_s,
+                         int max_cache,
+                         bool inline_images,
+                         int image_columns,
+                         int image_rows);
+
 private:
     struct FetchJob {
         std::string     url;
@@ -70,6 +77,7 @@ private:
     bool               inline_images_;
     int                image_columns_;
     int                image_rows_;
+    mutable std::mutex settings_mu_;
 
     std::thread              thread_;
     std::mutex               mu_;
