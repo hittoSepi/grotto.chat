@@ -41,6 +41,10 @@ public:
     void history_prev();
     void history_next();
 
+    // Select the whole buffer so the next edit replaces it.
+    void select_all();
+    bool has_full_selection() const { return full_selection_active_; }
+
     // Return current buffer as UTF-8 string (for display and send)
     std::string text() const;
 
@@ -63,8 +67,12 @@ public:
     void set_text(const std::string& utf8);
 
 private:
+    void clear_full_selection();
+    bool delete_full_selection_if_active();
+
     std::u32string buf_;
     size_t         cursor_ = 0;
+    bool           full_selection_active_ = false;
 
     std::deque<std::u32string> history_;
     int                        hist_pos_ = -1;  // -1 = not browsing history

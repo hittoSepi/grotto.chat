@@ -108,3 +108,78 @@ TEST_CASE("InputLine delete_word_backward does not cross newline boundary", "[in
     // "second" deleted but "\n" should still be there
     REQUIRE(line.text() == "first\n");
 }
+
+TEST_CASE("InputLine select_all marks the full buffer selected", "[input_line]") {
+    InputLine line;
+    line.insert_text("hello world");
+
+    line.select_all();
+
+    REQUIRE(line.has_full_selection());
+    REQUIRE(line.text() == "hello world");
+}
+
+TEST_CASE("InputLine typing replaces a full selection", "[input_line]") {
+    InputLine line;
+    line.insert_text("hello world");
+    line.select_all();
+
+    line.insert_text("bye");
+
+    REQUIRE_FALSE(line.has_full_selection());
+    REQUIRE(line.text() == "bye");
+    REQUIRE(line.cursor_col() == 3);
+}
+
+TEST_CASE("InputLine backspace clears a full selection", "[input_line]") {
+    InputLine line;
+    line.insert_text("hello world");
+    line.select_all();
+
+    line.backspace();
+
+    REQUIRE_FALSE(line.has_full_selection());
+    REQUIRE(line.text().empty());
+    REQUIRE(line.cursor_col() == 0);
+}
+
+TEST_CASE("InputLine delete clears a full selection", "[input_line]") {
+    InputLine line;
+    line.insert_text("hello world");
+    line.select_all();
+
+    line.del_forward();
+
+    REQUIRE_FALSE(line.has_full_selection());
+    REQUIRE(line.text().empty());
+    REQUIRE(line.cursor_col() == 0);
+}
+
+TEST_CASE("InputLine home collapses full selection to line start", "[input_line]") {
+    InputLine line;
+    line.insert_text("hello world");
+    line.select_all();
+
+    line.move_home();
+
+    REQUIRE_FALSE(line.has_full_selection());
+    REQUIRE(line.cursor_col() == 0);
+    REQUIRE(line.text() == "hello world");
+}
+
+TEST_CASE("InputLine vertical movement collapses full selection without leaving the buffer", "[input_line]") {
+    InputLine line;
+    line.insert_text("first");
+    line.insert(U'\n');
+    line.insert_text("second");
+    line.select_all();
+
+    REQUIRE(line.move_up());
+    REQUIRE_FALSE(line.has_full_selection());
+    REQUIRE(line.cursor_col() == 0);
+
+    line.select_all();
+    REQUIRE(line.move_down());
+    REQUIRE_FALSE(line.has_full_selection());
+    REQUIRE(line.cursor_col() == static_cast<int>(line.text().size()));
+}

@@ -430,3 +430,28 @@ target_link_libraries(test-command-parser PRIVATE
 )
 add_test(NAME command-parser-tests COMMAND test-command-parser)
 
+set(GROTTO_CLIENT_TEST_TARGETS
+    test-input-line
+    test-config
+    test-voice-helpers
+    test-noise-suppressor
+    test-signal-prekey-roundtrip
+    test-file-transfer
+    test-command-parser
+)
+
+if(CMAKE_CONFIGURATION_TYPES)
+    set(GROTTO_CLIENT_CTEST_ARGS -C $<CONFIG>)
+else()
+    set(GROTTO_CLIENT_CTEST_ARGS)
+endif()
+
+add_custom_target(check
+    COMMAND ${CMAKE_CTEST_COMMAND} ${GROTTO_CLIENT_CTEST_ARGS} --output-on-failure
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    DEPENDS ${GROTTO_CLIENT_TEST_TARGETS}
+    USES_TERMINAL
+    COMMAND_EXPAND_LISTS
+    COMMENT "Build and run grotto-chat-client tests"
+)
+

@@ -8,6 +8,7 @@ InputLine::InputLine(int max_history)
     : max_history_(max_history) {}
 
 void InputLine::insert(char32_t ch) {
+    delete_full_selection_if_active();
     buf_.insert(cursor_, 1, ch);
     ++cursor_;
     hist_pos_ = -1; // editing breaks history browse
@@ -17,6 +18,7 @@ void InputLine::insert_text(const std::string& utf8) {
     auto decoded = from_utf8(utf8);
     if (decoded.empty()) return;
 
+    delete_full_selection_if_active();
     buf_.insert(buf_.begin() + static_cast<std::ptrdiff_t>(cursor_),
                 decoded.begin(), decoded.end());
     cursor_ += decoded.size();
@@ -24,17 +26,20 @@ void InputLine::insert_text(const std::string& utf8) {
 }
 
 void InputLine::backspace() {
+    if (delete_full_selection_if_active()) return;
     if (cursor_ == 0) return;
     buf_.erase(cursor_ - 1, 1);
     --cursor_;
 }
 
 void InputLine::del_forward() {
+    if (delete_full_selection_if_active()) return;
     if (cursor_ >= buf_.size()) return;
     buf_.erase(cursor_, 1);
 }
 
 void InputLine::kill_to_end() {
+    if (delete_full_selection_if_active()) return;
     if (cursor_ >= buf_.size()) return;
     // Find next newline on this line
     size_t end = buf_.find(U'\n', cursor_);
@@ -51,6 +56,7 @@ void InputLine::kill_to_end() {
 }
 
 void InputLine::delete_word_backward() {
+    if (delete_full_selection_if_active()) return;
     if (cursor_ == 0) return;
     size_t pos = cursor_;
     // Step back over trailing spaces (but not newlines)
@@ -66,17 +72,39 @@ void InputLine::delete_word_backward() {
 }
 
 void InputLine::move_left() {
+    if (full_selection_active_) {
+        cursor_ = 0;
+        clear_full_selection();
+        return;
+    }
     if (cursor_ > 0) --cursor_;
 }
 
 void InputLine::move_right() {
+    if (full_selection_active_) {
+        cursor_ = buf_.size();
+        clear_full_selection();
+        return;
+    }
     if (cursor_ < buf_.size()) ++cursor_;
 }
 
-void InputLine::move_home() { cursor_ = 0; }
-void InputLine::move_end()  { cursor_ = buf_.size(); }
+void InputLine::move_home() {
+    cursor_ = 0;
+    clear_full_selection();
+}
+
+void InputLine::move_end()  {
+    cursor_ = buf_.size();
+    clear_full_selection();
+}
 
 bool InputLine::move_up() {
+    if (full_selection_active_) {
+        cursor_ = 0;
+        clear_full_selection();
+        return true;
+    }
     // Find the newline before cursor (end of previous line)
     // If there's no newline before cursor, we're on the first line
     if (cursor_ == 0) return false;
@@ -102,6 +130,11 @@ bool InputLine::move_up() {
 }
 
 bool InputLine::move_down() {
+    if (full_selection_active_) {
+        cursor_ = buf_.size();
+        clear_full_selection();
+        return true;
+    }
     // Find the newline after cursor (start of next line)
     size_t next_nl = buf_.find(U'\n', cursor_);
     if (next_nl == std::u32string::npos) return false; // on last line
@@ -125,6 +158,7 @@ bool InputLine::move_down() {
 }
 
 void InputLine::history_prev() {
+    clear_full_selection();
     if (history_.empty()) return;
     if (hist_pos_ == -1) {
         saved_input_ = buf_;
@@ -139,6 +173,7 @@ void InputLine::history_prev() {
 }
 
 void InputLine::history_next() {
+    clear_full_selection();
     if (hist_pos_ == -1) return;
     if (hist_pos_ == 0) {
         hist_pos_ = -1;
@@ -147,6 +182,14 @@ void InputLine::history_next() {
         --hist_pos_;
         buf_ = history_[hist_pos_];
     }
+    cursor_ = buf_.size();
+}
+
+void InputLine::select_all() {
+    if (buf_.empty()) {
+        return;
+    }
+    full_selection_active_ = true;
     cursor_ = buf_.size();
 }
 
@@ -159,6 +202,7 @@ std::string InputLine::commit() {
     buf_.clear();
     cursor_  = 0;
     hist_pos_ = -1;
+    clear_full_selection();
     return result;
 }
 
@@ -166,12 +210,14 @@ void InputLine::clear() {
     buf_.clear();
     cursor_  = 0;
     hist_pos_ = -1;
+    clear_full_selection();
 }
 
 void InputLine::set_text(const std::string& utf8) {
     buf_ = from_utf8(utf8);
     cursor_   = buf_.size();
     hist_pos_ = -1;
+    clear_full_selection();
 }
 
 std::string InputLine::text() const { return to_utf8(buf_); }
@@ -181,6 +227,21 @@ int InputLine::cursor_byte_offset() const {
     // Convert code point position to UTF-8 byte offset
     auto prefix = buf_.substr(0, cursor_);
     return static_cast<int>(to_utf8(prefix).size());
+}
+
+void InputLine::clear_full_selection() {
+    full_selection_active_ = false;
+}
+
+bool InputLine::delete_full_selection_if_active() {
+    if (!full_selection_active_) {
+        return false;
+    }
+    buf_.clear();
+    cursor_ = 0;
+    hist_pos_ = -1;
+    clear_full_selection();
+    return true;
 }
 
 std::u32string InputLine::from_utf8(const std::string& s) {

@@ -112,6 +112,7 @@ verify_peer = true             # Verify server TLS certificate (keep true in pro
 | Key | Action |
 |-----|--------|
 | `Enter` | Send message |
+| `Ctrl+A` | Select the whole active input |
 | `Ctrl+V` | Paste clipboard text into the input line |
 | `Tab` | Autocomplete username / channel |
 | `PgUp` / `PgDn` | Scroll message history |
@@ -220,6 +221,32 @@ Output:
 - `build/client.toml`
 - `build/help/`
 - `build/resources/`
+
+### Running Tests
+
+Canonical test path:
+
+```bash
+cmake --build build --target check
+```
+
+On Visual Studio generators:
+
+```powershell
+cmake --build build --config Release --target check
+```
+
+This target builds every registered test executable first and then runs `ctest --output-on-failure`.
+
+The helper scripts support the same path:
+
+```bash
+./build.sh check
+```
+
+```powershell
+.\build.cmd check
+```
 
 ### Running multiple instances on the same machine
 

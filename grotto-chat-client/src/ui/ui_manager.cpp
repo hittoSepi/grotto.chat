@@ -1612,6 +1612,7 @@ Element UIManager::build_document(int term_rows) {
     // Input line — render with proper wrapping and multiline support
     std::string input_text = input_line_.text();
     int byte_off = input_line_.cursor_byte_offset();
+    bool full_input_selected = input_line_.has_full_selection();
 
     // Build full display string: "> " + input text
     std::string full = "> " + input_text;
@@ -1649,6 +1650,36 @@ Element UIManager::build_document(int term_rows) {
     bool cursor_placed = false;
     for (auto& vl : vlines) {
         std::string line_text = full.substr(vl.start, vl.end - vl.start);
+
+        if (full_input_selected) {
+            const int selection_start = std::max(vl.start, 2);
+            const int selection_end = std::min(vl.end, static_cast<int>(full.size()));
+            if (selection_start < selection_end) {
+                const int prefix_len = std::max(0, selection_start - vl.start);
+                const int selected_len = std::max(0, selection_end - selection_start);
+                const std::string prefix = line_text.substr(0, prefix_len);
+                const std::string selected = line_text.substr(prefix_len, selected_len);
+                const std::string suffix = line_text.substr(prefix_len + selected_len);
+
+                Elements segments;
+                if (!prefix.empty()) {
+                    segments.push_back(text(prefix) | color(palette::fg()));
+                }
+                if (!selected.empty()) {
+                    segments.push_back(text(selected) | color(palette::bg()) | bgcolor(palette::fg()));
+                }
+                if (!suffix.empty()) {
+                    segments.push_back(text(suffix) | color(palette::fg()));
+                }
+                if (segments.empty()) {
+                    segments.push_back(text(line_text) | color(palette::fg()));
+                }
+                line_els.push_back(hbox(std::move(segments)));
+            } else {
+                line_els.push_back(text(line_text) | color(palette::fg()));
+            }
+            continue;
+        }
 
         if (!cursor_placed && cursor_in_full >= vl.start && cursor_in_full <= vl.end) {
             cursor_placed = true;
@@ -2046,9 +2077,9 @@ void UIManager::run(SubmitFn on_submit,
             input_line_.move_home();
             return true;
         }
-        // Ctrl+A — move to beginning of line (readline: move-beginning-of-line)
+        // Ctrl+A — select the whole active input
         if (event.input() == "\x01") {
-            input_line_.move_home();
+            input_line_.select_all();
             return true;
         }
         // Ctrl+E — move to end of line (readline: move-end-of-line)

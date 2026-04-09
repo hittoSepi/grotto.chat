@@ -403,10 +403,22 @@ Linux:
 ./build.sh
 ```
 
+Tai build + testit yhdella komennolla:
+
+```bash
+./build.sh check
+```
+
 Windows:
 
 ```powershell
 .\build.cmd
+```
+
+Tai build + testit yhdella komennolla:
+
+```powershell
+.\build.cmd check
 ```
 
 Tarkeaa:
@@ -415,6 +427,7 @@ Tarkeaa:
 - ne eivat tee inkrementaalista buildia olemassa olevaan `build`-hakemistoon
 - Linux-skripti tekee `Release`-buildin `-DCMAKE_BUILD_TYPE=Release`
 - Windows-skripti buildaa `Release`-konfiguraation
+- `check`-argumentti ajaa kanonisen CMake-targetin, joka rakentaa kaikki rekisteroidyt testit ja suorittaa `ctest --output-on-failure`
 
 Jos haluat hallita buildia tarkasti tai debugata configure-vaihetta, kayta mieluummin suoria `cmake`-komentoja kuin skripteja.
 

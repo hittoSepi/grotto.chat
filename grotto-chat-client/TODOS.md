@@ -1,49 +1,15 @@
 # TODOS
 
-    - [~] Voice toimimaan oikeasti
-        - [~] Audio settings
-            - [x] Input + ouput device list dropdown
-            - [x] Input volume ja output volume
-            - [x] Mode: Voice Activation vai PTT, PushToMute dropdown
-            - [x] Voice activation threshold (disabled jos ptt)
-            - [x] PTT hotkey
-            - [~] Mikä homma tehdä input test "oma input echolla omaan outputtiin"?
-            - [~] Mitä muita asetuksia sitä on?
-        - [ ] PeerToPeer voice toimimaan
-        - [ ] GroupVoice toimimaan
-    - [ ] ctrl-a voisi valita koko tekstin aktiivisesta inputista
-    - [x] servulle jää quitanneet nimet kummitelemaan, vai pitäisikö ne näyttää jotenkin offline (servun ongelma)
-    - [x] servulle yhteyden tekeminen "hidas", katso `dev_docs/desktop-client/becoming-online.png`
-      - voisi ainakin ilmoittaa paremmin että vielä connectaa
-    - [x] renderöidään grotto daemon kuva server tabiin kun aloitetaan yhdistäminen
-    - [x] ctrl+c sammuttaa vieläkin ohjelman. (mahdoton ongelma?)
-    - [x] aliaksia slash komennoille esim /join toimisi /j ja niin edelleen
-    - [x] server tabissa ei tarvi näyttää käyttäjä sidepanelia 
-    - [x] login ruutu on liian kapea, vähän leveämmänksi
-    - [x] jos kirjoitat /help se ei mahdu koko ruutuun mutta rullausalue ei muutu
-    - [x] ei koko ruudun levyistä underscorea, vain tekstin kohdalle. näyttää nyt vähä hölmöltä
-    - [x] paste ei toimi ainakaan powershellillä ssh läpi clientille
-    - [x] tekstin valinta chat-ruutuun
-      - [x] renderöi tekstin valinta että näkee valitun tekstin
-    - [x] hiiren click koordinaatit saattavat olla väärin
-    - [x] right click linkin avaus toimii aika randomisti, clientillä toimii ku right klikkaa vasempaan yläkulmaan ja ps ssh client ei ollenkaan.
-    - [x] safe native inline graphics v2 (kitty+sixel, auto-on) valmis ja manuaalitestattu
-    - [x] priva viestin vastaanottajalla aukeaa tabi omalla nimellä, eikä sen kuka lähettänyty
-    - [x] priva viestin vastaanottajalla ei päivity userlist
-    - [x] jos msg vastaanottajaa ei ole, anna palautetta userille
-    - [x] parempi /help ja jotkin alkuohjeet miten toimia kun servulle päästy, peruskäyttäjä ei välttämättä tiedä että pitää /join #<kanava> ja niin edelleen
-    - [x] käyttäjän viestin pituudessa pitää olla raja
-      - client plaintext max 4096 tavua
-      - server encrypted chat payload configurable `max_chat_payload_bytes`
-    - [x] private messaget eivät toimi, viestit "tulevat" perille muttaa decryptaus failaa
-        ```grotto.chat
-            privatechat msg [decryption failed]
-            [grotto] [warning] Decryption failed for message from hittoLinuxi: -1005
+## Pienet UX-parannukset
 
-            [grotto] [debug] KEY_REQUEST sent for 'hittoLinux', plaintext queued
-            [grotto] [debug] Received KeyBundle payload: size=184
-            [grotto] [debug] Parsed KeyBundle: recipient_for='hittoLinux'
-            [grotto] [info] Established X3DH session with 'hittoLinux'
-            [grotto] [debug] Flushed 1 pending DM(s) to 'hittoLinux' (0 failed)
-            [grotto] [warning] Decryption failed for message from hittoLinux: -1005
-        ```
+  - [ ] `ctrl + <+|->` käyttöliittymän skaalaukseen
+  - [ ] selvitä splitattu kanavanäkymä, esim. `/split 2 3`
+
+## Infra / testit
+
+  - [ ] ota kanoninen `check`-target käyttöön clientin CI:ssä kun CI-polku lisätään
+  - [ ] lisää kohdistetut UI-tason testit tabien klikkauksille, inputin select-all-renderille ja files panelin näppäinpoluille
+
+## Isommat myöhemmät ideat
+
+  - [ ] voice input self-test / paikallinen loopback-esikatselu mikrofonin säätöön

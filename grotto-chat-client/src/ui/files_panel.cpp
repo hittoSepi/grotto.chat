@@ -86,6 +86,18 @@ std::vector<std::string> split_lines(std::string_view text) {
     return lines;
 }
 
+std::string choose_hint(int width, std::initializer_list<std::string_view> variants) {
+    const int max_width = std::max(4, width - 1);
+    std::string fallback;
+    for (const auto variant : variants) {
+        fallback = std::string(variant);
+        if (static_cast<int>(variant.size()) <= max_width) {
+            return fallback;
+        }
+    }
+    return truncate_with_ellipsis(fallback, max_width);
+}
+
 Element render_file_entry(const RemoteFileEntry& file, int width, bool selected) {
     std::string label = file.filename.empty() ? file.file_id : file.filename;
     std::string meta = human_bytes(file.file_size) + "  " + format_uploaded_at(file.uploaded_at);
@@ -123,18 +135,24 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
     out_file_positions.clear();
 
     Elements content;
-    content.push_back(
-        hbox({
-            text("FILES " + std::to_string(files.size())) | bold | color(palette::fg_dark()),
-            filler(),
-            text("[Ctrl+F] filter  [s] sort  [Enter] dl  [Del] rm  [r] Refresh  [o] Open dl folder") | color(palette::comment()),
-        }));
+    int current_y = base_y;
+    auto push_line = [&](Element el) {
+        content.push_back(std::move(el));
+        ++current_y;
+    };
+
+    push_line(text("FILES " + std::to_string(files.size())) | bold | color(palette::fg_dark()));
+    push_line(text(choose_hint(width, {
+        "^F filter  s sort  r refresh  o open dl",
+        "^F flt  s sort  r ref  o dir",
+        "^F  s  r  o",
+    })) | color(palette::comment()));
     if (!sort_label.empty()) {
-        content.push_back(text(" Sort: " + sort_label) | color(palette::comment()));
+        push_line(text(" Sort: " + sort_label) | color(palette::comment()));
     }
     if (!filter_text.empty()) {
         const std::string lowered_filter = ascii_lower_copy(filter_text);
-        content.push_back(
+        push_line(
             text(" Filter: " + truncate_with_ellipsis(lowered_filter, std::max(10, width - 2)))
             | color(palette::yellow()));
     }
@@ -144,17 +162,16 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
             if (line.empty()) {
                 continue;
             }
-            content.push_back(
+            push_line(
                 text(" " + truncate_with_ellipsis(line, summary_width))
                 | color(palette::comment()));
         }
     }
-    content.push_back(separator() | color(palette::bg_highlight()));
+    push_line(separator() | color(palette::bg_highlight()));
 
-    int current_y = base_y + 2;
     if (files.empty()) {
-        content.push_back(text(" No files yet") | color(palette::comment()));
-        content.push_back(text(" Press /files to refresh") | color(palette::comment()));
+        push_line(text(" No files yet") | color(palette::comment()));
+        push_line(text(" Press /files to refresh") | color(palette::comment()));
     } else {
         for (const auto& file : files) {
             const bool selected = selected_file_id && *selected_file_id == file.file_id;
@@ -162,9 +179,12 @@ Element render_files_panel(const std::vector<RemoteFileEntry>& files,
             content.push_back(render_file_entry(file, width, selected));
             current_y += 2;
         }
-        content.push_back(separator() | color(palette::bg_highlight()));
-        content.push_back(text(" [Up/Down] move  [Ctrl+F] filter  [s] sort  [Enter] dl  [Del] rm  [r] Refresh  [o] Open dl folder")
-                          | color(palette::comment()));
+        push_line(separator() | color(palette::bg_highlight()));
+        push_line(text(choose_hint(width, {
+            "Up/Dn move  Enter download  Del delete",
+            "Up/Dn sel  Enter dl  Del rm",
+            "Up/Dn  Ent  Del",
+        })) | color(palette::comment()));
     }
 
     return vbox(std::move(content)) | bgcolor(palette::bg_dark());

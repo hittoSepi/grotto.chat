@@ -3,6 +3,10 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 set "BUILD_DIR=build"
 set "BACKUP_DIR=%BUILD_DIR%-old"
+set "RUN_CHECK=0"
+
+if /I "%~1"=="check" set "RUN_CHECK=1"
+if /I "%~1"=="test" set "RUN_CHECK=1"
 
 if exist "%BUILD_DIR%" (
     set /a IDX=1
@@ -28,6 +32,12 @@ if errorlevel 1 exit /b 1
 echo Building Release...
 cmake --build "%BUILD_DIR%" --config Release
 if errorlevel 1 exit /b 1
+
+if "%RUN_CHECK%"=="1" (
+    echo Running Release test check...
+    cmake --build "%BUILD_DIR%" --config Release --target check
+    if errorlevel 1 exit /b 1
+)
 
 echo Build completed successfully.
 endlocal
