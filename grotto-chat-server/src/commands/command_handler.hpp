@@ -11,6 +11,7 @@
 #include <vector>
 #include <chrono>
 #include <mutex>
+#include <optional>
 
 // Forward declarations
 namespace grotto::net { class Session; }
@@ -22,6 +23,13 @@ using SessionPtr = std::shared_ptr<net::Session>;
 using SessionFinder = std::function<SessionPtr(const std::string&)>;
 using BroadcastFunc = std::function<void(const Envelope&, SessionPtr)>;
 using PresenceUpdateFn = std::function<void(const std::string&, PresenceUpdate::Status, const std::string&, SessionPtr)>;
+
+struct PresenceInfo {
+    PresenceUpdate::Status status = PresenceUpdate::OFFLINE;
+    std::string status_text;
+    int64_t status_since_ms = 0;
+};
+using PresenceLookupFn = std::function<std::optional<PresenceInfo>(const std::string&)>;
 
 // Channel state with operators and settings
 struct ChannelState {
@@ -44,6 +52,7 @@ public:
         SessionFinder find_session,
         BroadcastFunc broadcast,
         PresenceUpdateFn update_presence,
+        PresenceLookupFn lookup_presence,
         db::Database& db,
         db::UserStore& user_store,
         db::OfflineStore& offline_store,
@@ -104,6 +113,7 @@ private:
     SessionFinder find_session_;
     BroadcastFunc broadcast_;
     PresenceUpdateFn update_presence_;
+    PresenceLookupFn lookup_presence_;
     db::Database& db_;
     db::UserStore& user_store_;
     db::OfflineStore& offline_store_;

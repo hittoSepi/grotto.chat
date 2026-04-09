@@ -108,6 +108,7 @@ CommandHandler::CommandHandler(
     SessionFinder find_session,
     BroadcastFunc broadcast,
     PresenceUpdateFn update_presence,
+    PresenceLookupFn lookup_presence,
     db::Database& db,
     db::UserStore& user_store,
     db::OfflineStore& offline_store,
@@ -117,6 +118,7 @@ CommandHandler::CommandHandler(
     : find_session_(std::move(find_session))
     , broadcast_(std::move(broadcast))
     , update_presence_(std::move(update_presence))
+    , lookup_presence_(std::move(lookup_presence))
     , db_(db)
     , user_store_(user_store)
     , offline_store_(offline_store)
@@ -358,6 +360,18 @@ CommandResponse CommandHandler::cmd_whois(const std::vector<std::string>& args, 
 
     if (auto user = user_store_.find_by_id(target_id)) {
         info.set_identity_fingerprint(format_identity_fingerprint(user->identity_pub));
+    }
+
+    if (lookup_presence_) {
+        if (const auto presence = lookup_presence_(target_id)) {
+            info.set_presence(presence->status);
+            info.set_status_text(presence->status_text);
+            info.set_status_since_ms(presence->status_since_ms);
+        } else {
+            info.set_presence(PresenceUpdate::OFFLINE);
+            info.set_status_text("");
+            info.set_status_since_ms(0);
+        }
     }
 
     return make_response(true, info.SerializeAsString(), "whois");

@@ -266,6 +266,16 @@ std::string dm_presence_notice_key(const PresenceInfo& presence) {
            presence.status_text + "|" + std::to_string(presence.status_since_ms);
 }
 
+std::string whois_presence_label(PresenceUpdate::Status status) {
+    switch (status) {
+        case PresenceUpdate::ONLINE: return "online";
+        case PresenceUpdate::AWAY: return "away";
+        case PresenceUpdate::DND: return "do not disturb";
+        case PresenceUpdate::OFFLINE:
+        default: return "offline";
+    }
+}
+
 std::string quota_preflight_message(std::string_view label, uint64_t file_size, uint64_t limit) {
     return "Upload blocked: file exceeds the " + std::string(label) + " (" +
            human_bytes(file_size) + " > " + human_bytes(limit) + ")";
@@ -911,6 +921,13 @@ void App::handle_command(const ParsedCommand& cmd) {
         ui_->notify();
         return;
     }
+    if (cmd.name == "/whois") {
+        if (cmd.args.empty()) {
+            ui_->push_system_msg("Usage: /whois <name>");
+            ui_->notify();
+            return;
+        }
+    }
     // All remaining commands require server connection + authentication
     if (!msg_handler_ || !msg_handler_->is_authenticated()) {
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::NOT_CONNECTED_CHECK_STATUS));
@@ -927,6 +944,10 @@ void App::handle_command(const ParsedCommand& cmd) {
         }
         const std::string command = cmd.name.substr(1);
         msg_handler_->send_command(command, cmd.args);
+        return;
+    }
+    if (cmd.name == "/whois") {
+        msg_handler_->send_command("whois", {cmd.args[0]});
         return;
     }
 
@@ -1437,6 +1458,41 @@ void App::trace_connection_phase(const std::string& phase,
 void App::handle_command_response(const CommandResponse& response) {
     const std::string command = ascii_lower_copy(response.command());
     std::string prefix = response.success() ? "[ok] " : "[fail] ";
+
+    if (command == "whois" && response.success()) {
+        UserInfo info;
+        if (info.ParseFromString(response.message())) {
+            log_server_event("[ok] whois: " + info.nickname(), false);
+            ui_->push_system_msg("Whois for " + info.nickname() + ":");
+            ui_->push_system_msg("  User ID: " + info.user_id());
+            ui_->push_system_msg("  Status: " + whois_presence_label(info.presence()));
+            if (!info.status_text().empty()) {
+                ui_->push_system_msg("  Status text: " + info.status_text());
+            }
+            if (info.status_since_ms() > 0) {
+                const std::string since = format_presence_since_time(info.status_since_ms());
+                if (!since.empty()) {
+                    ui_->push_system_msg("  Since: " + since);
+                }
+            }
+            if (info.channels_size() > 0) {
+                std::string channels;
+                for (int i = 0; i < info.channels_size(); ++i) {
+                    if (i > 0) channels += ", ";
+                    channels += info.channels(i);
+                }
+                ui_->push_system_msg("  Channels: " + channels);
+            } else {
+                ui_->push_system_msg("  Channels: (none)");
+            }
+            if (!info.identity_fingerprint().empty()) {
+                ui_->push_system_msg("  Fingerprint: " + info.identity_fingerprint());
+            }
+            if (ui_) ui_->notify();
+            return;
+        }
+    }
+
     log_server_event(prefix + command + ": " + response.message(), false);
 
     if (command == "quota" && response.success()) {

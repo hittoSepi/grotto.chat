@@ -99,8 +99,21 @@ void Listener::run() {
             presence.set_status_since_ms(unix_time_ms_now());
             this->broadcast_presence(presence, exclude);
         };
+        auto lookup_presence = [this](const std::string& user_id) -> std::optional<commands::PresenceInfo> {
+            std::lock_guard<std::mutex> lock(sessions_mutex_);
+            auto it = user_presence_.find(user_id);
+            if (it == user_presence_.end()) {
+                return std::nullopt;
+            }
+            return commands::PresenceInfo{
+                it->second.status,
+                it->second.status_text,
+                it->second.status_since_ms,
+            };
+        };
         command_handler_ = std::make_unique<commands::CommandHandler>(
-            find_session, broadcast, update_presence, *db_, user_store_, offline_store_, *file_store_,
+            find_session, broadcast, update_presence, lookup_presence,
+            *db_, user_store_, offline_store_, *file_store_,
             max_total_storage_bytes_, max_user_storage_bytes_);
         spdlog::info("Command handler initialized");
 

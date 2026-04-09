@@ -247,6 +247,9 @@ message UserInfo {
   bool is_online = 3;
   repeated string channels = 4;  // Channels user is in
   string identity_fingerprint = 5;
+  PresenceUpdate.Status presence = 6;
+  string status_text = 7;
+  int64 status_since_ms = 8;
 }
 
 // Push notification messages
