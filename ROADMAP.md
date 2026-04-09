@@ -42,7 +42,8 @@ Tarkeys: Kriittinen
 - [ ] Thread safety audit
 - [~] Error-scenario QA
   - [x] Repeatable QA harness / checklist target (`qa-error-scenarios`)
-  - [ ] Aja server alas / reconnect / shutdown / transfer -skenaariot lapi release-ehdokkaalla
+  - [~] Server restart / reconnect ajettu Windows release-ehdokkaalla
+  - [ ] Shutdown / transfer -skenaariot viela ajamatta release-ehdokkaalla
   - [ ] Aja sama polku Windows- ja Linux-buildilla
 
 ### 3. Release Packaging & Docs

@@ -145,6 +145,60 @@ std::string ascii_lower_copy(std::string text) {
     return text;
 }
 
+std::string sanitize_disconnect_reason(std::string reason) {
+    reason = trim_ascii_whitespace(reason);
+    if (reason.empty()) {
+        return "connection closed";
+    }
+
+    const std::string lowered = ascii_lower_copy(reason);
+    if (lowered.find("multiple exceptions") != std::string::npos) {
+        return "connection lost";
+    }
+    if (lowered.find("actively refused") != std::string::npos ||
+        lowered.find("system:10061") != std::string::npos) {
+        return "connection refused";
+    }
+    if (lowered.find("end of file") != std::string::npos) {
+        return "connection closed by server";
+    }
+    if (lowered.find("connection reset by peer") != std::string::npos) {
+        return "connection reset by peer";
+    }
+
+    const auto bracket = reason.find(" [");
+    if (bracket != std::string::npos) {
+        reason.erase(bracket);
+    }
+
+    constexpr size_t kMaxReasonLength = 120;
+    if (reason.size() > kMaxReasonLength) {
+        reason.resize(kMaxReasonLength);
+        reason += "...";
+    }
+    return reason;
+}
+
+bool should_log_connection_phase(std::string_view phase) {
+    static constexpr std::string_view kSuppressedPhases[] = {
+        "Resolving server address",
+        "Server address resolved",
+        "TCP connected",
+        "TLS handshake done",
+        "Certificate verified",
+        "HELLO sent",
+        "Auth challenge received",
+        "Auth response sent",
+    };
+
+    for (const auto suppressed : kSuppressedPhases) {
+        if (phase == suppressed) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool mime_rule_matches(std::string_view rule, std::string_view mime_type) {
     if (rule.empty() || mime_type.empty()) {
         return false;
@@ -572,7 +626,7 @@ bool App::init(const std::filesystem::path& config_path,
             std::lock_guard lk(pending_read_receipts_mu_);
             pending_read_receipts_.clear();
         }
-        log_server_event("Disconnected: " + reason, true);
+        log_server_event("Disconnected: " + sanitize_disconnect_reason(reason), true);
     };
 
     net_client_ = std::make_shared<net::NetClient>(ioc_, cfg_, std::move(cb));
@@ -1435,6 +1489,10 @@ void App::log_server_event(const std::string& text, bool activate_server) {
 void App::trace_connection_phase(const std::string& phase,
                                  bool reset_attempt_timer,
                                  bool activate_server) {
+    if (!should_log_connection_phase(phase)) {
+        return;
+    }
+
     state_.set_connecting(true);
 
     auto now = std::chrono::steady_clock::now();
