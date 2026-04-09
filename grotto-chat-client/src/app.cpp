@@ -934,6 +934,28 @@ void App::handle_command(const ParsedCommand& cmd) {
                              std::string(runtime_capabilities_.audio_capture_available ? "true" : "false"));
         ui_->push_system_msg("  audio_playback_available=" +
                              std::string(runtime_capabilities_.audio_playback_available ? "true" : "false"));
+        ui_->push_system_msg("  voice.cfg_ice_servers=" +
+                             std::to_string(cfg_.voice.ice_servers.size()));
+        for (size_t i = 0; i < cfg_.voice.ice_servers.size(); ++i) {
+            ui_->push_system_msg("    cfg_ice[" + std::to_string(i) + "]=" + cfg_.voice.ice_servers[i]);
+        }
+        ui_->push_system_msg("  voice.cfg_turn_username=" +
+                             (cfg_.voice.turn_username.empty() ? "<empty>" : cfg_.voice.turn_username));
+        ui_->push_system_msg("  voice.cfg_turn_password_set=" +
+                             std::string(cfg_.voice.turn_password.empty() ? "false" : "true"));
+
+        const auto runtime_ice = state_.runtime_voice_ice_config();
+        ui_->push_system_msg("  voice.runtime_ice_from_server=" +
+                             std::string(runtime_ice.from_server ? "true" : "false"));
+        ui_->push_system_msg("  voice.runtime_ice_servers=" +
+                             std::to_string(runtime_ice.ice_servers.size()));
+        for (size_t i = 0; i < runtime_ice.ice_servers.size(); ++i) {
+            ui_->push_system_msg("    runtime_ice[" + std::to_string(i) + "]=" + runtime_ice.ice_servers[i]);
+        }
+        ui_->push_system_msg("  voice.runtime_turn_username=" +
+                             (runtime_ice.turn_username.empty() ? "<empty>" : runtime_ice.turn_username));
+        ui_->push_system_msg("  voice.runtime_turn_password_set=" +
+                             std::string(runtime_ice.turn_password.empty() ? "false" : "true"));
         ui_->notify();
         return;
     }

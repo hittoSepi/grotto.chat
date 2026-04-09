@@ -49,6 +49,14 @@ public:
         return out;
     }
 
+    size_t discard_front(size_t frames) {
+        const size_t count = std::min(frames, samples_.size());
+        for (size_t i = 0; i < count; ++i) {
+            samples_.pop_front();
+        }
+        return count;
+    }
+
     size_t mix_into(float* out, uint32_t frames) {
         if (!out || frames == 0 || samples_.empty()) {
             return 0;

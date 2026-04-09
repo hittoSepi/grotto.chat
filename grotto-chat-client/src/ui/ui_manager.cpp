@@ -1491,12 +1491,36 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
     // Build voice section from current voice state
     auto vs = state_.voice_snapshot();
     VoiceSection voice_sec;
-    if (vs.in_voice && !vs.participants.empty()) {
+    if (vs.in_voice) {
+        const auto& local_user_id = state_.local_user_id();
+        if (!local_user_id.empty() &&
+            std::none_of(users.begin(), users.end(), [&](const ChannelUserInfo& user) {
+                return user.user_id == local_user_id;
+            })) {
+            ChannelUserInfo local_user;
+            local_user.user_id = local_user_id;
+            local_user.presence = PresenceStatus::Online;
+            users.push_back(std::move(local_user));
+            users = sort_users_by_role(std::move(users));
+        }
+
+        auto voice_participants = vs.participants;
+        if (!local_user_id.empty() &&
+            std::find(voice_participants.begin(), voice_participants.end(), local_user_id) == voice_participants.end()) {
+            voice_participants.push_back(local_user_id);
+        }
+
+        auto speaking_peers = vs.speaking_peers;
+        if (vs.local_capture_active && !local_user_id.empty() &&
+            std::find(speaking_peers.begin(), speaking_peers.end(), local_user_id) == speaking_peers.end()) {
+            speaking_peers.push_back(local_user_id);
+        }
+
         std::vector<std::string> muted_users;
         if (vs.muted) {
-            muted_users.push_back(state_.local_user_id());
+            muted_users.push_back(local_user_id);
         }
-        voice_sec = build_voice_section(users, vs.participants, vs.speaking_peers, muted_users);
+        voice_sec = build_voice_section(users, voice_participants, speaking_peers, muted_users);
     }
 
     user_positions_.clear();

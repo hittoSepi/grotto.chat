@@ -20,12 +20,14 @@ RuntimeCapabilities detect_runtime_capabilities(const ClientConfig& cfg) {
     capabilities.clipboard_backend = ui::clipboard_backend_name();
     capabilities.clipboard_available = capabilities.clipboard_backend != "unknown";
 
-    const auto input_devices = voice::AudioDevice::list_input_devices();
-    const auto output_devices = voice::AudioDevice::list_output_devices();
-    capabilities.audio_input_device_count = input_devices.size();
-    capabilities.audio_output_device_count = output_devices.size();
-    capabilities.audio_capture_available = !input_devices.empty();
-    capabilities.audio_playback_available = !output_devices.empty();
+    // Do not enumerate audio devices during process startup. On some Windows
+    // machines the host audio stack or drivers can fault inside device
+    // enumeration before the UI even appears. Voice settings and actual voice
+    // startup still probe devices later through the normal path.
+    capabilities.audio_input_device_count = 0;
+    capabilities.audio_output_device_count = 0;
+    capabilities.audio_capture_available = false;
+    capabilities.audio_playback_available = false;
 
     return capabilities;
 }

@@ -136,11 +136,13 @@ private:
 
     AudioDevice        audio_;
     Limiter            limiter_;
+    Limiter            playback_limiter_;
     NoiseSuppressor    noise_suppressor_;
     std::atomic_bool   in_voice_{false};
     std::atomic_bool   muted_{false};
     std::atomic_bool   deafened_{false};
     std::atomic_bool   ptt_active_{false};
+    std::atomic_int64_t last_local_voice_activity_ms_{0};
     VoiceSessionKind   session_kind_ = VoiceSessionKind::None;
     std::string        active_channel_;
     std::string        voice_mode_;

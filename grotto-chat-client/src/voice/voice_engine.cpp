@@ -19,6 +19,24 @@ int clamp_jitter_buffer_frames(int frames) {
     return std::clamp(frames, 2, 10);
 }
 
+int64_t steady_now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+float clamped_volume_multiplier(int percent) {
+    return std::clamp(static_cast<float>(percent), 0.0f, 200.0f) / 100.0f;
+}
+
+void apply_gain_in_place(std::vector<float>& samples, float gain) {
+    if (samples.empty() || gain == 1.0f) {
+        return;
+    }
+    for (float& sample : samples) {
+        sample = std::clamp(sample * gain, -1.0f, 1.0f);
+    }
+}
+
 uint32_t next_voice_ssrc() {
     static std::atomic_uint32_t counter{0x24570000u};
     return counter.fetch_add(1, std::memory_order_relaxed);
@@ -137,6 +155,7 @@ rtc::Configuration VoiceEngine::make_rtc_config() {
 bool VoiceEngine::open_audio_or_report(const std::string& failure_context) {
     reconfigure_noise_suppressor_locked();
     limiter_.configure(cfg_.voice.limiter_enabled, cfg_.voice.limiter_threshold);
+    playback_limiter_.configure(cfg_.voice.limiter_enabled, cfg_.voice.limiter_threshold);
     spdlog::info("Voice limiter (enabled={}, threshold={:.2f})",
                  cfg_.voice.limiter_enabled,
                  cfg_.voice.limiter_threshold);
@@ -195,6 +214,7 @@ void VoiceEngine::set_voice_state_for_session(const std::string& active_channel,
     vs.in_voice = true;
     vs.muted = muted_.load(std::memory_order_relaxed);
     vs.deafened = deafened_.load(std::memory_order_relaxed);
+    vs.local_capture_active = false;
     vs.active_channel = active_channel;
     vs.participants = participants;
     vs.speaking_peers.clear();
@@ -215,6 +235,7 @@ void VoiceEngine::reset_voice_state() {
     vs.in_voice = false;
     vs.muted = false;
     vs.deafened = false;
+    vs.local_capture_active = false;
     vs.active_channel.clear();
     vs.participants.clear();
     vs.speaking_peers.clear();
@@ -252,6 +273,7 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
         std::lock_guard capture_lk(capture_mu_);
         capture_fifo_.clear();
         limiter_.reset();
+        playback_limiter_.reset();
         noise_suppressor_.reset();
         logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
     }
@@ -265,6 +287,7 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
     muted_.store(false, std::memory_order_relaxed);
     deafened_.store(false, std::memory_order_relaxed);
     ptt_active_.store(false, std::memory_order_relaxed);
+    last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
     session_kind_ = VoiceSessionKind::None;
     active_channel_.clear();
 
@@ -318,6 +341,7 @@ void VoiceEngine::on_room_joined(const std::string& channel_id,
         std::lock_guard capture_lk(capture_mu_);
         capture_fifo_.clear();
         limiter_.reset();
+        playback_limiter_.reset();
         noise_suppressor_.reset();
         logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
     }
@@ -446,8 +470,14 @@ void VoiceEngine::hangup() {
 
 void VoiceEngine::set_muted(bool muted) {
     muted_.store(muted, std::memory_order_relaxed);
+    if (muted) {
+        last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
+    }
     VoiceState vs = state_.voice_snapshot();
     vs.muted = muted;
+    if (muted) {
+        vs.local_capture_active = false;
+    }
     state_.set_voice_state(vs);
 }
 
@@ -468,6 +498,17 @@ void VoiceEngine::set_ptt_active(bool active) {
         noise_suppressor_.clear_pending();
         capture_fifo_.clear();
         reconfigure_noise_suppressor_locked();
+    }
+    if (!active) {
+        last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
+    }
+    if (voice_mode_ == "ptt") {
+        VoiceState vs = state_.voice_snapshot();
+        vs.local_capture_active =
+            in_voice_.load(std::memory_order_relaxed) &&
+            !muted_.load(std::memory_order_relaxed) &&
+            active;
+        state_.set_voice_state(vs);
     }
     spdlog::debug("PTT {} (mode={}, in_voice={})",
                   active ? "enabled" : "disabled",
@@ -841,8 +882,10 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
 
 void VoiceEngine::toggle_voice_mode() {
     voice_mode_ = (voice_mode_ == "ptt") ? "vox" : "ptt";
+    last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
     VoiceState vs = state_.voice_snapshot();
     vs.voice_mode = voice_mode_;
+    vs.local_capture_active = false;
     state_.set_voice_state(vs); // trigger UI refresh
 }
 
@@ -869,7 +912,16 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
         return;
     }
 
-    for (auto& processed_chunk : noise_suppressor_.process_capture_chunk(pcm, frames)) {
+    std::vector<float> capture_chunk;
+    const float input_gain = clamped_volume_multiplier(cfg_.voice.input_volume);
+    const float* capture_ptr = pcm;
+    if (input_gain != 1.0f) {
+        capture_chunk.assign(pcm, pcm + frames);
+        apply_gain_in_place(capture_chunk, input_gain);
+        capture_ptr = capture_chunk.data();
+    }
+
+    for (auto& processed_chunk : noise_suppressor_.process_capture_chunk(capture_ptr, frames)) {
         if (voice_mode_ == "vox") {
             float energy = 0.0f;
             for (float sample : processed_chunk) {
@@ -881,6 +933,7 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
                 noise_suppressor_.clear_pending();
                 continue;
             }
+            last_local_voice_activity_ms_.store(steady_now_ms(), std::memory_order_relaxed);
         }
 
         capture_fifo_.push(processed_chunk);
@@ -950,6 +1003,7 @@ void VoiceEngine::mix_output(float* out, uint32_t frames) {
     for (auto& [pid, peer] : peers_) {
         const size_t target_buffered_samples =
             std::max<size_t>(frames, static_cast<size_t>(OpusCodec::kFrameSamples * 2));
+        const size_t max_buffered_samples = target_buffered_samples + static_cast<size_t>(OpusCodec::kFrameSamples);
         while (peer->playout_fifo.size() < target_buffered_samples) {
             if (auto frame = peer->jitter_buf.pop()) {
                 peer->playout_fifo.push(*frame);
@@ -963,12 +1017,25 @@ void VoiceEngine::mix_output(float* out, uint32_t frames) {
             }
             break;
         }
+        if (peer->playout_fifo.size() > max_buffered_samples) {
+            const size_t discard_samples = peer->playout_fifo.size() - target_buffered_samples;
+            peer->playout_fifo.discard_front(discard_samples);
+            spdlog::debug("Trimmed playout drift for {} by {} samples (remaining={})",
+                          pid,
+                          discard_samples,
+                          peer->playout_fifo.size());
+        }
         peer->playout_fifo.mix_into(out, frames);
     }
 
+    std::vector<float> mixed_frame(out, out + frames);
+    const float output_gain = clamped_volume_multiplier(cfg_.voice.output_volume);
+    apply_gain_in_place(mixed_frame, output_gain);
+    playback_limiter_.process(mixed_frame);
+
     // Soft clip to [-1, 1]
     for (uint32_t i = 0; i < frames; ++i) {
-        out[i] = std::max(-1.0f, std::min(1.0f, out[i]));
+        out[i] = std::max(-1.0f, std::min(1.0f, mixed_frame[i]));
     }
 }
 
@@ -1035,12 +1102,20 @@ void VoiceEngine::refresh_speaking_state() {
         }
     }
     auto speaking = get_speaking_peers();
+    const int64_t now_ms = steady_now_ms();
+    const bool local_capture_active =
+        !muted_.load(std::memory_order_relaxed) &&
+        ((voice_mode_ == "ptt" && ptt_active_.load(std::memory_order_relaxed)) ||
+         (voice_mode_ == "vox" &&
+          (now_ms - last_local_voice_activity_ms_.load(std::memory_order_relaxed)) < 400));
     VoiceState vs = state_.voice_snapshot();
     if (vs.speaking_peers != speaking ||
+        vs.local_capture_active != local_capture_active ||
         vs.rtc_connected_peers != rtc_connected_peers ||
         vs.send_ready_peers != send_ready_peers ||
         vs.recv_ready_peers != recv_ready_peers) {
         vs.speaking_peers = std::move(speaking);
+        vs.local_capture_active = local_capture_active;
         vs.rtc_connected_peers = rtc_connected_peers;
         vs.send_ready_peers = send_ready_peers;
         vs.recv_ready_peers = recv_ready_peers;
