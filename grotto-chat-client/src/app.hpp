@@ -82,6 +82,7 @@ private:
     void save_current_config();
     void refresh_runtime_capabilities();
     std::string build_transfer_summary() const;
+    std::string build_connection_summary() const;
     std::vector<std::string> format_transfer_lines(std::size_t limit) const;
     void update_file_transfer_policy(const FileTransferPolicy& policy);
     void handle_file_list_response(const FileListResponse& response);

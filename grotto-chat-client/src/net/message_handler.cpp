@@ -96,7 +96,7 @@ void MessageHandler::handle_auth_challenge(const Envelope& env) {
 
 void MessageHandler::handle_auth_ok(const Envelope& env) {
     (void)env;
-    authenticated_ = true;
+    authenticated_.store(true);
     if (trace_fn_) trace_fn_("Authenticated");
     spdlog::info("Authentication successful");
     push_system(i18n::tr(i18n::I18nKey::AUTHENTICATED_AS, cfg_.identity.user_id));
@@ -110,6 +110,8 @@ void MessageHandler::on_auth_ok() {
     auto ku = crypto_.prepare_key_upload(100);
     send_envelope(MT_KEY_UPLOAD, ku);
     spdlog::debug("Uploaded {} one-time pre-keys", ku.opk_ids_size());
+    resend_pending_key_requests();
+    flush_pending_authenticated();
 
     if (onboarding_shown_) {
         return;
@@ -130,18 +132,19 @@ void MessageHandler::on_auth_ok() {
 }
 
 void MessageHandler::on_transport_disconnected() {
-    authenticated_ = false;
-    state_.set_connecting(false);
-    {
-        std::lock_guard lk(pending_sends_mu_);
+    authenticated_.store(false);
+    if (!cfg_.connection.auto_reconnect) {
+        std::lock_guard pending_lk(pending_sends_mu_);
         pending_sends_.clear();
         pending_repair_requests_.clear();
+        std::lock_guard outbound_lk(outbound_mu_);
+        pending_authenticated_.clear();
     }
     crypto_.reset_all_dm_sessions();
 }
 
 void MessageHandler::handle_auth_fail(const Envelope& env) {
-    authenticated_ = false;
+    authenticated_.store(false);
     if (trace_fn_) trace_fn_("AUTH_FAIL received");
 
     Error err;
@@ -160,6 +163,22 @@ void MessageHandler::handle_auth_fail(const Envelope& env) {
     }
     state_.set_connected(false);
     state_.set_connecting(false);
+}
+
+std::size_t MessageHandler::pending_delivery_count() const {
+    std::size_t total = 0;
+    {
+        std::lock_guard lk(outbound_mu_);
+        total += pending_authenticated_.size();
+    }
+    {
+        std::lock_guard lk(pending_sends_mu_);
+        for (const auto& [recipient_id, queued] : pending_sends_) {
+            (void)recipient_id;
+            total += queued.size();
+        }
+    }
+    return total;
 }
 
 void MessageHandler::handle_chat(const Envelope& env) {
@@ -359,30 +378,13 @@ void MessageHandler::request_key(const std::string& recipient_id,
     }
 
     if (first_request) {
-        // Only send KEY_REQUEST once per recipient (subsequent messages just queue)
-        KeyRequest kr;
-        kr.set_user_id(recipient_id);
-        send_envelope(MT_KEY_REQUEST, kr);
-        spdlog::debug("KEY_REQUEST sent for '{}', plaintext queued", recipient_id);
-
-        // Timeout: if KEY_BUNDLE doesn't arrive in 10s, notify user and clean up
+        if (can_send_authenticated()) {
+            send_key_request_now(recipient_id);
+        } else {
+            spdlog::debug("Queued DM for '{}' until transport/auth is ready", recipient_id);
+        }
         std::thread([this, rid = recipient_id]() {
-            std::this_thread::sleep_for(std::chrono::seconds(10));
-            int count = 0;
-            {
-                std::lock_guard lk(pending_sends_mu_);
-                auto it = pending_sends_.find(rid);
-                if (it == pending_sends_.end()) {
-                    return;
-                }
-                count = static_cast<int>(it->second.size());
-                pending_sends_.erase(it);
-            }
-            if (count > 0) {
-                push_system(i18n::tr(i18n::I18nKey::COULD_NOT_ESTABLISH_SESSION, rid) +
-                            " (timeout) — " + std::to_string(count) + " message(s) dropped");
-                spdlog::warn("KEY_BUNDLE timeout for '{}', {} messages dropped", rid, count);
-            }
+            await_pending_send_timeout(rid);
         }).detach();
     } else {
         spdlog::debug("Additional plaintext queued for '{}' (waiting for KEY_BUNDLE)", recipient_id);
@@ -520,15 +522,15 @@ bool MessageHandler::request_key_bundle_only(const std::string& recipient_id) {
         return false;
     }
 
-    KeyRequest kr;
-    kr.set_user_id(recipient_id);
-    send_envelope(MT_KEY_REQUEST, kr);
-    spdlog::info("Requested fresh KEY_BUNDLE for '{}' after DM decryption failure", recipient_id);
+    if (can_send_authenticated()) {
+        send_key_request_now(recipient_id);
+        spdlog::info("Requested fresh KEY_BUNDLE for '{}' after DM decryption failure", recipient_id);
+    } else {
+        spdlog::info("Queued KEY_BUNDLE repair request for '{}' until reconnect/auth finishes", recipient_id);
+    }
 
     std::thread([this, rid = recipient_id]() {
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-        std::lock_guard lk(pending_sends_mu_);
-        pending_repair_requests_.erase(rid);
+        await_pending_repair_timeout(rid);
     }).detach();
     return true;
 }
@@ -569,7 +571,7 @@ void MessageHandler::request_file_list(const std::string& recipient_id,
     req.set_recipient_id(recipient_id);
     req.set_channel_id(channel_id);
     req.set_limit(limit);
-    send_envelope(MT_FILE_LIST_REQUEST, req);
+    send_or_queue_authenticated(make_envelope(MT_FILE_LIST_REQUEST, req));
 }
 
 void MessageHandler::handle_voice_room_join(const Envelope& env) {
@@ -658,11 +660,11 @@ void MessageHandler::handle_voice_ice_config(const Envelope& env) {
 void MessageHandler::handle_ping(const Envelope& env) {
     (void)env;
     Envelope pong;
-    pong.set_seq(next_seq_++);
+    pong.set_seq(next_seq_.fetch_add(1));
     pong.set_timestamp_ms(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count());
     pong.set_type(MT_PONG);
-    if (net_client_) net_client_->send(pong);
+    send_envelope(std::move(pong));
 }
 
 void MessageHandler::handle_error(const Envelope& env) {
@@ -672,11 +674,16 @@ void MessageHandler::handle_error(const Envelope& env) {
 
     if (err.code() == 4060) {
         std::string recipient_id = recipient_from_not_found_error(err.message());
-        if (recipient_id.empty() && pending_sends_.size() == 1) {
-            recipient_id = pending_sends_.begin()->first;
+        {
+            std::lock_guard lk(pending_sends_mu_);
+            if (recipient_id.empty() && pending_sends_.size() == 1) {
+                recipient_id = pending_sends_.begin()->first;
+            }
+            if (!recipient_id.empty()) {
+                pending_sends_.erase(recipient_id);
+            }
         }
         if (!recipient_id.empty()) {
-            pending_sends_.erase(recipient_id);
             push_system(i18n::tr(i18n::I18nKey::USER_NOT_FOUND, recipient_id));
             return;
         }
@@ -700,17 +707,146 @@ void MessageHandler::handle_command_response(const Envelope& env) {
     push_system(i18n::tr(i18n::I18nKey::COMMAND_RESPONSE, response.command(), response.message()));
 }
 
-void MessageHandler::send_envelope(MessageType type, const google::protobuf::Message& msg) {
-    if (!net_client_) return;
-
+Envelope MessageHandler::make_envelope(MessageType type, const google::protobuf::Message& msg) {
     Envelope env;
-    env.set_seq(next_seq_++);
+    env.set_seq(next_seq_.fetch_add(1));
     env.set_timestamp_ms(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count());
     env.set_type(type);
     env.set_payload(msg.SerializeAsString());
+    return env;
+}
 
+bool MessageHandler::can_send_authenticated() const {
+    return authenticated_.load() && net_client_ && net_client_->is_connected();
+}
+
+void MessageHandler::send_envelope(Envelope env) {
+    if (!net_client_) return;
     net_client_->send(env);
+}
+
+void MessageHandler::send_envelope(MessageType type, const google::protobuf::Message& msg) {
+    send_envelope(make_envelope(type, msg));
+}
+
+void MessageHandler::send_or_queue_authenticated(Envelope env) {
+    if (can_send_authenticated()) {
+        send_envelope(std::move(env));
+        return;
+    }
+
+    std::lock_guard lk(outbound_mu_);
+    pending_authenticated_.push_back(std::move(env));
+}
+
+void MessageHandler::flush_pending_authenticated() {
+    if (!can_send_authenticated()) {
+        return;
+    }
+
+    std::deque<Envelope> queued;
+    {
+        std::lock_guard lk(outbound_mu_);
+        if (pending_authenticated_.empty()) {
+            return;
+        }
+        queued.swap(pending_authenticated_);
+    }
+
+    for (auto& env : queued) {
+        send_envelope(std::move(env));
+    }
+}
+
+void MessageHandler::resend_pending_key_requests() {
+    if (!can_send_authenticated()) {
+        return;
+    }
+
+    std::vector<std::string> dm_targets;
+    std::vector<std::string> repair_targets;
+    {
+        std::lock_guard lk(pending_sends_mu_);
+        dm_targets.reserve(pending_sends_.size());
+        for (const auto& [recipient_id, queued] : pending_sends_) {
+            if (!queued.empty()) {
+                dm_targets.push_back(recipient_id);
+            }
+        }
+        repair_targets.reserve(pending_repair_requests_.size());
+        for (const auto& recipient_id : pending_repair_requests_) {
+            repair_targets.push_back(recipient_id);
+        }
+    }
+
+    for (const auto& recipient_id : dm_targets) {
+        send_key_request_now(recipient_id);
+    }
+    for (const auto& recipient_id : repair_targets) {
+        send_key_request_now(recipient_id);
+    }
+}
+
+void MessageHandler::send_key_request_now(const std::string& recipient_id) {
+    KeyRequest kr;
+    kr.set_user_id(recipient_id);
+    send_envelope(MT_KEY_REQUEST, kr);
+}
+
+void MessageHandler::await_pending_send_timeout(const std::string& recipient_id) {
+    auto remaining = std::chrono::milliseconds(10000);
+    auto last_tick = std::chrono::steady_clock::now();
+    while (remaining > std::chrono::milliseconds(0)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        const auto now = std::chrono::steady_clock::now();
+        if (can_send_authenticated()) {
+            remaining -= std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick);
+        }
+        last_tick = now;
+
+        std::lock_guard lk(pending_sends_mu_);
+        if (pending_sends_.find(recipient_id) == pending_sends_.end()) {
+            return;
+        }
+    }
+
+    int count = 0;
+    {
+        std::lock_guard lk(pending_sends_mu_);
+        auto it = pending_sends_.find(recipient_id);
+        if (it == pending_sends_.end()) {
+            return;
+        }
+        count = static_cast<int>(it->second.size());
+        pending_sends_.erase(it);
+    }
+    if (count > 0) {
+        push_system(i18n::tr(i18n::I18nKey::COULD_NOT_ESTABLISH_SESSION, recipient_id) +
+                    " (timeout) — " + std::to_string(count) + " message(s) dropped");
+        spdlog::warn("KEY_BUNDLE timeout for '{}', {} messages dropped", recipient_id, count);
+    }
+}
+
+void MessageHandler::await_pending_repair_timeout(const std::string& recipient_id) {
+    auto remaining = std::chrono::milliseconds(10000);
+    auto last_tick = std::chrono::steady_clock::now();
+    while (remaining > std::chrono::milliseconds(0)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        const auto now = std::chrono::steady_clock::now();
+        if (can_send_authenticated()) {
+            remaining -= std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick);
+        }
+        last_tick = now;
+
+        std::lock_guard lk(pending_sends_mu_);
+        if (!pending_repair_requests_.contains(recipient_id)) {
+            return;
+        }
+    }
+
+    std::lock_guard lk(pending_sends_mu_);
+    pending_repair_requests_.erase(recipient_id);
 }
 
 void MessageHandler::push_system(const std::string& text) {
@@ -746,16 +882,22 @@ void MessageHandler::send_hello() {
     send_envelope(MT_HELLO, hello);
 }
 
+void MessageHandler::send_chat_envelope(const ChatEnvelope& chat) {
+    send_or_queue_authenticated(make_envelope(MT_CHAT_ENVELOPE, chat));
+}
+
+void MessageHandler::send_read_receipt(const ReadReceipt& receipt) {
+    send_or_queue_authenticated(make_envelope(MT_READ_RECEIPT, receipt));
+}
+
 void MessageHandler::send_command(const std::string& cmd, const std::vector<std::string>& args) {
-    if (!net_client_) return;
-    
     IrcCommand ic;
     ic.set_command(cmd);
     for (const auto& arg : args) {
         ic.add_args(arg);
     }
-    
-    send_envelope(MT_COMMAND, ic);
+
+    send_or_queue_authenticated(make_envelope(MT_COMMAND, ic));
     spdlog::debug("Sent command: {} with {} args", cmd, args.size());
 }
 

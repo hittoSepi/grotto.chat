@@ -12,6 +12,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 
@@ -29,6 +30,7 @@ NetClient::NetClient(asio::io_context& ioc, const ClientConfig& cfg,
     , strand_(asio::make_strand(ioc))
     , reconnect_timer_(ioc)
 {
+    reconnect_delay_s_ = std::max(1, cfg_.connection.reconnect_delay_sec);
     if (cfg.tls.verify_peer) {
         ssl_ctx_.set_verify_mode(asio::ssl::verify_peer);
         ssl_ctx_.set_verify_callback([](bool, asio::ssl::verify_context&) {
@@ -79,6 +81,13 @@ asio::awaitable<void> NetClient::run() {
         }
         if (callbacks_.on_disconnected) {
             callbacks_.on_disconnected(disconnect_reason);
+        }
+
+        if (!cfg_.connection.auto_reconnect) {
+            if (callbacks_.on_trace) {
+                callbacks_.on_trace("Disconnected; auto-reconnect disabled", false, true);
+            }
+            break;
         }
 
         cumulative_wait_s_ += reconnect_delay_s_;
@@ -134,7 +143,7 @@ asio::awaitable<void> NetClient::connect_once() {
     spdlog::info("Connected to {}:{}", cfg_.server.host, cfg_.server.port);
     connected_.store(true);
     active_socket_ = socket;
-    reconnect_delay_s_ = 1;
+    reconnect_delay_s_ = std::max(1, cfg_.connection.reconnect_delay_sec);
     reconnect_attempt_ = 1;
     cumulative_wait_s_ = 0;
 

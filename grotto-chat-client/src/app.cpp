@@ -551,7 +551,7 @@ bool App::init(const std::filesystem::path& config_path,
     };
     cb.on_disconnected = [this](const std::string& reason) {
         state_.set_connected(false);
-        state_.set_connecting(false);
+        state_.set_connecting(cfg_.connection.auto_reconnect);
         msg_handler_->on_transport_disconnected();
         crypto_->reset_group_sessions();  // Re-send SKDM on next connection
         clear_pending_channel_commands();
@@ -622,6 +622,9 @@ bool App::init(const std::filesystem::path& config_path,
     });
     ui_->set_typing_summary_provider([this]() {
         return build_typing_summary();
+    });
+    ui_->set_connection_summary_provider([this]() {
+        return build_connection_summary();
     });
     ui_->set_quota_refresh_handler([this]() {
         request_quota_summary();
@@ -1209,8 +1212,10 @@ void App::handle_command(const ParsedCommand& cmd) {
 }
 
 void App::send_chat(const std::string& text) {
-    if (!msg_handler_->is_authenticated()) {
-        if (net_client_->is_connected()) {
+    const bool can_queue_during_reconnect =
+        state_.connecting() || (net_client_ && net_client_->is_connected());
+    if (!msg_handler_->is_authenticated() && !can_queue_during_reconnect) {
+        if (net_client_ && net_client_->is_connected()) {
             log_server_event("message blocked: authentication still in progress", true);
         } else {
             log_server_event("message blocked: not connected", true);
@@ -1286,10 +1291,10 @@ void App::send_chat(const std::string& text) {
 
     if (!env.sender_id().empty()) {
         env.set_message_id(message_id);
-        Envelope wire;
-        wire.set_type(MT_CHAT_ENVELOPE);
-        wire.set_payload(env.SerializeAsString());
-        net_client_->send(wire);
+        msg_handler_->send_chat_envelope(env);
+        if (!msg_handler_->is_authenticated()) {
+            log_server_event("message queued until connection/auth recovers", false);
+        }
     }
 
     trigger_previews(active, text);
@@ -1701,6 +1706,19 @@ std::string App::build_transfer_summary() const {
     return summary;
 }
 
+std::string App::build_connection_summary() const {
+    if (!msg_handler_) {
+        return {};
+    }
+
+    const auto queued = msg_handler_->pending_delivery_count();
+    if (queued == 0) {
+        return {};
+    }
+
+    return "queued " + std::to_string(queued);
+}
+
 std::vector<std::string> App::format_transfer_lines(std::size_t limit) const {
     std::vector<std::string> lines;
     if (!file_mgr_) {
@@ -1982,10 +2000,7 @@ void App::send_read_receipt(const std::string& target, const std::string& messag
         target.empty() ||
         !is_direct_target(target) ||
         message_id.empty() ||
-        !net_client_ ||
-        !msg_handler_ ||
-        !msg_handler_->is_authenticated() ||
-        !net_client_->is_connected()) {
+        !msg_handler_) {
         return;
     }
 
@@ -1996,11 +2011,7 @@ void App::send_read_receipt(const std::string& target, const std::string& messag
     receipt.set_read_at_ms(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count());
 
-    Envelope env;
-    env.set_type(MT_READ_RECEIPT);
-    env.set_payload(receipt.SerializeAsString());
-    env.set_timestamp_ms(receipt.read_at_ms());
-    net_client_->send(env);
+    msg_handler_->send_read_receipt(receipt);
 }
 
 void App::flush_pending_read_receipt_for_channel(const std::string& channel_id) {
@@ -2023,7 +2034,7 @@ void App::flush_pending_read_receipt_for_channel(const std::string& channel_id) 
 }
 
 void App::request_remote_files_for_target(const std::string& target, bool echo_to_chat) {
-    if (!msg_handler_ || !msg_handler_->is_authenticated()) {
+    if (!msg_handler_ || (!msg_handler_->is_authenticated() && !state_.connecting())) {
         if (echo_to_chat && ui_) {
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::NOT_CONNECTED_CHECK_STATUS));
         }

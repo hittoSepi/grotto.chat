@@ -12,6 +12,7 @@ struct StatusInfo {
     grotto::PresenceStatus local_presence = grotto::PresenceStatus::Offline;
     std::string local_user_id;
     std::string active_channel;
+    std::string connection_summary;
     bool        in_voice       = false;
     bool        muted          = false;
     bool        deafened       = false;

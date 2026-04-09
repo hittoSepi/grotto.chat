@@ -80,6 +80,9 @@ public:
     void set_typing_summary_provider(std::function<std::string()> provider) {
         typing_summary_provider_ = std::move(provider);
     }
+    void set_connection_summary_provider(std::function<std::string()> provider) {
+        connection_summary_provider_ = std::move(provider);
+    }
 
     // Wake the FTXUI event loop after AppState changes.
     // Called internally by AppState::post_ui() wiring.
@@ -203,6 +206,7 @@ private:
     std::function<std::string()> quota_summary_provider_;
     std::function<void()> quota_refresh_handler_;
     std::function<std::string()> typing_summary_provider_;
+    std::function<std::string()> connection_summary_provider_;
     ActiveChannelChangedFn active_channel_changed_handler_;
     std::string toast_text_;
     std::chrono::steady_clock::time_point toast_until_{};

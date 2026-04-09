@@ -1588,6 +1588,9 @@ Element UIManager::build_document(int term_rows) {
     si.local_presence = state_.presence(state_.local_user_id());
     si.local_user_id  = state_.local_user_id();
     si.active_channel = active_ch;
+    if (connection_summary_provider_) {
+        si.connection_summary = connection_summary_provider_();
+    }
     auto vs           = state_.voice_snapshot();
     si.in_voice       = vs.in_voice;
     si.muted          = vs.muted;

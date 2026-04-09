@@ -6,10 +6,13 @@
 #include "grotto.pb.h"
 
 #include <functional>
+#include <deque>
 #include <mutex>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <thread>
+#include <chrono>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -72,8 +75,9 @@ public:
     void on_auth_ok();
 
     // Track auth state for UI feedback
-    bool is_authenticated() const { return authenticated_; }
+    bool is_authenticated() const { return authenticated_.load(); }
     void on_transport_disconnected();
+    std::size_t pending_delivery_count() const;
 
     // Send KEY_REQUEST for a DM recipient and track the pending plaintext
     // so it can be sent once the KEY_BUNDLE arrives.
@@ -83,6 +87,8 @@ public:
     void request_file_list(const std::string& recipient_id,
                            const std::string& channel_id,
                            uint32_t limit = 50);
+    void send_chat_envelope(const ChatEnvelope& chat);
+    void send_read_receipt(const ReadReceipt& receipt);
     
     // Send IRC command to server
     void send_command(const std::string& cmd, const std::vector<std::string>& args);
@@ -115,7 +121,16 @@ private:
     void handle_file_changed(const Envelope& env);
 
     // Helpers
+    bool can_send_authenticated() const;
+    Envelope make_envelope(MessageType type, const google::protobuf::Message& msg);
+    void send_envelope(Envelope env);
     void send_envelope(MessageType type, const google::protobuf::Message& msg);
+    void send_or_queue_authenticated(Envelope env);
+    void flush_pending_authenticated();
+    void resend_pending_key_requests();
+    void send_key_request_now(const std::string& recipient_id);
+    void await_pending_send_timeout(const std::string& recipient_id);
+    void await_pending_repair_timeout(const std::string& recipient_id);
     void send_hello();
     void push_system(const std::string& text);
     void push_system_to_channel(const std::string& channel_id, const std::string& text);
@@ -140,9 +155,9 @@ private:
     ReadReceiptFn        read_receipt_fn_;
     DmReadCandidateFn    dm_read_candidate_fn_;
 
-    bool   authenticated_ = false;
+    std::atomic<bool> authenticated_{false};
     bool   onboarding_shown_ = false;
-    uint64_t next_seq_    = 1;
+    std::atomic<uint64_t> next_seq_{1};
 
     // Pending KEY_REQUEST recipients (to flush when KEY_BUNDLE arrives)
     // Stores multiple queued plaintexts per recipient
@@ -150,9 +165,11 @@ private:
         std::string plaintext;
         std::string message_id;
     };
-    std::mutex pending_sends_mu_;
+    mutable std::mutex pending_sends_mu_;
     std::unordered_map<std::string, std::vector<PendingSend>> pending_sends_;
     std::unordered_set<std::string> pending_repair_requests_;
+    mutable std::mutex outbound_mu_;
+    std::deque<Envelope> pending_authenticated_;
     bool offline_sync_active_ = false;
     std::unordered_set<std::string> offline_marked_channels_;
 };
