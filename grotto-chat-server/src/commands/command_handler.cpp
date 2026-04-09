@@ -346,35 +346,69 @@ CommandResponse CommandHandler::cmd_whois(const std::vector<std::string>& args, 
     // Look up by nick or user_id
     target_id = resolve_target_user_id(nick_to_user_id_, target);
 
-    UserInfo info;
-    info.set_user_id(target_id);
-    info.set_nickname(user_id_to_nick_.count(target_id) ? user_id_to_nick_[target_id] : target_id);
-    info.set_is_online(find_session_(target_id) != nullptr);
+    const std::string nickname =
+        user_id_to_nick_.count(target_id) ? user_id_to_nick_[target_id] : target_id;
+    PresenceUpdate::Status presence_status = PresenceUpdate::OFFLINE;
+    std::string status_text;
+    int64_t status_since_ms = 0;
 
     // Add channels
+    std::vector<std::string> channels;
     for (const auto& [chan_name, chan] : channels_) {
         if (chan.members.count(target_id)) {
-            info.add_channels(chan_name);
+            channels.push_back(chan_name);
         }
     }
 
+    std::string fingerprint;
     if (auto user = user_store_.find_by_id(target_id)) {
-        info.set_identity_fingerprint(format_identity_fingerprint(user->identity_pub));
+        fingerprint = format_identity_fingerprint(user->identity_pub);
     }
 
     if (lookup_presence_) {
         if (const auto presence = lookup_presence_(target_id)) {
-            info.set_presence(presence->status);
-            info.set_status_text(presence->status_text);
-            info.set_status_since_ms(presence->status_since_ms);
-        } else {
-            info.set_presence(PresenceUpdate::OFFLINE);
-            info.set_status_text("");
-            info.set_status_since_ms(0);
+            presence_status = presence->status;
+            status_text = presence->status_text;
+            status_since_ms = presence->status_since_ms;
         }
     }
 
-    return make_response(true, info.SerializeAsString(), "whois");
+    std::string status = "offline";
+    if (presence_status == PresenceUpdate::ONLINE) {
+        status = "online";
+    } else if (presence_status == PresenceUpdate::AWAY) {
+        status = "away";
+    } else if (presence_status == PresenceUpdate::DND) {
+        status = "do not disturb";
+    }
+
+    std::ostringstream out;
+    out << "Whois for " << nickname << ":\n";
+    out << "User ID: " << target_id << "\n";
+    out << "Status: " << status << "\n";
+    if (!status_text.empty()) {
+        out << "Status text: " << status_text << "\n";
+    }
+    if (status_since_ms > 0) {
+        out << "Status since ms: " << status_since_ms << "\n";
+    }
+    if (!channels.empty()) {
+        out << "Channels: ";
+        for (size_t i = 0; i < channels.size(); ++i) {
+            if (i > 0) {
+                out << ", ";
+            }
+            out << channels[i];
+        }
+        out << "\n";
+    } else {
+        out << "Channels: (none)\n";
+    }
+    if (!fingerprint.empty()) {
+        out << "Fingerprint: " << fingerprint;
+    }
+
+    return make_response(true, out.str(), "whois");
 }
 
 CommandResponse CommandHandler::cmd_me(const std::vector<std::string>& args, SessionPtr session) {

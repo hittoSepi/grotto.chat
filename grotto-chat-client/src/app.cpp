@@ -266,16 +266,6 @@ std::string dm_presence_notice_key(const PresenceInfo& presence) {
            presence.status_text + "|" + std::to_string(presence.status_since_ms);
 }
 
-std::string whois_presence_label(PresenceUpdate::Status status) {
-    switch (status) {
-        case PresenceUpdate::ONLINE: return "online";
-        case PresenceUpdate::AWAY: return "away";
-        case PresenceUpdate::DND: return "do not disturb";
-        case PresenceUpdate::OFFLINE:
-        default: return "offline";
-    }
-}
-
 std::string quota_preflight_message(std::string_view label, uint64_t file_size, uint64_t limit) {
     return "Upload blocked: file exceeds the " + std::string(label) + " (" +
            human_bytes(file_size) + " > " + human_bytes(limit) + ")";
@@ -1460,37 +1450,17 @@ void App::handle_command_response(const CommandResponse& response) {
     std::string prefix = response.success() ? "[ok] " : "[fail] ";
 
     if (command == "whois" && response.success()) {
-        UserInfo info;
-        if (info.ParseFromString(response.message())) {
-            log_server_event("[ok] whois: " + info.nickname(), false);
-            ui_->push_system_msg("Whois for " + info.nickname() + ":");
-            ui_->push_system_msg("  User ID: " + info.user_id());
-            ui_->push_system_msg("  Status: " + whois_presence_label(info.presence()));
-            if (!info.status_text().empty()) {
-                ui_->push_system_msg("  Status text: " + info.status_text());
+        log_server_event("[ok] whois", false);
+        std::istringstream lines(response.message());
+        std::string line;
+        while (std::getline(lines, line)) {
+            line = trim_ascii_whitespace(std::regex_replace(line, std::regex(R"(\r$)"), ""));
+            if (!line.empty()) {
+                ui_->push_system_msg(line);
             }
-            if (info.status_since_ms() > 0) {
-                const std::string since = format_presence_since_time(info.status_since_ms());
-                if (!since.empty()) {
-                    ui_->push_system_msg("  Since: " + since);
-                }
-            }
-            if (info.channels_size() > 0) {
-                std::string channels;
-                for (int i = 0; i < info.channels_size(); ++i) {
-                    if (i > 0) channels += ", ";
-                    channels += info.channels(i);
-                }
-                ui_->push_system_msg("  Channels: " + channels);
-            } else {
-                ui_->push_system_msg("  Channels: (none)");
-            }
-            if (!info.identity_fingerprint().empty()) {
-                ui_->push_system_msg("  Fingerprint: " + info.identity_fingerprint());
-            }
-            if (ui_) ui_->notify();
-            return;
         }
+        if (ui_) ui_->notify();
+        return;
     }
 
     log_server_event(prefix + command + ": " + response.message(), false);
