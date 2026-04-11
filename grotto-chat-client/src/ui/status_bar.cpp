@@ -37,7 +37,7 @@ Element render_status_bar(const StatusInfo& info) {
         left.push_back(text(" | " + info.connection_summary) | color(palette::cyan()));
     }
     if (info.in_voice) {
-        const std::string ptt_text = "PTT: " + (info.ptt_key.empty() ? std::string("F1") : info.ptt_key);
+        const std::string ptt_text = "PTT: " + (info.ptt_key.empty() ? std::string("§") : info.ptt_key);
         std::string voice_text;
         if (info.voice_local_test) {
             voice_text = "\U0001F3A4 mic test";

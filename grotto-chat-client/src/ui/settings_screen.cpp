@@ -7,7 +7,11 @@
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
+#include <ftxui/dom/node.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/box.hpp>
+#include <ftxui/screen/screen.hpp>
+#include <ftxui/util/autoreset.hpp>
 #include <spdlog/spdlog.h>
 #include <toml.hpp>
 
@@ -19,6 +23,7 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <memory>
 #include <optional>
 
 using namespace ftxui;
@@ -142,6 +147,61 @@ int find_device_index(const std::vector<std::string>& values,
     return 0;
 }
 
+Element yframe_scrolled(Element child, int* offset, int* max_offset, bool* follow_focus) {
+    class ScrolledFrame final : public Node {
+    public:
+        ScrolledFrame(Elements children, int* offset, int* max_offset, bool* follow_focus)
+            : Node(std::move(children)),
+              offset_(offset),
+              max_offset_(max_offset),
+              follow_focus_(follow_focus) {}
+
+        void ComputeRequirement() override {
+            Node::ComputeRequirement();
+            requirement_ = children_[0]->requirement();
+        }
+
+        void SetBox(Box box) override {
+            Node::SetBox(box);
+
+            auto children_box = box;
+            const auto& focused_box = requirement_.focused.box;
+            const int external_dimy = box.y_max - box.y_min;
+            const int internal_dimy = std::max(requirement_.min_y, external_dimy);
+            const int max_scroll = std::max(0, internal_dimy - external_dimy - 1);
+
+            *max_offset_ = max_scroll;
+            *offset_ = std::clamp(*offset_, 0, max_scroll);
+
+            if (*follow_focus_) {
+                const int focused_dimy = focused_box.y_max - focused_box.y_min;
+                int target = focused_box.y_min - external_dimy / 2 + focused_dimy / 2;
+                *offset_ = std::clamp(target, 0, max_scroll);
+            }
+
+            children_box.y_min = box.y_min - *offset_;
+            children_box.y_max = box.y_min + internal_dimy - *offset_;
+            children_[0]->SetBox(children_box);
+        }
+
+        void Render(Screen& screen) override {
+            const AutoReset<Box> stencil(&screen.stencil, Box::Intersection(box_, screen.stencil));
+            children_[0]->Render(screen);
+        }
+
+    private:
+        int* offset_;
+        int* max_offset_;
+        bool* follow_focus_;
+    };
+
+    return std::make_shared<ScrolledFrame>(unpack(std::move(child)), offset, max_offset, follow_focus);
+}
+
+bool box_contains(const Box& box, int x, int y) {
+    return x >= box.x_min && x <= box.x_max && y >= box.y_min && y <= box.y_max;
+}
+
 } // anonymous namespace
 
 const std::vector<std::string>& available_themes() {
@@ -159,6 +219,8 @@ SettingsScreen::SettingsScreen() = default;
 void SettingsScreen::set_active_category(SettingsCategory category) {
     active_category_ = category;
     active_category_index_ = static_cast<int>(category);
+    content_scroll_offset_ = 0;
+    content_scroll_follow_focus_ = true;
     if (content_container_) {
         content_container_->TakeFocus();
     }
@@ -187,6 +249,9 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     
     load_settings_from_config(cfg);
     voice_test_active_ = voice_test_state_ ? voice_test_state_() : false;
+    content_scroll_offset_ = 0;
+    content_scroll_max_offset_ = 0;
+    content_scroll_follow_focus_ = true;
     build_ui();
     if (content_container_) {
         content_container_->TakeFocus();
@@ -258,7 +323,13 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
         });
         
         auto main_content = vbox({
-            content | yframe | vscroll_indicator | focusPositionRelative(0.f, 0.15f) | flex,
+            yframe_scrolled(std::move(content),
+                            &content_scroll_offset_,
+                            &content_scroll_max_offset_,
+                            &content_scroll_follow_focus_)
+                | vscroll_indicator
+                | reflect(content_scroll_box_)
+                | flex,
             separator(),
             actions,
         }) | border | flex;
@@ -312,16 +383,49 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             exit_closure();
             return true;
         }
+        if (event == Event::PageDown) {
+            const int page_step = std::max(3, content_scroll_box_.y_max - content_scroll_box_.y_min - 1);
+            content_scroll_follow_focus_ = false;
+            content_scroll_offset_ =
+                std::min(content_scroll_offset_ + page_step, content_scroll_max_offset_);
+            return true;
+        }
+        if (event == Event::PageUp) {
+            const int page_step = std::max(3, content_scroll_box_.y_max - content_scroll_box_.y_min - 1);
+            content_scroll_follow_focus_ = false;
+            content_scroll_offset_ = std::max(content_scroll_offset_ - page_step, 0);
+            return true;
+        }
         if (event.is_mouse()) {
             const auto& mouse = event.mouse();
-            if (mouse.button == Mouse::WheelDown) {
-                content_container_->TakeFocus();
-                return content_container_->OnEvent(Event::ArrowDown);
+            if (mouse.button == Mouse::WheelDown &&
+                box_contains(content_scroll_box_, mouse.x, mouse.y)) {
+                content_scroll_follow_focus_ = false;
+                content_scroll_offset_ =
+                    std::min(content_scroll_offset_ + 3, content_scroll_max_offset_);
+                return true;
             }
-            if (mouse.button == Mouse::WheelUp) {
-                content_container_->TakeFocus();
-                return content_container_->OnEvent(Event::ArrowUp);
+            if (mouse.button == Mouse::WheelUp &&
+                box_contains(content_scroll_box_, mouse.x, mouse.y)) {
+                content_scroll_follow_focus_ = false;
+                content_scroll_offset_ = std::max(content_scroll_offset_ - 3, 0);
+                return true;
             }
+            if (mouse.button == Mouse::Left &&
+                box_contains(content_scroll_box_, mouse.x, mouse.y)) {
+                content_scroll_follow_focus_ = true;
+            }
+        }
+        if (event == Event::Tab ||
+            event == Event::TabReverse ||
+            event == Event::ArrowUp ||
+            event == Event::ArrowDown ||
+            event == Event::ArrowLeft ||
+            event == Event::ArrowRight ||
+            event == Event::Home ||
+            event == Event::End ||
+            event == Event::Return) {
+            content_scroll_follow_focus_ = true;
         }
         // F1-F7 to switch categories
         if (event == Event::F1) {
@@ -489,32 +593,32 @@ void SettingsScreen::build_ui() {
 
     appearance_container_ = Container::Vertical({
         theme_toggle_,
+        show_timestamps_cb_,
+        show_user_colors_cb_,
         timestamp_format_input_,
         max_messages_input_,
         language_toggle_,
-        show_timestamps_cb_,
-        show_user_colors_cb_,
     });
 
     voice_container_ = Container::Vertical({
         voice_input_device_dropdown_,
         voice_output_device_dropdown_,
-        voice_mode_dropdown_,
-        voice_noise_suppression_cb_,
-        voice_capture_key_button_,
-        voice_vad_threshold_slider_,
-        voice_jitter_buffer_slider_,
-        voice_limiter_cb_,
-        voice_limiter_threshold_slider_,
         voice_input_volume_slider_,
         voice_output_volume_slider_,
+        voice_mode_dropdown_,
+        voice_capture_key_button_,
+        voice_vad_threshold_slider_,
+        voice_noise_suppression_cb_,
+        voice_limiter_cb_,
+        voice_limiter_threshold_slider_,
+        voice_jitter_buffer_slider_,
         voice_self_test_button_,
     });
 
     connection_container_ = Container::Vertical({
+        auto_reconnect_cb_,
         reconnect_delay_input_,
         timeout_input_,
-        auto_reconnect_cb_,
         tls_verify_cb_,
         cert_pin_input_,
     });
@@ -696,7 +800,7 @@ void SettingsScreen::apply_settings_to_config(ClientConfig& cfg, bool notify_the
     cfg.voice.limiter_enabled = voice_limiter_enabled_;
     cfg.voice.limiter_threshold =
         std::clamp(static_cast<float>(voice_limiter_threshold_percent_) / 100.0f, 0.20f, 0.99f);
-    cfg.voice.ptt_key = voice_ptt_key_.empty() ? "F1" : voice_ptt_key_;
+    cfg.voice.ptt_key = voice_ptt_key_.empty() ? "§" : voice_ptt_key_;
     cfg.voice.vad_threshold =
         std::clamp(static_cast<float>(voice_vad_threshold_percent_) / 100.0f, 0.0f, 1.0f);
     cfg.voice.jitter_buffer_frames = clamp_int(voice_jitter_buffer_frames_, 2, 10);
@@ -767,7 +871,7 @@ void SettingsScreen::reset_to_defaults() {
     voice_noise_suppression_enabled_ = true;
     voice_limiter_enabled_ = true;
     voice_limiter_threshold_percent_ = 85;
-    voice_ptt_key_ = "F1";
+    voice_ptt_key_ = "§";
     voice_vad_threshold_percent_ = 2;
     voice_jitter_buffer_frames_ = 4;
     voice_input_volume_value_ = 100;

@@ -58,7 +58,7 @@ Element row(const std::string& label, Element control, bool active) {
         label_cell(label, active),
         std::move(control) | flex,
     });
-    return inset(apply_active_state(std::move(row_element), active));
+    return inset(std::move(row_element));
 }
 
 Element row(const std::string& label, Element control, Element value, bool active) {
@@ -68,7 +68,7 @@ Element row(const std::string& label, Element control, Element value, bool activ
         text(" "),
         std::move(value) | vcenter,
     });
-    return inset(apply_active_state(std::move(row_element), active));
+    return inset(std::move(row_element));
 }
 
 Element toggle_row(Element toggle, const std::string& hint_text, bool active) {

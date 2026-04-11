@@ -4,6 +4,7 @@
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/screen/box.hpp>
 #include <functional>
 #include <string>
 #include <vector>
@@ -36,9 +37,13 @@ using VoiceTestStateFn = std::function<bool()>;
 struct VoiceTestMetrics {
     float input_rms = 0.0f;
     float input_peak = 0.0f;
+    float noise_suppression_change_ratio = 0.0f;
     bool vad_open = false;
     bool limiter_active = false;
     bool clipped = false;
+    bool noise_suppression_enabled = false;
+    bool noise_suppression_operational = false;
+    bool noise_suppression_modified = false;
     int loopback_buffer_ms = 0;
 };
 
@@ -231,6 +236,12 @@ private:
     ftxui::Component export_button_persistent_;
     ftxui::Component import_button_persistent_;
     ftxui::Component logout_button_persistent_;
+
+    // Scroll state for the right-side content pane.
+    ftxui::Box content_scroll_box_;
+    int content_scroll_offset_ = 0;
+    int content_scroll_max_offset_ = 0;
+    bool content_scroll_follow_focus_ = true;
 };
 
 // Get available theme names

@@ -33,6 +33,11 @@ std::string voice_meter_bar(float level, float threshold, int width = 24) {
     return bar;
 }
 
+std::string percent_text(float ratio) {
+    const auto percent = static_cast<int>(std::clamp(ratio, 0.0f, 1.0f) * 100.0f + 0.5f);
+    return std::to_string(percent) + "%";
+}
+
 } // namespace
 
 Element SettingsScreen::render_voice() {
@@ -51,12 +56,29 @@ Element SettingsScreen::render_voice() {
     const auto threshold_ratio =
         std::clamp(static_cast<float>(voice_vad_threshold_percent_) / 100.0f, 0.0f, 1.0f);
     const auto current_level_ratio = std::clamp(metrics.input_rms, 0.0f, 1.0f);
+    const auto ns_change_ratio = std::clamp(metrics.noise_suppression_change_ratio, 0.0f, 1.0f);
+
+    const std::string ns_state =
+        !metrics.noise_suppression_enabled ? i18n::tr(i18n::I18nKey::VOICE_TEST_NS_DISABLED)
+        : !metrics.noise_suppression_operational ? i18n::tr(i18n::I18nKey::VOICE_TEST_NS_FALLBACK)
+        : metrics.noise_suppression_modified ? i18n::tr(i18n::I18nKey::VOICE_TEST_NS_ACTIVE)
+        : i18n::tr(i18n::I18nKey::VOICE_TEST_NS_READY);
+    const auto ns_state_color =
+        !metrics.noise_suppression_enabled ? palette::comment()
+        : !metrics.noise_suppression_operational ? palette::orange()
+        : metrics.noise_suppression_modified ? palette::online()
+        : palette::cyan();
+    const std::string ns_detail =
+        !metrics.noise_suppression_enabled ? i18n::tr(i18n::I18nKey::VOICE_TEST_NS_DETAIL_DISABLED)
+        : !metrics.noise_suppression_operational ? i18n::tr(i18n::I18nKey::VOICE_TEST_NS_DETAIL_CLEAN_AUDIO)
+        : metrics.noise_suppression_modified ? i18n::tr(i18n::I18nKey::VOICE_TEST_NS_DETAIL_FRAME_CLEANED)
+        : i18n::tr(i18n::I18nKey::VOICE_TEST_NS_DETAIL_NO_CHANGE);
 
     auto ptt_control = hbox({
-        text(voice_ptt_key_) | bold | color(palette::cyan()),
+        text(voice_ptt_key_) | bold | color(palette::cyan()) | vcenter,
         text("  "),
-        voice_capture_key_button_->Render(),
-    });
+        voice_capture_key_button_->Render() | vcenter,
+    }) | vcenter;
 
     auto meter_control = text(voice_meter_bar(current_level_ratio, threshold_ratio)) |
         color(metrics.vad_open ? palette::online() : palette::cyan());
@@ -69,18 +91,33 @@ Element SettingsScreen::render_voice() {
     });
 
     auto stats_control = hbox({
-        text("Peak " +
+        text(i18n::tr(i18n::I18nKey::VOICE_TEST_PEAK_LABEL) + " " +
              std::to_string(static_cast<int>(std::clamp(metrics.input_peak, 0.0f, 1.0f) * 100.0f + 0.5f)) +
              "%") | color(palette::comment()),
         text("  "),
-        text(std::string("Limiter ") + (metrics.limiter_active ? "active" : "idle")) |
+        text(i18n::tr(metrics.limiter_active
+                          ? i18n::I18nKey::VOICE_TEST_LIMITER_ACTIVE
+                          : i18n::I18nKey::VOICE_TEST_LIMITER_IDLE)) |
             color(metrics.limiter_active ? palette::orange() : palette::comment()),
         text("  "),
-        text(std::string("Clip ") + (metrics.clipped ? "yes" : "no")) |
+        text(i18n::tr(metrics.clipped
+                          ? i18n::I18nKey::VOICE_TEST_CLIP_YES
+                          : i18n::I18nKey::VOICE_TEST_CLIP_NO)) |
             color(metrics.clipped ? palette::error_c() : palette::comment()),
         text("  "),
-        text("Buffer " + std::to_string(std::max(metrics.loopback_buffer_ms, 0)) + " ms") |
+        text(i18n::tr(i18n::I18nKey::VOICE_TEST_BUFFER_LABEL) + " " +
+             std::to_string(std::max(metrics.loopback_buffer_ms, 0)) + " ms") |
             color(palette::comment()),
+    }) | dim;
+
+    auto ns_control = hbox({
+        text(ns_state) | color(ns_state_color),
+        text("  "),
+        text(i18n::tr(i18n::I18nKey::VOICE_TEST_CHANGE_LABEL) + " " + percent_text(ns_change_ratio)) |
+            color(palette::cyan()),
+        text("  "),
+        text(ns_detail) |
+            color(metrics.noise_suppression_modified ? palette::online() : palette::comment()),
     }) | dim;
 
     auto status_control = hbox({
@@ -131,8 +168,9 @@ Element SettingsScreen::render_voice() {
 
     auto test_rows = std::vector<Element>{
         row(i18n::tr(i18n::I18nKey::VOICE_SELF_TEST_LABEL), std::move(status_control)),
-        row("Level:", std::move(meter_control), std::move(meter_value)),
-        row("Stats:", std::move(stats_control)),
+        row(i18n::tr(i18n::I18nKey::VOICE_TEST_LEVEL_LABEL), std::move(meter_control), std::move(meter_value)),
+        row(i18n::tr(i18n::I18nKey::VOICE_TEST_RNNOISE_LABEL), std::move(ns_control)),
+        row(i18n::tr(i18n::I18nKey::VOICE_TEST_STATS_LABEL), std::move(stats_control)),
     };
 
     return page(

@@ -20,7 +20,7 @@ struct StatusInfo {
     bool        local_capture_active = false;
     std::string voice_channel;
     std::string voice_mode     = "ptt";  // "ptt" or "vox"
-    std::string ptt_key        = "F1";
+    std::string ptt_key        = "§";
     std::size_t voice_rtc_connected = 0;
     std::size_t voice_send_ready = 0;
     std::size_t voice_recv_ready = 0;
