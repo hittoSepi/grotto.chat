@@ -96,15 +96,6 @@ std::string summarize_sdp(std::string_view sdp) {
     return out.str();
 }
 
-std::string normalized_noise_suppression_level(std::string level) {
-    std::transform(level.begin(), level.end(), level.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (level == "low" || level == "moderate" || level == "high" || level == "very_high") {
-        return level;
-    }
-    return "moderate";
-}
-
 } // namespace
 
 VoiceEngine::VoiceEngine(AppState& state, const ClientConfig& cfg)
@@ -195,13 +186,12 @@ bool VoiceEngine::open_audio_or_report(const std::string& failure_context) {
 }
 
 void VoiceEngine::reconfigure_noise_suppressor_locked() {
-    const auto ns_level = normalized_noise_suppression_level(cfg_.voice.noise_suppression_level);
     const bool ns_operational =
-        noise_suppressor_.configure(cfg_.voice.noise_suppression_enabled, ns_level);
-    spdlog::info("Noise suppression (built_in={}, enabled={}, level={}, operational={})",
+        noise_suppressor_.configure(cfg_.voice.noise_suppression_enabled,
+                                    cfg_.voice.noise_suppression_level);
+    spdlog::info("Noise suppression backend=rnnoise (built_in={}, enabled={}, operational={})",
                  noise_suppressor_.build_available(),
                  cfg_.voice.noise_suppression_enabled,
-                 ns_level,
                  ns_operational);
 }
 

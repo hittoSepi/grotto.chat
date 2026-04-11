@@ -42,7 +42,7 @@ struct VoiceConfig {
     int         frame_ms      = 20;
     int         jitter_buffer_frames = 4;  // 20 ms Opus frames buffered before playout
     bool        noise_suppression_enabled = true;
-    std::string noise_suppression_level = "moderate"; // "low" | "moderate" | "high" | "very_high"
+    std::string noise_suppression_level = "moderate"; // Legacy load-only field.
     bool        limiter_enabled = true;
     float       limiter_threshold = 0.85f;
     std::string mode          = "ptt";     // "ptt" or "vox"

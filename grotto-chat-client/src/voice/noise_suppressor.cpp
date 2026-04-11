@@ -2,12 +2,9 @@
 
 #include <spdlog/spdlog.h>
 
-#include <algorithm>
-#include <cmath>
-
-#if defined(GROTTO_HAS_WEBRTC_NS) && GROTTO_HAS_WEBRTC_NS
+#if defined(GROTTO_HAS_RNNOISE) && GROTTO_HAS_RNNOISE
 extern "C" {
-#include <noise_suppression.h>
+#include <rnnoise.h>
 }
 #endif
 
@@ -15,20 +12,55 @@ namespace grotto::voice {
 
 namespace {
 
-constexpr float kSuppressionBypassRms = 0.45f;
+class NoiseSuppressorBackend {
+public:
+    virtual ~NoiseSuppressorBackend() = default;
+    virtual bool initialize() = 0;
+    virtual void reset() = 0;
+    virtual void process_frame(const float* input, float* output) = 0;
+};
 
-}
-
-NoiseSuppressor::NoiseSuppressor() = default;
-
-NoiseSuppressor::~NoiseSuppressor() {
-#if defined(GROTTO_HAS_WEBRTC_NS) && GROTTO_HAS_WEBRTC_NS
-    if (handle_) {
-        WebRtcNs_Free(static_cast<NsHandle*>(handle_));
-        handle_ = nullptr;
+#if defined(GROTTO_HAS_RNNOISE) && GROTTO_HAS_RNNOISE
+class RnnoiseBackend final : public NoiseSuppressorBackend {
+public:
+    ~RnnoiseBackend() override {
+        reset();
     }
+
+    bool initialize() override {
+        state_ = rnnoise_create(nullptr);
+        return state_ != nullptr;
+    }
+
+    void reset() override {
+        if (state_ != nullptr) {
+            rnnoise_destroy(state_);
+            state_ = nullptr;
+        }
+    }
+
+    void process_frame(const float* input, float* output) override {
+        if (state_ == nullptr || input == nullptr || output == nullptr) {
+            return;
+        }
+        rnnoise_process_frame(state_, output, input);
+    }
+
+private:
+    DenoiseState* state_ = nullptr;
+};
 #endif
-}
+
+} // namespace
+
+struct NoiseSuppressor::Impl {
+    std::unique_ptr<NoiseSuppressorBackend> backend;
+};
+
+NoiseSuppressor::NoiseSuppressor()
+    : impl_(std::make_unique<Impl>()) {}
+
+NoiseSuppressor::~NoiseSuppressor() = default;
 
 bool NoiseSuppressor::configure(bool enabled, const std::string& level) {
     reset();
@@ -39,34 +71,21 @@ bool NoiseSuppressor::configure(bool enabled, const std::string& level) {
         return true;
     }
 
-#if defined(GROTTO_HAS_WEBRTC_NS) && GROTTO_HAS_WEBRTC_NS
-    handle_ = WebRtcNs_Create();
-    if (!handle_) {
+#if defined(GROTTO_HAS_RNNOISE) && GROTTO_HAS_RNNOISE
+    impl_->backend = std::make_unique<RnnoiseBackend>();
+    if (!impl_->backend->initialize()) {
+        impl_->backend.reset();
         if (!init_warning_logged_) {
-            spdlog::warn("Noise suppression requested but WebRTC NS handle creation failed; using passthrough audio");
+            spdlog::warn("Noise suppression requested but RNNoise init failed; using passthrough audio");
             init_warning_logged_ = true;
         }
-        return false;
-    }
-    if (WebRtcNs_Init(static_cast<NsHandle*>(handle_), kProcessingSampleRate) != 0) {
-        spdlog::warn("Noise suppression requested but WebRTC NS init failed; using passthrough audio");
-        WebRtcNs_Free(static_cast<NsHandle*>(handle_));
-        handle_ = nullptr;
-        init_warning_logged_ = true;
-        return false;
-    }
-    if (WebRtcNs_set_policy(static_cast<NsHandle*>(handle_), policy_for_level(level_)) != 0) {
-        spdlog::warn("Noise suppression policy '{}' failed; using passthrough audio", level_);
-        WebRtcNs_Free(static_cast<NsHandle*>(handle_));
-        handle_ = nullptr;
-        init_warning_logged_ = true;
         return false;
     }
     initialized_ = true;
     return true;
 #else
     if (!init_warning_logged_) {
-        spdlog::warn("Noise suppression requested but build has no WebRTC NS support; using passthrough audio");
+        spdlog::warn("Noise suppression requested but build has no RNNoise support; using passthrough audio");
         init_warning_logged_ = true;
     }
     return false;
@@ -75,16 +94,13 @@ bool NoiseSuppressor::configure(bool enabled, const std::string& level) {
 
 void NoiseSuppressor::reset() {
     input_fifo_.clear();
+    enabled_ = false;
     initialized_ = false;
     init_warning_logged_ = false;
-#if defined(GROTTO_HAS_WEBRTC_NS) && GROTTO_HAS_WEBRTC_NS
-    if (handle_) {
-        WebRtcNs_Free(static_cast<NsHandle*>(handle_));
-        handle_ = nullptr;
+    if (impl_ && impl_->backend) {
+        impl_->backend->reset();
+        impl_->backend.reset();
     }
-#else
-    handle_ = nullptr;
-#endif
 }
 
 void NoiseSuppressor::clear_pending() {
@@ -105,7 +121,7 @@ std::vector<std::vector<float>> NoiseSuppressor::process_capture_chunk(const flo
 }
 
 bool NoiseSuppressor::build_available() const {
-#if defined(GROTTO_HAS_WEBRTC_NS) && GROTTO_HAS_WEBRTC_NS
+#if defined(GROTTO_HAS_RNNOISE) && GROTTO_HAS_RNNOISE
     return true;
 #else
     return false;
@@ -113,93 +129,13 @@ bool NoiseSuppressor::build_available() const {
 }
 
 std::vector<float> NoiseSuppressor::process_frame_10ms(const std::vector<float>& frame_48k) {
-    if (frame_48k.size() != kInputFrameSamples || !enabled_ || !initialized_ || !handle_) {
+    if (frame_48k.size() != kInputFrameSamples || !enabled_ || !initialized_ || !impl_ || !impl_->backend) {
         return frame_48k;
     }
 
-    if (compute_rms(frame_48k) >= kSuppressionBypassRms) {
-        return frame_48k;
-    }
-
-#if defined(GROTTO_HAS_WEBRTC_NS) && GROTTO_HAS_WEBRTC_NS
-    auto frame_16k = downsample_48k_to_16k(frame_48k);
-    std::vector<int16_t> output_16k(kProcessingFrameSamples);
-    const int16_t* input_bands[1] = {frame_16k.data()};
-    int16_t* output_bands[1] = {output_16k.data()};
-    WebRtcNs_Analyze(static_cast<NsHandle*>(handle_), frame_16k.data());
-    WebRtcNs_Process(static_cast<NsHandle*>(handle_), input_bands, 1, output_bands);
-    return upsample_16k_to_48k(output_16k);
-#else
-    return frame_48k;
-#endif
-}
-
-int NoiseSuppressor::policy_for_level(const std::string& level) {
-    if (level == "low") {
-        return 0;
-    }
-    if (level == "high" || level == "very_high") {
-        return 2;
-    }
-    return 1;
-}
-
-float NoiseSuppressor::compute_rms(const std::vector<float>& samples) {
-    if (samples.empty()) {
-        return 0.0f;
-    }
-
-    float energy = 0.0f;
-    for (float sample : samples) {
-        energy += sample * sample;
-    }
-    return std::sqrt(energy / static_cast<float>(samples.size()));
-}
-
-std::vector<int16_t> NoiseSuppressor::downsample_48k_to_16k(const std::vector<float>& frame_48k) {
-    std::vector<int16_t> out(kProcessingFrameSamples, 0);
-    auto at = [&frame_48k](int index) {
-        const int clamped = std::clamp(index, 0, static_cast<int>(frame_48k.size()) - 1);
-        return frame_48k[static_cast<size_t>(clamped)];
-    };
-    for (size_t i = 0; i < out.size(); ++i) {
-        const int center = static_cast<int>(i * 3);
-        const float filtered =
-            (1.0f * at(center - 4) +
-             2.0f * at(center - 3) +
-             3.0f * at(center - 2) +
-             4.0f * at(center - 1) +
-             5.0f * at(center + 0) +
-             4.0f * at(center + 1) +
-             3.0f * at(center + 2) +
-             2.0f * at(center + 3) +
-             1.0f * at(center + 4)) / 25.0f;
-        out[i] = float_to_s16(filtered);
-    }
-    return out;
-}
-
-std::vector<float> NoiseSuppressor::upsample_16k_to_48k(const std::vector<int16_t>& frame_16k) {
-    std::vector<float> out(kInputFrameSamples, 0.0f);
-    for (size_t i = 0; i < out.size(); ++i) {
-        const float src_pos = static_cast<float>(i) / 3.0f;
-        const auto index = static_cast<size_t>(src_pos);
-        const size_t next = std::min(index + 1, frame_16k.size() - 1);
-        const float frac = src_pos - static_cast<float>(index);
-        const float a = s16_to_float(frame_16k[index]);
-        const float b = s16_to_float(frame_16k[next]);
-        out[i] = a + ((b - a) * frac);
-    }
-    return out;
-}
-
-int16_t NoiseSuppressor::float_to_s16(float sample) {
-    const float clamped = std::clamp(sample, -1.0f, 1.0f);
-    return static_cast<int16_t>(std::lrint(clamped * 32767.0f));
-}
-
-float NoiseSuppressor::s16_to_float(int16_t sample) {
-    return static_cast<float>(sample) / 32768.0f;
+    std::vector<float> output(frame_48k.size(), 0.0f);
+    impl_->backend->process_frame(frame_48k.data(), output.data());
+    return output;
 }
 
 } // namespace grotto::voice

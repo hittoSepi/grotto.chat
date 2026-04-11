@@ -3,8 +3,8 @@
 #include "voice/pcm_sample_fifo.hpp"
 
 #include <cstdint>
-#include <optional>
 #include <string>
+#include <memory>
 #include <vector>
 
 namespace grotto::voice {
@@ -13,8 +13,8 @@ class NoiseSuppressor {
 public:
     static constexpr uint32_t kInputSampleRate = 48000;
     static constexpr uint32_t kInputFrameSamples = 480; // 10 ms @ 48 kHz
-    static constexpr uint32_t kProcessingSampleRate = 16000;
-    static constexpr uint32_t kProcessingFrameSamples = 160; // 10 ms @ 16 kHz
+    static constexpr uint32_t kProcessingSampleRate = 48000;
+    static constexpr uint32_t kProcessingFrameSamples = 480; // 10 ms @ 48 kHz
 
     NoiseSuppressor();
     ~NoiseSuppressor();
@@ -31,15 +31,11 @@ public:
     [[nodiscard]] const std::string& level() const { return level_; }
 
 private:
-    std::vector<float> process_frame_10ms(const std::vector<float>& frame_48k);
-    static int policy_for_level(const std::string& level);
-    static float compute_rms(const std::vector<float>& samples);
-    static std::vector<int16_t> downsample_48k_to_16k(const std::vector<float>& frame_48k);
-    static std::vector<float> upsample_16k_to_48k(const std::vector<int16_t>& frame_16k);
-    static int16_t float_to_s16(float sample);
-    static float s16_to_float(int16_t sample);
+    struct Impl;
 
-    void* handle_ = nullptr;
+    std::vector<float> process_frame_10ms(const std::vector<float>& frame_48k);
+
+    std::unique_ptr<Impl> impl_;
     PcmSampleFifo input_fifo_;
     bool enabled_ = false;
     bool initialized_ = false;

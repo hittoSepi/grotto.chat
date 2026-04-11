@@ -70,20 +70,6 @@ constexpr bool kDefaultShowUserColors = true;
 constexpr int kDefaultFontScale = 100;
 constexpr int kDefaultMaxMessages = 1000;
 
-// Category labels
-std::string category_label(SettingsCategory cat) {
-    switch (cat) {
-        case SettingsCategory::General: return i18n::tr(i18n::I18nKey::CATEGORY_GENERAL);
-        case SettingsCategory::Appearance: return i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE);
-        case SettingsCategory::Voice: return i18n::tr(i18n::I18nKey::CATEGORY_VOICE);
-        case SettingsCategory::Connection: return i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION);
-        case SettingsCategory::Notifications: return i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS);
-        case SettingsCategory::Privacy: return i18n::tr(i18n::I18nKey::CATEGORY_PRIVACY);
-        case SettingsCategory::Account: return i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT);
-    }
-    return "Unknown";
-}
-
 int terminal_graphics_to_index(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -145,30 +131,6 @@ std::string voice_mode_from_index(int index) {
     return index == 1 ? "vox" : "ptt";
 }
 
-int noise_suppression_level_to_index(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (value == "low") {
-        return 0;
-    }
-    if (value == "high") {
-        return 2;
-    }
-    if (value == "very_high") {
-        return 3;
-    }
-    return 1;
-}
-
-std::string noise_suppression_level_from_index(int index) {
-    switch (index) {
-        case 0: return "low";
-        case 2: return "high";
-        case 3: return "very_high";
-        default: return "moderate";
-    }
-}
-
 int find_device_index(const std::vector<std::string>& values,
                       const std::string& selected_value) {
     for (size_t i = 0; i < values.size(); ++i) {
@@ -177,27 +139,6 @@ int find_device_index(const std::vector<std::string>& values,
         }
     }
     return 0;
-}
-
-std::string voice_meter_bar(float level, float threshold, int width = 24) {
-    const int clamped_width = std::max(8, width);
-    const float clamped_level = std::clamp(level, 0.0f, 1.0f);
-    const float clamped_threshold = std::clamp(threshold, 0.0f, 1.0f);
-    const int filled = std::clamp(static_cast<int>(clamped_level * clamped_width + 0.5f), 0, clamped_width);
-    const int threshold_index = std::clamp(static_cast<int>(clamped_threshold * clamped_width), 0, clamped_width - 1);
-
-    std::string bar;
-    bar.reserve(static_cast<size_t>(clamped_width + 2));
-    bar.push_back('[');
-    for (int i = 0; i < clamped_width; ++i) {
-        char ch = (i < filled) ? '=' : ' ';
-        if (i == threshold_index) {
-            ch = (i < filled) ? '!' : '|';
-        }
-        bar.push_back(ch);
-    }
-    bar.push_back(']');
-    return bar;
 }
 
 } // anonymous namespace
@@ -217,6 +158,9 @@ SettingsScreen::SettingsScreen() = default;
 void SettingsScreen::set_active_category(SettingsCategory category) {
     active_category_ = category;
     active_category_index_ = static_cast<int>(category);
+    if (content_container_) {
+        content_container_->TakeFocus();
+    }
 }
 
 SettingsResult SettingsScreen::show(ClientConfig& cfg,
@@ -243,6 +187,9 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     load_settings_from_config(cfg);
     voice_test_active_ = voice_test_state_ ? voice_test_state_() : false;
     build_ui();
+    if (content_container_) {
+        content_container_->TakeFocus();
+    }
     
 #ifndef _WIN32
     install_interrupt_handlers();
@@ -294,9 +241,7 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
         });
         
         auto main_content = vbox({
-            text(" " + category_label(active_category_) + " ") | bold | color(palette::blue()),
-            separator(),
-            content | flex,
+            content | yframe | vscroll_indicator | focusPositionRelative(0.f, 0.15f) | flex,
             separator(),
             actions,
         }) | border | flex;
@@ -349,6 +294,17 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
             cancelled_ = true;
             exit_closure();
             return true;
+        }
+        if (event.is_mouse()) {
+            const auto& mouse = event.mouse();
+            if (mouse.button == Mouse::WheelDown) {
+                content_container_->TakeFocus();
+                return content_container_->OnEvent(Event::ArrowDown);
+            }
+            if (mouse.button == Mouse::WheelUp) {
+                content_container_->TakeFocus();
+                return content_container_->OnEvent(Event::ArrowUp);
+            }
         }
         // F1-F7 to switch categories
         if (event == Event::F1) {
@@ -428,17 +384,10 @@ void SettingsScreen::build_ui() {
         i18n::tr(i18n::I18nKey::VOICE_MODE_PTT),
         i18n::tr(i18n::I18nKey::VOICE_MODE_VOX),
     };
-    voice_noise_suppression_level_options_ = {
-        i18n::tr(i18n::I18nKey::VOICE_NS_LEVEL_LOW),
-        i18n::tr(i18n::I18nKey::VOICE_NS_LEVEL_MODERATE),
-        i18n::tr(i18n::I18nKey::VOICE_NS_LEVEL_HIGH),
-        i18n::tr(i18n::I18nKey::VOICE_NS_LEVEL_VERY_HIGH),
-    };
     voice_input_device_dropdown_ = Dropdown(&voice_input_device_options_, &voice_input_device_selected_);
     voice_output_device_dropdown_ = Dropdown(&voice_output_device_options_, &voice_output_device_selected_);
     voice_mode_dropdown_ = Dropdown(&voice_mode_options_, &voice_mode_selected_);
     voice_noise_suppression_cb_ = Checkbox(i18n::tr(i18n::I18nKey::VOICE_NOISE_SUPPRESSION_LABEL), &voice_noise_suppression_enabled_);
-    voice_noise_suppression_level_dropdown_ = Dropdown(&voice_noise_suppression_level_options_, &voice_noise_suppression_level_selected_);
     voice_capture_key_button_ = Button(i18n::tr(i18n::I18nKey::VOICE_SET_HOTKEY_BUTTON), [this] {
         voice_key_capture_visible_ = true;
     });
@@ -524,7 +473,6 @@ void SettingsScreen::build_ui() {
         voice_output_device_dropdown_,
         voice_mode_dropdown_,
         voice_noise_suppression_cb_,
-        voice_noise_suppression_level_dropdown_,
         voice_capture_key_button_,
         voice_vad_threshold_slider_,
         voice_jitter_buffer_slider_,
@@ -590,331 +538,6 @@ void SettingsScreen::build_ui() {
     });
 }
 
-Element SettingsScreen::render_appearance() {
-    // Theme selection dropdown/toggle
-    auto theme_row = hbox({
-        text(i18n::tr(i18n::I18nKey::THEME_LABEL)) | color(palette::fg_dark()),
-        theme_toggle_->Render() | border,
-        text(" (" + std::to_string(theme_options_.size()) + i18n::tr(i18n::I18nKey::THEME_AVAILABLE) + ")" ) | color(palette::comment()),
-    });
-    
-    // Font scale slider representation
-    auto font_row = hbox({
-        text(i18n::tr(i18n::I18nKey::FONT_SCALE_LABEL)) | color(palette::fg_dark()),
-        text(std::to_string(font_scale_) + "%") | color(palette::cyan()),
-    });
-    
-    // Display options (use persistent components)
-    
-    // Timestamp format
-    auto format_row = hbox({
-        text(i18n::tr(i18n::I18nKey::TIMESTAMP_FORMAT_LABEL)) | color(palette::fg_dark()),
-        timestamp_format_input_->Render() | size(WIDTH, GREATER_THAN, 15) | border,
-    });
-    
-    // Max messages
-    auto max_msg_row = hbox({
-        text(i18n::tr(i18n::I18nKey::MAX_MESSAGES_LABEL)) | color(palette::fg_dark()),
-        max_messages_input_->Render() | size(WIDTH, GREATER_THAN, 10) | border,
-    });
-    
-    return vbox({
-        text(i18n::tr(i18n::I18nKey::THEME_SETTINGS)) | bold | color(palette::blue()),
-        separator(),
-        theme_row,
-        text(""),
-        text(i18n::tr(i18n::I18nKey::DISPLAY_OPTIONS)) | bold | color(palette::blue()),
-        separator(),
-        show_timestamps_cb_->Render(),
-        show_user_colors_cb_->Render(),
-        format_row,
-        max_msg_row,
-        text(""),
-        hbox({
-            text(i18n::tr(i18n::I18nKey::LANGUAGE_LABEL)) | color(palette::fg_dark()),
-            language_toggle_->Render() | border,
-        }),
-        text(""),
-        text(i18n::tr(i18n::I18nKey::THEME_NOTE))
-            | color(palette::comment()) | dim,
-    });
-}
-
-Element SettingsScreen::render_general() {
-    auto image_columns_row = hbox({
-        text(i18n::tr(i18n::I18nKey::IMAGE_COLUMNS_LABEL)) | color(palette::fg_dark()),
-        image_columns_input_->Render() | size(WIDTH, GREATER_THAN, 6) | border,
-    });
-
-    auto image_rows_row = hbox({
-        text(i18n::tr(i18n::I18nKey::IMAGE_ROWS_LABEL)) | color(palette::fg_dark()),
-        image_rows_input_->Render() | size(WIDTH, GREATER_THAN, 6) | border,
-    });
-
-    auto terminal_graphics_row = hbox({
-        text(i18n::tr(i18n::I18nKey::TERMINAL_GRAPHICS_LABEL)) | color(palette::fg_dark()),
-        terminal_graphics_toggle_->Render() | border,
-    });
-
-    return vbox({
-        text(i18n::tr(i18n::I18nKey::CLIPBOARD_SETTINGS)) | bold | color(palette::blue()),
-        separator(),
-        copy_selection_on_release_cb_->Render(),
-        text(""),
-        text(i18n::tr(i18n::I18nKey::PREVIEW_SETTINGS)) | bold | color(palette::blue()),
-        separator(),
-        inline_images_cb_->Render(),
-        image_columns_row,
-        image_rows_row,
-        terminal_graphics_row,
-        text(i18n::tr(i18n::I18nKey::TERMINAL_GRAPHICS_HINT)) | color(palette::comment()) | dim,
-    });
-}
-
-Element SettingsScreen::render_voice() {
-    auto input_device_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_INPUT_DEVICE_LABEL)) | color(palette::fg_dark()),
-        voice_input_device_dropdown_->Render() | border | flex,
-    });
-
-    auto output_device_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_OUTPUT_DEVICE_LABEL)) | color(palette::fg_dark()),
-        voice_output_device_dropdown_->Render() | border | flex,
-    });
-
-    auto input_volume_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_INPUT_VOLUME_LABEL)) | color(palette::fg_dark()),
-        voice_input_volume_slider_->Render() | flex,
-        text(" " + std::to_string(voice_input_volume_value_) + "%") | color(palette::cyan()),
-    });
-
-    auto output_volume_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_OUTPUT_VOLUME_LABEL)) | color(palette::fg_dark()),
-        voice_output_volume_slider_->Render() | flex,
-        text(" " + std::to_string(voice_output_volume_value_) + "%") | color(palette::cyan()),
-    });
-
-    auto voice_mode_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_MODE_LABEL)) | color(palette::fg_dark()),
-        voice_mode_dropdown_->Render() | border,
-    });
-
-    auto ptt_key_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_PTT_HOTKEY_LABEL)) | color(palette::fg_dark()),
-        text(voice_ptt_key_) | bold | color(palette::cyan()),
-        text("  "),
-        voice_capture_key_button_->Render(),
-    });
-
-    auto noise_suppression_level_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_NOISE_SUPPRESSION_LEVEL_LABEL)) | color(palette::fg_dark()),
-        voice_noise_suppression_level_dropdown_->Render() | border,
-    });
-
-    auto vad_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_VAD_THRESHOLD_LABEL)) | color(palette::fg_dark()),
-        voice_vad_threshold_slider_->Render() | flex,
-        text(" " + std::to_string(voice_vad_threshold_percent_) + "%") | color(palette::cyan()),
-    });
-
-    auto jitter_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_JITTER_BUFFER_LABEL)) | color(palette::fg_dark()),
-        voice_jitter_buffer_slider_->Render() | flex,
-        text(" " + std::to_string(voice_jitter_buffer_frames_) + " fr") | color(palette::cyan()),
-    });
-
-    auto limiter_threshold_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_LIMITER_THRESHOLD_LABEL)) | color(palette::fg_dark()),
-        voice_limiter_threshold_slider_->Render() | flex,
-        text(" " + std::to_string(voice_limiter_threshold_percent_) + "%") | color(palette::cyan()),
-    });
-
-    const auto metrics = voice_test_metrics_ ? voice_test_metrics_() : VoiceTestMetrics{};
-    const auto threshold_ratio =
-        std::clamp(static_cast<float>(voice_vad_threshold_percent_) / 100.0f, 0.0f, 1.0f);
-    const auto current_level_ratio = std::clamp(metrics.input_rms, 0.0f, 1.0f);
-
-    auto self_test_meter_row = hbox({
-        text("Level: ") | color(palette::fg_dark()),
-        text(voice_meter_bar(current_level_ratio, threshold_ratio)) |
-            color(metrics.vad_open ? palette::online() : palette::cyan()),
-        text(" " + std::to_string(static_cast<int>(current_level_ratio * 100.0f + 0.5f)) + "%") |
-            color(palette::cyan()),
-        text("  VAD " + std::to_string(voice_vad_threshold_percent_) + "%") |
-            color(metrics.vad_open ? palette::online() : palette::comment()),
-    });
-
-    auto self_test_stats_row = hbox({
-        text("Peak " + std::to_string(static_cast<int>(std::clamp(metrics.input_peak, 0.0f, 1.0f) * 100.0f + 0.5f)) + "%") |
-            color(palette::cyan()),
-        text("  "),
-        text(std::string("Limiter ") + (metrics.limiter_active ? "active" : "idle")) |
-            color(metrics.limiter_active ? palette::yellow() : palette::comment()),
-        text("  "),
-        text(std::string("Clip ") + (metrics.clipped ? "yes" : "no")) |
-            color(metrics.clipped ? palette::error_c() : palette::comment()),
-        text("  "),
-        text("Buffer " + std::to_string(std::max(metrics.loopback_buffer_ms, 0)) + " ms") |
-            color(palette::comment()),
-    });
-
-    auto self_test_row = hbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_SELF_TEST_LABEL)) | color(palette::fg_dark()),
-        text(i18n::tr(voice_test_active_
-            ? i18n::I18nKey::VOICE_SELF_TEST_ACTIVE
-            : i18n::I18nKey::VOICE_SELF_TEST_INACTIVE)) |
-            color(voice_test_active_ ? palette::online() : palette::comment()),
-        text("  "),
-        voice_self_test_button_->Render(),
-    });
-
-    return vbox({
-        text(i18n::tr(i18n::I18nKey::VOICE_SETTINGS)) | bold | color(palette::blue()),
-        separator(),
-        input_device_row,
-        output_device_row,
-        text(""),
-        input_volume_row,
-        output_volume_row,
-        text(""),
-        voice_mode_row,
-        voice_noise_suppression_cb_->Render(),
-        noise_suppression_level_row,
-        voice_limiter_cb_->Render(),
-        limiter_threshold_row,
-        ptt_key_row,
-        vad_row,
-        jitter_row,
-        text(""),
-        self_test_row,
-        self_test_meter_row,
-        self_test_stats_row,
-        text(i18n::tr(i18n::I18nKey::VOICE_SELF_TEST_HINT)) | color(palette::comment()) | dim,
-        text(i18n::tr(i18n::I18nKey::VOICE_SETTINGS_HINT)) | color(palette::comment()) | dim,
-    });
-}
-
-Element SettingsScreen::render_connection() {
-    auto delay_row = hbox({
-        text(i18n::tr(i18n::I18nKey::RECONNECT_DELAY_LABEL)) | color(palette::fg_dark()),
-        reconnect_delay_input_->Render() | size(WIDTH, GREATER_THAN, 5) | border,
-        text(i18n::tr(i18n::I18nKey::SECONDS)) | color(palette::comment()),
-    });
-    
-    auto timeout_row = hbox({
-        text(i18n::tr(i18n::I18nKey::CONNECTION_TIMEOUT_LABEL)) | color(palette::fg_dark()),
-        timeout_input_->Render() | size(WIDTH, GREATER_THAN, 5) | border,
-        text(i18n::tr(i18n::I18nKey::SECONDS)) | color(palette::comment()),
-    });
-    
-    auto cert_pin_row = hbox({
-        text(i18n::tr(i18n::I18nKey::CERT_PIN_LABEL)) | color(palette::fg_dark()),
-        cert_pin_input_->Render() | size(WIDTH, GREATER_THAN, 40) | border,
-    });
-    
-    return vbox({
-        text(i18n::tr(i18n::I18nKey::RECONNECT_BEHAVIOR)) | bold | color(palette::blue()),
-        separator(),
-        auto_reconnect_cb_->Render(),
-        delay_row,
-        text(""),
-        text(i18n::tr(i18n::I18nKey::TIMEOUT_SETTINGS)) | bold | color(palette::blue()),
-        separator(),
-        timeout_row,
-        text(""),
-        text(i18n::tr(i18n::I18nKey::TLS_OPTIONS)) | bold | color(palette::blue()),
-        separator(),
-        tls_verify_cb_->Render(),
-        cert_pin_row,
-        text(""),
-        text(i18n::tr(i18n::I18nKey::CONNECTION_NOTE))
-            | color(palette::comment()) | dim,
-    });
-}
-
-Element SettingsScreen::render_notifications() {
-    auto keywords_row = hbox({
-        text(i18n::tr(i18n::I18nKey::MENTION_KEYWORDS_LABEL)) | color(palette::fg_dark()),
-        keywords_input_->Render() | size(WIDTH, GREATER_THAN, 30) | border,
-    });
-    
-    return vbox({
-        text(i18n::tr(i18n::I18nKey::NOTIFICATION_SETTINGS)) | bold | color(palette::blue()),
-        separator(),
-        desktop_notif_cb_->Render(),
-        sound_alerts_cb_->Render(),
-        text(""),
-        text(i18n::tr(i18n::I18nKey::MENTION_SETTINGS)) | bold | color(palette::blue()),
-        separator(),
-        mention_cb_->Render(),
-        dm_cb_->Render(),
-        keywords_row,
-        text(i18n::tr(i18n::I18nKey::MENTION_KEYWORDS_HINT)) | color(palette::comment()) | dim,
-    });
-}
-
-Element SettingsScreen::render_privacy() {
-    auto auto_away_row = hbox({
-        text(i18n::tr(i18n::I18nKey::AUTO_AWAY_MINUTES_LABEL)) | color(palette::fg_dark()),
-        auto_away_minutes_input_->Render() | size(WIDTH, GREATER_THAN, 8) | border,
-    });
-    return vbox({
-        share_typing_indicators_cb_->Render(),
-        share_read_receipts_cb_->Render(),
-        auto_away_cb_->Render(),
-        auto_away_row,
-        text(""),
-        text(i18n::tr(i18n::I18nKey::AUTO_AWAY_NOTE)) | color(palette::comment()) | dim,
-        text(""),
-        text(i18n::tr(i18n::I18nKey::PRIVACY_NOTE)) | color(palette::comment()) | dim,
-    });
-}
-
-Element SettingsScreen::render_account() {
-    auto nickname_row = hbox({
-        text(i18n::tr(i18n::I18nKey::NICKNAME_LABEL)) | color(palette::fg_dark()),
-        nickname_input_->Render() | size(WIDTH, GREATER_THAN, 25) | border,
-    });
-    
-    // Public key display (read-only)
-    std::string pk_display = public_key_hex_.empty() ? i18n::tr(i18n::I18nKey::PUBLIC_KEY_NOT_AVAILABLE) : public_key_hex_;
-    if (pk_display.size() > 50) {
-        pk_display = pk_display.substr(0, 47) + "...";
-    }
-    
-    auto pubkey_row = vbox({
-        text(i18n::tr(i18n::I18nKey::PUBLIC_KEY_LABEL)) | color(palette::fg_dark()),
-        text(pk_display) | color(palette::cyan()),
-    });
-    
-    auto import_export = hbox({
-        export_button_persistent_->Render(),
-        text("  "),
-        import_button_persistent_->Render(),
-    });
-
-    auto danger_zone = vbox({
-        text(i18n::tr(i18n::I18nKey::DANGER_ZONE)) | bold | color(palette::red()),
-        separator(),
-        logout_button_persistent_->Render() | color(palette::red()),
-    });
-    
-    return vbox({
-        text(i18n::tr(i18n::I18nKey::ACCOUNT_SETTINGS)) | bold | color(palette::blue()),
-        separator(),
-        nickname_row,
-        text(i18n::tr(i18n::I18nKey::NICKNAME_HINT)) | color(palette::comment()) | dim,
-        text(""),
-        pubkey_row,
-        text(""),
-        text(i18n::tr(i18n::I18nKey::IMPORT_EXPORT)) | bold | color(palette::blue()),
-        separator(),
-        import_export,
-        text(""),
-        danger_zone,
-    });
-}
-
 void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     // Voice device options (label list + value list)
     voice_input_device_values_.clear();
@@ -962,7 +585,6 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     voice_output_device_selected_ = find_device_index(voice_output_device_values_, cfg.voice.output_device);
     voice_mode_selected_ = voice_mode_to_index(cfg.voice.mode);
     voice_noise_suppression_enabled_ = cfg.voice.noise_suppression_enabled;
-    voice_noise_suppression_level_selected_ = noise_suppression_level_to_index(cfg.voice.noise_suppression_level);
     voice_limiter_enabled_ = cfg.voice.limiter_enabled;
     voice_limiter_threshold_percent_ = std::clamp(static_cast<int>(cfg.voice.limiter_threshold * 100.0f + 0.5f), 20, 99);
     voice_ptt_key_ = cfg.voice.ptt_key;
@@ -1043,7 +665,6 @@ void SettingsScreen::apply_settings_to_config(ClientConfig& cfg, bool notify_the
     }
     cfg.voice.mode = voice_mode_from_index(voice_mode_selected_);
     cfg.voice.noise_suppression_enabled = voice_noise_suppression_enabled_;
-    cfg.voice.noise_suppression_level = noise_suppression_level_from_index(voice_noise_suppression_level_selected_);
     cfg.voice.limiter_enabled = voice_limiter_enabled_;
     cfg.voice.limiter_threshold =
         std::clamp(static_cast<float>(voice_limiter_threshold_percent_) / 100.0f, 0.20f, 0.99f);
@@ -1116,7 +737,6 @@ void SettingsScreen::reset_to_defaults() {
     voice_output_device_selected_ = 0;
     voice_mode_selected_ = 0;
     voice_noise_suppression_enabled_ = true;
-    voice_noise_suppression_level_selected_ = 1;
     voice_limiter_enabled_ = true;
     voice_limiter_threshold_percent_ = 85;
     voice_ptt_key_ = "F1";
@@ -1171,7 +791,6 @@ void SettingsScreen::export_settings() {
         data["voice"]["output_volume"] = voice_output_volume_value_;
         data["voice"]["mode"] = voice_mode_from_index(voice_mode_selected_);
         data["voice"]["noise_suppression_enabled"] = voice_noise_suppression_enabled_;
-        data["voice"]["noise_suppression_level"] = noise_suppression_level_from_index(voice_noise_suppression_level_selected_);
         data["voice"]["jitter_buffer_frames"] = voice_jitter_buffer_frames_;
         data["voice"]["limiter_enabled"] = voice_limiter_enabled_;
         data["voice"]["limiter_threshold"] = static_cast<double>(voice_limiter_threshold_percent_) / 100.0;
@@ -1260,10 +879,6 @@ void SettingsScreen::import_settings() {
             }
             if (voice.contains("noise_suppression_enabled")) {
                 voice_noise_suppression_enabled_ = toml::find<bool>(voice, "noise_suppression_enabled");
-            }
-            if (voice.contains("noise_suppression_level")) {
-                voice_noise_suppression_level_selected_ =
-                    noise_suppression_level_to_index(toml::find<std::string>(voice, "noise_suppression_level"));
             }
             if (voice.contains("limiter_enabled")) {
                 voice_limiter_enabled_ = toml::find<bool>(voice, "limiter_enabled");

@@ -2,6 +2,14 @@
 
 All notable changes and achievements for the Grotto project.
 
+## 2026-04-11 - Desktop Client RNNoise Noise Suppression
+
+### Implemented
+- **Desktop client**: Replaced the old WebRTC noise suppression integration with RNNoise in the live voice capture path
+- **Voice engine**: Kept the existing capture -> suppression -> VOX/PTT -> limiter flow, but removed the old 48 kHz -> 16 kHz -> 48 kHz conversion path
+- **Settings/config**: Simplified noise suppression to on/off while keeping legacy `noise_suppression_level` config loading compatible
+- **Tests/docs**: Updated client config tests, noise suppressor tests, example config, and README for the RNNoise-based path
+
 ## 2026-04-11 - Desktop Client Local Voice Self-Test
 
 ### Implemented

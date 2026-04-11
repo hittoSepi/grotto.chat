@@ -9,6 +9,21 @@
 
 namespace grotto {
 
+namespace {
+
+void erase_voice_noise_suppression_level(toml::value& data) {
+    if (!data.contains("voice")) {
+        return;
+    }
+    auto& voice = data["voice"];
+    if (!voice.is_table()) {
+        return;
+    }
+    voice.as_table().erase("noise_suppression_level");
+}
+
+} // namespace
+
 std::filesystem::path default_config_dir() {
 #ifdef _WIN32
     const char* appdata = std::getenv("APPDATA");
@@ -299,7 +314,6 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["voice"]["frame_ms"] = cfg.voice.frame_ms;
     data["voice"]["jitter_buffer_frames"] = cfg.voice.jitter_buffer_frames;
     data["voice"]["noise_suppression_enabled"] = cfg.voice.noise_suppression_enabled;
-    data["voice"]["noise_suppression_level"] = cfg.voice.noise_suppression_level;
     data["voice"]["limiter_enabled"] = cfg.voice.limiter_enabled;
     data["voice"]["limiter_threshold"] = cfg.voice.limiter_threshold;
     data["voice"]["mode"] = cfg.voice.mode;
@@ -312,6 +326,7 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["voice"]["ice_servers"] = voice_ice_servers;
     data["voice"]["turn_username"] = cfg.voice.turn_username;
     data["voice"]["turn_password"] = cfg.voice.turn_password;
+    erase_voice_noise_suppression_level(data);
 
     // Patch preview section
     data["preview"]["enabled"] = cfg.preview.enabled;
@@ -393,7 +408,6 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["voice"]["frame_ms"] = cfg.voice.frame_ms;
         data["voice"]["jitter_buffer_frames"] = cfg.voice.jitter_buffer_frames;
         data["voice"]["noise_suppression_enabled"] = cfg.voice.noise_suppression_enabled;
-        data["voice"]["noise_suppression_level"] = cfg.voice.noise_suppression_level;
         data["voice"]["limiter_enabled"] = cfg.voice.limiter_enabled;
         data["voice"]["limiter_threshold"] = cfg.voice.limiter_threshold;
         data["voice"]["mode"] = cfg.voice.mode;
@@ -406,6 +420,7 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["voice"]["ice_servers"] = voice_ice_servers;
         data["voice"]["turn_username"] = cfg.voice.turn_username;
         data["voice"]["turn_password"] = cfg.voice.turn_password;
+        erase_voice_noise_suppression_level(data);
         
         data["preview"]["enabled"] = cfg.preview.enabled;
         data["preview"]["fetch_timeout"] = cfg.preview.fetch_timeout;

@@ -5,6 +5,8 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <system_error>
 
 namespace {
@@ -49,10 +51,15 @@ TEST_CASE("voice ICE settings survive save/load", "[config]") {
     REQUIRE(loaded.voice.turn_username == cfg.voice.turn_username);
     REQUIRE(loaded.voice.turn_password == cfg.voice.turn_password);
     REQUIRE(loaded.voice.noise_suppression_enabled == cfg.voice.noise_suppression_enabled);
-    REQUIRE(loaded.voice.noise_suppression_level == cfg.voice.noise_suppression_level);
     REQUIRE(loaded.voice.limiter_enabled == cfg.voice.limiter_enabled);
     REQUIRE(loaded.voice.limiter_threshold == Catch::Approx(cfg.voice.limiter_threshold));
     REQUIRE(loaded.preview.terminal_graphics == cfg.preview.terminal_graphics);
+
+    std::ifstream saved(path);
+    REQUIRE(saved.good());
+    std::ostringstream saved_text;
+    saved_text << saved.rdbuf();
+    REQUIRE(saved_text.str().find("noise_suppression_level") == std::string::npos);
 
     cleanup(dir);
 }
@@ -82,10 +89,35 @@ TEST_CASE("voice ICE settings survive export/import", "[config]") {
     REQUIRE(imported.voice.turn_username == original.voice.turn_username);
     REQUIRE(imported.voice.turn_password == original.voice.turn_password);
     REQUIRE(imported.voice.noise_suppression_enabled == original.voice.noise_suppression_enabled);
-    REQUIRE(imported.voice.noise_suppression_level == original.voice.noise_suppression_level);
     REQUIRE(imported.voice.limiter_enabled == original.voice.limiter_enabled);
     REQUIRE(imported.voice.limiter_threshold == Catch::Approx(original.voice.limiter_threshold));
     REQUIRE(imported.preview.terminal_graphics == original.preview.terminal_graphics);
+
+    std::ifstream exported(path);
+    REQUIRE(exported.good());
+    std::ostringstream exported_text;
+    exported_text << exported.rdbuf();
+    REQUIRE(exported_text.str().find("noise_suppression_level") == std::string::npos);
+
+    cleanup(dir);
+}
+
+TEST_CASE("legacy noise suppression level still loads from config", "[config]") {
+    const auto dir = make_temp_dir("config-legacy-level");
+    const auto path = dir / "client.toml";
+
+    {
+        std::ofstream out(path);
+        out << "[voice]\n";
+        out << "noise_suppression_enabled = true\n";
+        out << "noise_suppression_level = \"very_high\"\n";
+        out << "limiter_enabled = false\n";
+    }
+
+    const auto loaded = grotto::load_config(path);
+    REQUIRE(loaded.voice.noise_suppression_enabled);
+    REQUIRE(loaded.voice.noise_suppression_level == "very_high");
+    REQUIRE_FALSE(loaded.voice.limiter_enabled);
 
     cleanup(dir);
 }

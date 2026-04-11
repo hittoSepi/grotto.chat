@@ -143,22 +143,80 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(miniaudio)
 
 FetchContent_Declare(
-    webrtc_ns
-    GIT_REPOSITORY https://github.com/cpuimage/WebRTC_NS.git
-    GIT_TAG        master
+    rnnoise
+    GIT_REPOSITORY https://github.com/xiph/rnnoise.git
+    GIT_TAG        904a876dce1f9ab8860c0a5000ed151f9f6eef58 # v0.2
     GIT_SHALLOW    TRUE
 )
-FetchContent_GetProperties(webrtc_ns)
-if(NOT webrtc_ns_POPULATED)
-    FetchContent_Populate(webrtc_ns)
+FetchContent_GetProperties(rnnoise)
+if(NOT rnnoise_POPULATED)
+    FetchContent_Populate(rnnoise)
 endif()
 
-add_library(grotto_webrtc_ns STATIC
-    ${webrtc_ns_SOURCE_DIR}/noise_suppression.c
+set(GROTTO_RNNOISE_MODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/rnnoise-model/src")
+set(GROTTO_RNNOISE_COMPAT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/rnnoise-compat")
+set(_RNNOISE_MODEL_C "${GROTTO_RNNOISE_MODEL_DIR}/rnnoise_data.c")
+set(_RNNOISE_MODEL_H "${GROTTO_RNNOISE_MODEL_DIR}/rnnoise_data.h")
+
+if(NOT EXISTS "${_RNNOISE_MODEL_C}" OR NOT EXISTS "${_RNNOISE_MODEL_H}")
+    set(_RNNOISE_MODEL_VERSION "0b50c45")
+    set(_RNNOISE_MODEL_ARCHIVE "${rnnoise_SOURCE_DIR}/rnnoise_data-${_RNNOISE_MODEL_VERSION}.tar.gz")
+    set(_RNNOISE_MODEL_URL "https://media.xiph.org/rnnoise/models/rnnoise_data-${_RNNOISE_MODEL_VERSION}.tar.gz")
+
+    if(NOT EXISTS "${rnnoise_SOURCE_DIR}/src/rnnoise_data.c" OR
+       NOT EXISTS "${rnnoise_SOURCE_DIR}/src/rnnoise_data.h")
+        message(STATUS "Downloading RNNoise default model archive: ${_RNNOISE_MODEL_URL}")
+        file(DOWNLOAD
+            "${_RNNOISE_MODEL_URL}"
+            "${_RNNOISE_MODEL_ARCHIVE}"
+            STATUS _rnnoise_download_status
+            SHOW_PROGRESS
+        )
+        list(GET _rnnoise_download_status 0 _rnnoise_download_code)
+        list(GET _rnnoise_download_status 1 _rnnoise_download_message)
+        if(NOT _rnnoise_download_code EQUAL 0)
+            message(FATAL_ERROR
+                "Failed to download RNNoise model archive (${_RNNOISE_MODEL_URL}): ${_rnnoise_download_message}")
+        endif()
+
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E tar xzf "${_RNNOISE_MODEL_ARCHIVE}"
+            WORKING_DIRECTORY "${rnnoise_SOURCE_DIR}"
+            RESULT_VARIABLE _rnnoise_extract_result
+        )
+        if(NOT _rnnoise_extract_result EQUAL 0)
+            message(FATAL_ERROR
+                "Failed to extract RNNoise model archive: ${_RNNOISE_MODEL_ARCHIVE}")
+        endif()
+    endif()
+
+    set(_RNNOISE_MODEL_C "${rnnoise_SOURCE_DIR}/src/rnnoise_data.c")
+    set(_RNNOISE_MODEL_H "${rnnoise_SOURCE_DIR}/src/rnnoise_data.h")
+endif()
+
+add_library(grotto_rnnoise STATIC
+    ${rnnoise_SOURCE_DIR}/src/denoise.c
+    ${rnnoise_SOURCE_DIR}/src/rnn.c
+    ${rnnoise_SOURCE_DIR}/src/pitch.c
+    ${rnnoise_SOURCE_DIR}/src/kiss_fft.c
+    ${rnnoise_SOURCE_DIR}/src/celt_lpc.c
+    ${rnnoise_SOURCE_DIR}/src/nnet.c
+    ${rnnoise_SOURCE_DIR}/src/nnet_default.c
+    ${rnnoise_SOURCE_DIR}/src/parse_lpcnet_weights.c
+    ${_RNNOISE_MODEL_C}
+    ${rnnoise_SOURCE_DIR}/src/rnnoise_tables.c
 )
-target_include_directories(grotto_webrtc_ns PUBLIC ${webrtc_ns_SOURCE_DIR})
+target_include_directories(grotto_rnnoise
+    PUBLIC
+        ${rnnoise_SOURCE_DIR}/include
+    PRIVATE
+        ${rnnoise_SOURCE_DIR}/src
+        ${GROTTO_RNNOISE_MODEL_DIR}
+        ${GROTTO_RNNOISE_COMPAT_DIR}
+)
+target_compile_definitions(grotto_rnnoise PRIVATE RNNOISE_BUILD=1)
 if(NOT MSVC)
-    target_link_libraries(grotto_webrtc_ns PUBLIC m)
+    target_link_libraries(grotto_rnnoise PUBLIC m)
 endif()
 
 FetchContent_Declare(
@@ -211,6 +269,10 @@ set(CLIENT_SOURCES
     src/ui/ui_manager.cpp
     src/ui/login_screen.cpp
     src/ui/settings_screen.cpp
+    src/ui/settings_layout.cpp
+    src/ui/settings_categories_general.cpp
+    src/ui/settings_categories_voice.cpp
+    src/ui/settings_categories_misc.cpp
     src/ui/message_view.cpp
     src/ui/graphics_compositor.cpp
     src/ui/input_line.cpp
@@ -270,13 +332,13 @@ target_link_libraries(grotto-client PRIVATE
     spdlog::spdlog
     signal-protocol-c
     miniaudio::miniaudio
-    grotto_webrtc_ns
+    grotto_rnnoise
     ftxui::screen
     ftxui::dom
     ftxui::component
   
 )
-target_compile_definitions(grotto-client PRIVATE GROTTO_HAS_WEBRTC_NS=1)
+target_compile_definitions(grotto-client PRIVATE GROTTO_HAS_RNNOISE=1)
 
 if(MSVC)
     target_compile_options(grotto-client PRIVATE /W3 /wd4996)
@@ -364,11 +426,11 @@ add_executable(test-noise-suppressor
 target_include_directories(test-noise-suppressor PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-target_compile_definitions(test-noise-suppressor PRIVATE GROTTO_HAS_WEBRTC_NS=1)
+target_compile_definitions(test-noise-suppressor PRIVATE GROTTO_HAS_RNNOISE=1)
 target_link_libraries(test-noise-suppressor PRIVATE
     Catch2::Catch2WithMain
     spdlog::spdlog
-    grotto_webrtc_ns
+    grotto_rnnoise
 )
 add_test(NAME noise-suppressor-tests COMMAND test-noise-suppressor)
 
