@@ -50,7 +50,7 @@ Element hint(const std::string& text_value) {
     if (text_value.empty()) {
         return text("");
     }
-    return inset(text(text_value) | color(palette::comment()) | dim);
+    return inset(paragraphAlignLeft(text_value) | color(palette::comment()) | dim);
 }
 
 Element row(const std::string& label, Element control, bool active) {

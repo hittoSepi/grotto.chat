@@ -71,25 +71,25 @@ Element SettingsScreen::render_voice() {
     auto stats_control = hbox({
         text("Peak " +
              std::to_string(static_cast<int>(std::clamp(metrics.input_peak, 0.0f, 1.0f) * 100.0f + 0.5f)) +
-             "%") | color(palette::cyan()),
+             "%") | color(palette::comment()),
         text("  "),
         text(std::string("Limiter ") + (metrics.limiter_active ? "active" : "idle")) |
-            color(metrics.limiter_active ? palette::yellow() : palette::comment()),
+            color(metrics.limiter_active ? palette::orange() : palette::comment()),
         text("  "),
         text(std::string("Clip ") + (metrics.clipped ? "yes" : "no")) |
             color(metrics.clipped ? palette::error_c() : palette::comment()),
         text("  "),
         text("Buffer " + std::to_string(std::max(metrics.loopback_buffer_ms, 0)) + " ms") |
             color(palette::comment()),
-    });
+    }) | dim;
 
     auto status_control = hbox({
         text(i18n::tr(voice_test_active_
                           ? i18n::I18nKey::VOICE_SELF_TEST_ACTIVE
                           : i18n::I18nKey::VOICE_SELF_TEST_INACTIVE)) |
-            color(voice_test_active_ ? palette::online() : palette::comment()),
+            color(voice_test_active_ ? palette::online() : palette::comment()) | vcenter,
         text("  "),
-        voice_self_test_button_->Render(),
+        voice_self_test_button_->Render() | vcenter,
     });
 
     auto device_rows = std::vector<Element>{

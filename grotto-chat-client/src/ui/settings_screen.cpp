@@ -69,6 +69,7 @@ constexpr bool kDefaultShowTimestamps = true;
 constexpr bool kDefaultShowUserColors = true;
 constexpr int kDefaultFontScale = 100;
 constexpr int kDefaultMaxMessages = 1000;
+constexpr int kMinSettingsWidth = 120;
 
 int terminal_graphics_to_index(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
@@ -197,7 +198,23 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
     screen.ForceHandleCtrlC(false);
     
     // Main renderer
-    auto renderer = Renderer(container_, [this] {
+    auto renderer = Renderer(container_, [this, &screen] {
+        if (screen.dimx() < kMinSettingsWidth) {
+            return vbox({
+                filler(),
+                vbox({
+                    text(i18n::tr(i18n::I18nKey::SETTINGS_MIN_WIDTH_TITLE)) | bold | color(palette::red()) | center,
+                    separator(),
+                    paragraphAlignLeft(i18n::tr(i18n::I18nKey::SETTINGS_MIN_WIDTH_BODY,
+                                                std::to_string(kMinSettingsWidth),
+                                                std::to_string(screen.dimx()))) | center,
+                    text("") | center,
+                    paragraphAlignLeft(i18n::tr(i18n::I18nKey::SETTINGS_MIN_WIDTH_HINT)) | color(palette::comment()) | dim | center,
+                }) | border | size(WIDTH, LESS_THAN, 72) | center,
+                filler(),
+            }) | bgcolor(palette::bg()) | color(palette::fg());
+        }
+
         // Sidebar
         auto sidebar = vbox({
             text(" " + i18n::tr(i18n::I18nKey::SETTINGS_TITLE) + " ") | bold | color(palette::blue()),
@@ -356,15 +373,26 @@ SettingsResult SettingsScreen::show(ClientConfig& cfg,
 }
 
 void SettingsScreen::build_ui() {
+    auto make_sidebar_button = [this](const std::string& label, SettingsCategory category) {
+        auto button = Button(" " + label + " ", [this, category] { set_active_category(category); });
+        return Renderer(button, [this, button, category] {
+            auto element = button->Render();
+            if (active_category_ == category) {
+                return element | bold | bgcolor(palette::fg()) | color(palette::bg_dark());
+            }
+            return element;
+        });
+    };
+
     // Sidebar category buttons
     sidebar_container_ = Container::Vertical({
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_GENERAL) + " ", [this] { set_active_category(SettingsCategory::General); }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE) + " ", [this] { set_active_category(SettingsCategory::Appearance); }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_VOICE) + " ", [this] { set_active_category(SettingsCategory::Voice); }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION) + " ", [this] { set_active_category(SettingsCategory::Connection); }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS) + " ", [this] { set_active_category(SettingsCategory::Notifications); }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_PRIVACY) + " ", [this] { set_active_category(SettingsCategory::Privacy); }),
-        Button(" " + i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT) + " ", [this] { set_active_category(SettingsCategory::Account); }),
+        make_sidebar_button(i18n::tr(i18n::I18nKey::CATEGORY_GENERAL), SettingsCategory::General),
+        make_sidebar_button(i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE), SettingsCategory::Appearance),
+        make_sidebar_button(i18n::tr(i18n::I18nKey::CATEGORY_VOICE), SettingsCategory::Voice),
+        make_sidebar_button(i18n::tr(i18n::I18nKey::CATEGORY_CONNECTION), SettingsCategory::Connection),
+        make_sidebar_button(i18n::tr(i18n::I18nKey::CATEGORY_NOTIFICATIONS), SettingsCategory::Notifications),
+        make_sidebar_button(i18n::tr(i18n::I18nKey::CATEGORY_PRIVACY), SettingsCategory::Privacy),
+        make_sidebar_button(i18n::tr(i18n::I18nKey::CATEGORY_ACCOUNT), SettingsCategory::Account),
     });
     
     // Input components

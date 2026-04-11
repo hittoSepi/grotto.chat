@@ -40,6 +40,9 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::CATEGORY_NOTIFICATIONS, "Notifications"},
     {I18nKey::CATEGORY_PRIVACY, "Privacy"},
     {I18nKey::CATEGORY_ACCOUNT, "Account"},
+    {I18nKey::SETTINGS_MIN_WIDTH_TITLE, "Window Too Narrow"},
+    {I18nKey::SETTINGS_MIN_WIDTH_BODY, "Settings view needs at least {0} columns. Current width: {1}."},
+    {I18nKey::SETTINGS_MIN_WIDTH_HINT, "Resize the terminal window wider, then reopen or continue using Settings."},
 
     // Settings labels
     {I18nKey::THEME_LABEL, "Theme: "},
@@ -99,7 +102,7 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::VOICE_SELF_TEST_LABEL, "Mic Test: "},
     {I18nKey::VOICE_SELF_TEST_ACTIVE, "running"},
     {I18nKey::VOICE_SELF_TEST_INACTIVE, "stopped"},
-    {I18nKey::VOICE_SELF_TEST_HINT, "Uses the current Voice settings preview, including selected devices and levels."},
+    {I18nKey::VOICE_SELF_TEST_HINT, "Mic test uses the current settings on this page, including selected devices and volume levels."},
     {I18nKey::VOICE_PTT_CAPTURE_TITLE, "Set PTT Hotkey"},
     {I18nKey::VOICE_PTT_CAPTURE_HINT, "Press any key to bind."},
     {I18nKey::VOICE_PTT_CAPTURE_CANCEL_HINT, "Esc cancels."},
@@ -258,6 +261,9 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::CATEGORY_NOTIFICATIONS, "Ilmoitukset"},
     {I18nKey::CATEGORY_PRIVACY, "Yksityisyys"},
     {I18nKey::CATEGORY_ACCOUNT, "Tili"},
+    {I18nKey::SETTINGS_MIN_WIDTH_TITLE, "Ikkuna Liian Kapea"},
+    {I18nKey::SETTINGS_MIN_WIDTH_BODY, "Asetusnäkymä tarvitsee vähintään {0} saraketta. Nykyinen leveys: {1}."},
+    {I18nKey::SETTINGS_MIN_WIDTH_HINT, "Levennä terminaali-ikkunaa ja jatka sitten asetusten käyttöä."},
 
     // Settings labels
     {I18nKey::THEME_LABEL, "Teema: "},
@@ -317,7 +323,7 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::VOICE_SELF_TEST_LABEL, "Mikrofonitesti: "},
     {I18nKey::VOICE_SELF_TEST_ACTIVE, "käynnissä"},
     {I18nKey::VOICE_SELF_TEST_INACTIVE, "pysäytetty"},
-    {I18nKey::VOICE_SELF_TEST_HINT, "Kayttaa taman Voice-sivun nykyista esikatselua, mukaan lukien valitut laitteet ja aanitasot."},
+    {I18nKey::VOICE_SELF_TEST_HINT, "Mikrofonitesti käyttää tämän sivun nykyisiä ääniasetuksia, kuten valittuja laitteita ja äänenvoimakkuuksia."},
     {I18nKey::VOICE_PTT_CAPTURE_TITLE, "Aseta PTT-pikanäppäin"},
     {I18nKey::VOICE_PTT_CAPTURE_HINT, "Paina näppäintä asettaaksesi sidonnan."},
     {I18nKey::VOICE_PTT_CAPTURE_CANCEL_HINT, "Esc peruuttaa."},

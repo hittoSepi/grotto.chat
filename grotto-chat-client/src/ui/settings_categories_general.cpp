@@ -20,7 +20,7 @@ Element SettingsScreen::render_general() {
         row(i18n::tr(i18n::I18nKey::IMAGE_ROWS_LABEL),
             image_rows_input_->Render() | size(WIDTH, GREATER_THAN, 6) | border),
         row(i18n::tr(i18n::I18nKey::TERMINAL_GRAPHICS_LABEL),
-            terminal_graphics_toggle_->Render() | border),
+            terminal_graphics_toggle_->Render() | border | flex),
     };
 
     return page(
@@ -36,15 +36,8 @@ Element SettingsScreen::render_general() {
 Element SettingsScreen::render_appearance() {
     using namespace settings_layout;
 
-    auto theme_control = hbox({
-        theme_toggle_->Render() | border,
-        text(" "),
-        text("(" + std::to_string(theme_options_.size()) + i18n::tr(i18n::I18nKey::THEME_AVAILABLE) + ")") |
-            color(palette::comment()),
-    });
-
     auto theme_rows = std::vector<Element>{
-        row(i18n::tr(i18n::I18nKey::THEME_LABEL), std::move(theme_control)),
+        row(i18n::tr(i18n::I18nKey::THEME_LABEL), theme_toggle_->Render() | border | flex),
     };
 
     auto display_rows = std::vector<Element>{
@@ -54,7 +47,7 @@ Element SettingsScreen::render_appearance() {
             timestamp_format_input_->Render() | size(WIDTH, GREATER_THAN, 15) | border),
         row(i18n::tr(i18n::I18nKey::MAX_MESSAGES_LABEL),
             max_messages_input_->Render() | size(WIDTH, GREATER_THAN, 10) | border),
-        row(i18n::tr(i18n::I18nKey::LANGUAGE_LABEL), language_toggle_->Render() | border),
+        row(i18n::tr(i18n::I18nKey::LANGUAGE_LABEL), language_toggle_->Render() | border | flex),
         row(i18n::tr(i18n::I18nKey::FONT_SCALE_LABEL),
             text(std::to_string(font_scale_) + "%") | color(palette::cyan())),
     };
@@ -62,7 +55,9 @@ Element SettingsScreen::render_appearance() {
     return page(
         i18n::tr(i18n::I18nKey::CATEGORY_APPEARANCE),
         {
-            section(i18n::tr(i18n::I18nKey::THEME_SETTINGS), std::move(theme_rows)),
+            section(i18n::tr(i18n::I18nKey::THEME_SETTINGS),
+                    std::move(theme_rows),
+                    std::to_string(theme_options_.size()) + i18n::tr(i18n::I18nKey::THEME_AVAILABLE)),
             section(i18n::tr(i18n::I18nKey::DISPLAY_OPTIONS),
                     std::move(display_rows),
                     i18n::tr(i18n::I18nKey::THEME_NOTE)),
