@@ -2,6 +2,9 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <cmath>
+
 #if defined(GROTTO_HAS_RNNOISE) && GROTTO_HAS_RNNOISE
 extern "C" {
 #include <rnnoise.h>
@@ -97,6 +100,8 @@ void NoiseSuppressor::reset() {
     enabled_ = false;
     initialized_ = false;
     init_warning_logged_ = false;
+    last_frame_change_ratio_.store(0.0f, std::memory_order_relaxed);
+    last_frame_modified_.store(false, std::memory_order_relaxed);
     if (impl_ && impl_->backend) {
         impl_->backend->reset();
         impl_->backend.reset();
@@ -130,11 +135,30 @@ bool NoiseSuppressor::build_available() const {
 
 std::vector<float> NoiseSuppressor::process_frame_10ms(const std::vector<float>& frame_48k) {
     if (frame_48k.size() != kInputFrameSamples || !enabled_ || !initialized_ || !impl_ || !impl_->backend) {
+        last_frame_change_ratio_.store(0.0f, std::memory_order_relaxed);
+        last_frame_modified_.store(false, std::memory_order_relaxed);
         return frame_48k;
     }
 
     std::vector<float> output(frame_48k.size(), 0.0f);
     impl_->backend->process_frame(frame_48k.data(), output.data());
+
+    float input_energy = 0.0f;
+    float diff_energy = 0.0f;
+    for (size_t i = 0; i < frame_48k.size(); ++i) {
+        const float in = frame_48k[i];
+        const float out = output[i];
+        input_energy += in * in;
+        const float diff = out - in;
+        diff_energy += diff * diff;
+    }
+
+    const float ratio = input_energy > 1e-9f
+        ? std::sqrt(diff_energy / input_energy)
+        : 0.0f;
+    last_frame_change_ratio_.store(std::clamp(ratio, 0.0f, 1.0f), std::memory_order_relaxed);
+    last_frame_modified_.store(ratio > 0.001f, std::memory_order_relaxed);
+
     return output;
 }
 

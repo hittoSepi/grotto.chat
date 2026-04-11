@@ -110,9 +110,17 @@ LocalMonitorSnapshot VoiceEngine::local_monitor_snapshot() const {
     LocalMonitorSnapshot snapshot;
     snapshot.input_rms = local_input_rms_.load(std::memory_order_relaxed);
     snapshot.input_peak = local_input_peak_.load(std::memory_order_relaxed);
+    snapshot.noise_suppression_change_ratio =
+        local_noise_suppression_change_ratio_.load(std::memory_order_relaxed);
     snapshot.vad_open = local_vad_open_.load(std::memory_order_relaxed);
     snapshot.limiter_active = local_limiter_active_.load(std::memory_order_relaxed);
     snapshot.clipped = local_input_clipped_.load(std::memory_order_relaxed);
+    snapshot.noise_suppression_enabled =
+        local_noise_suppression_enabled_.load(std::memory_order_relaxed);
+    snapshot.noise_suppression_operational =
+        local_noise_suppression_operational_.load(std::memory_order_relaxed);
+    snapshot.noise_suppression_modified =
+        local_noise_suppression_modified_.load(std::memory_order_relaxed);
     std::lock_guard lk(mu_);
     snapshot.loopback_buffer_ms = static_cast<int>(
         (local_test_monitor_fifo_.size() * 1000) / OpusCodec::kSampleRate);
@@ -189,6 +197,11 @@ void VoiceEngine::reconfigure_noise_suppressor_locked() {
     const bool ns_operational =
         noise_suppressor_.configure(cfg_.voice.noise_suppression_enabled,
                                     cfg_.voice.noise_suppression_level);
+    local_noise_suppression_enabled_.store(cfg_.voice.noise_suppression_enabled,
+                                           std::memory_order_relaxed);
+    local_noise_suppression_operational_.store(ns_operational, std::memory_order_relaxed);
+    local_noise_suppression_change_ratio_.store(0.0f, std::memory_order_relaxed);
+    local_noise_suppression_modified_.store(false, std::memory_order_relaxed);
     spdlog::info("Noise suppression backend=rnnoise (built_in={}, enabled={}, operational={})",
                  noise_suppressor_.build_available(),
                  cfg_.voice.noise_suppression_enabled,
@@ -311,6 +324,10 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
     local_vad_open_.store(false, std::memory_order_relaxed);
     local_limiter_active_.store(false, std::memory_order_relaxed);
     local_input_clipped_.store(false, std::memory_order_relaxed);
+    local_noise_suppression_change_ratio_.store(0.0f, std::memory_order_relaxed);
+    local_noise_suppression_enabled_.store(false, std::memory_order_relaxed);
+    local_noise_suppression_operational_.store(false, std::memory_order_relaxed);
+    local_noise_suppression_modified_.store(false, std::memory_order_relaxed);
 
     in_voice_.store(false, std::memory_order_relaxed);
     muted_.store(false, std::memory_order_relaxed);
@@ -528,6 +545,10 @@ bool VoiceEngine::start_local_test() {
     local_vad_open_.store(false, std::memory_order_relaxed);
     local_limiter_active_.store(false, std::memory_order_relaxed);
     local_input_clipped_.store(false, std::memory_order_relaxed);
+    local_noise_suppression_change_ratio_.store(0.0f, std::memory_order_relaxed);
+    local_noise_suppression_enabled_.store(false, std::memory_order_relaxed);
+    local_noise_suppression_operational_.store(false, std::memory_order_relaxed);
+    local_noise_suppression_modified_.store(false, std::memory_order_relaxed);
 
     if (!open_audio_or_report("local voice test")) {
         in_voice_.store(false, std::memory_order_relaxed);
@@ -989,6 +1010,8 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
         local_vad_open_.store(false, std::memory_order_relaxed);
         local_limiter_active_.store(false, std::memory_order_relaxed);
         local_input_clipped_.store(false, std::memory_order_relaxed);
+        local_noise_suppression_change_ratio_.store(0.0f, std::memory_order_relaxed);
+        local_noise_suppression_modified_.store(false, std::memory_order_relaxed);
         std::lock_guard lk(mu_);
         local_test_monitor_fifo_.clear();
         return;
@@ -1003,6 +1026,8 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
         local_vad_open_.store(false, std::memory_order_relaxed);
         local_limiter_active_.store(false, std::memory_order_relaxed);
         local_input_clipped_.store(false, std::memory_order_relaxed);
+        local_noise_suppression_change_ratio_.store(0.0f, std::memory_order_relaxed);
+        local_noise_suppression_modified_.store(false, std::memory_order_relaxed);
         std::lock_guard lk(mu_);
         local_test_monitor_fifo_.clear();
         return;
@@ -1018,6 +1043,12 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
     }
 
     for (auto& processed_chunk : noise_suppressor_.process_capture_chunk(capture_ptr, frames)) {
+        local_noise_suppression_change_ratio_.store(
+            noise_suppressor_.last_frame_change_ratio(),
+            std::memory_order_relaxed);
+        local_noise_suppression_modified_.store(
+            noise_suppressor_.last_frame_modified(),
+            std::memory_order_relaxed);
         float chunk_energy = 0.0f;
         float chunk_peak = 0.0f;
         for (float sample : processed_chunk) {
@@ -1037,6 +1068,8 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
                 capture_fifo_.clear();
                 noise_suppressor_.clear_pending();
                 local_limiter_active_.store(false, std::memory_order_relaxed);
+                local_noise_suppression_change_ratio_.store(0.0f, std::memory_order_relaxed);
+                local_noise_suppression_modified_.store(false, std::memory_order_relaxed);
                 std::lock_guard lk(mu_);
                 local_test_monitor_fifo_.clear();
                 continue;

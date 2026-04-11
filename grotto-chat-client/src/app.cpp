@@ -1777,9 +1777,13 @@ void App::open_settings() {
             const auto snapshot = voice_->local_monitor_snapshot();
             metrics.input_rms = snapshot.input_rms;
             metrics.input_peak = snapshot.input_peak;
+            metrics.noise_suppression_change_ratio = snapshot.noise_suppression_change_ratio;
             metrics.vad_open = snapshot.vad_open;
             metrics.limiter_active = snapshot.limiter_active;
             metrics.clipped = snapshot.clipped;
+            metrics.noise_suppression_enabled = snapshot.noise_suppression_enabled;
+            metrics.noise_suppression_operational = snapshot.noise_suppression_operational;
+            metrics.noise_suppression_modified = snapshot.noise_suppression_modified;
             metrics.loopback_buffer_ms = snapshot.loopback_buffer_ms;
             return metrics;
         });

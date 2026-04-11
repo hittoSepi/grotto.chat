@@ -2,9 +2,10 @@
 
 #include "voice/pcm_sample_fifo.hpp"
 
+#include <atomic>
 #include <cstdint>
-#include <string>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace grotto::voice {
@@ -29,6 +30,12 @@ public:
     [[nodiscard]] bool operational() const { return enabled_ && initialized_; }
     [[nodiscard]] bool build_available() const;
     [[nodiscard]] const std::string& level() const { return level_; }
+    [[nodiscard]] float last_frame_change_ratio() const {
+        return last_frame_change_ratio_.load(std::memory_order_relaxed);
+    }
+    [[nodiscard]] bool last_frame_modified() const {
+        return last_frame_modified_.load(std::memory_order_relaxed);
+    }
 
 private:
     struct Impl;
@@ -40,6 +47,8 @@ private:
     bool enabled_ = false;
     bool initialized_ = false;
     bool init_warning_logged_ = false;
+    std::atomic<float> last_frame_change_ratio_{0.0f};
+    std::atomic_bool last_frame_modified_{false};
     std::string level_ = "moderate";
 };
 

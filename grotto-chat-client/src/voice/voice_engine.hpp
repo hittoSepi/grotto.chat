@@ -62,9 +62,13 @@ enum class VoiceSessionKind {
 struct LocalMonitorSnapshot {
     float input_rms = 0.0f;
     float input_peak = 0.0f;
+    float noise_suppression_change_ratio = 0.0f;
     bool vad_open = false;
     bool limiter_active = false;
     bool clipped = false;
+    bool noise_suppression_enabled = false;
+    bool noise_suppression_operational = false;
+    bool noise_suppression_modified = false;
     int loopback_buffer_ms = 0;
 };
 
@@ -160,9 +164,13 @@ private:
     std::atomic_bool   ptt_active_{false};
     std::atomic<float> local_input_rms_{0.0f};
     std::atomic<float> local_input_peak_{0.0f};
+    std::atomic<float> local_noise_suppression_change_ratio_{0.0f};
     std::atomic_bool   local_vad_open_{false};
     std::atomic_bool   local_limiter_active_{false};
     std::atomic_bool   local_input_clipped_{false};
+    std::atomic_bool   local_noise_suppression_enabled_{false};
+    std::atomic_bool   local_noise_suppression_operational_{false};
+    std::atomic_bool   local_noise_suppression_modified_{false};
     std::atomic_int64_t last_local_voice_activity_ms_{0};
     VoiceSessionKind   session_kind_ = VoiceSessionKind::None;
     std::string        active_channel_;
