@@ -238,6 +238,23 @@ cmake --build build --config Release --target check
 
 This target builds every registered test executable first and then runs `ctest --output-on-failure`.
 
+## Custom RNNoise Models
+
+The desktop client links RNNoise weights from vendored C sources, not directly from a `.pth` or `.pt` file.
+
+If you have a custom RNNoise-compatible `.pth` checkpoint, use:
+
+```powershell
+python .\scripts\export-rnnoise-model.py C:\path\to\custom-rnnoise-model.pth --build-dir .\build
+cmake --build build --config Release --target grotto-client
+```
+
+Only RNNoise-style `.pth` checkpoints work with this path. TorchScript `.pt` denoisers do not.
+
+More detail:
+
+- [docs/RNNOISE-MODEL.md](./docs/RNNOISE-MODEL.md)
+
 The helper scripts support the same path:
 
 ```bash

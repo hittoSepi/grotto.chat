@@ -3,6 +3,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include <cmath>
+
 namespace grotto::voice {
 
 TEST_CASE("noise suppressor batches 5 ms capture chunks into 10 ms frames", "[voice][ns]") {
@@ -31,6 +33,36 @@ TEST_CASE("noise suppressor passthrough preserves frame size when enabled", "[vo
 
     REQUIRE(out.size() == 1);
     REQUIRE(out.front().size() == frame.size());
+}
+
+TEST_CASE("noise suppressor keeps voiced signal audible when enabled", "[voice][ns]") {
+    NoiseSuppressor suppressor;
+    REQUIRE(suppressor.configure(true, "moderate"));
+
+    std::vector<float> frame(NoiseSuppressor::kInputFrameSamples);
+    constexpr float kAmplitude = 0.2f;
+    constexpr float kFrequencyHz = 220.0f;
+    for (size_t i = 0; i < frame.size(); ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(NoiseSuppressor::kInputSampleRate);
+        frame[i] = kAmplitude * std::sin(2.0f * 3.14159265358979323846f * kFrequencyHz * t);
+    }
+
+    auto out = suppressor.process_capture_chunk(frame.data(), static_cast<uint32_t>(frame.size()));
+
+    REQUIRE(out.size() == 1);
+    REQUIRE(out.front().size() == frame.size());
+
+    float input_rms = 0.0f;
+    float output_rms = 0.0f;
+    for (size_t i = 0; i < frame.size(); ++i) {
+        input_rms += frame[i] * frame[i];
+        output_rms += out.front()[i] * out.front()[i];
+    }
+    input_rms = std::sqrt(input_rms / static_cast<float>(frame.size()));
+    output_rms = std::sqrt(output_rms / static_cast<float>(frame.size()));
+
+    REQUIRE(input_rms > 0.01f);
+    REQUIRE(output_rms > input_rms * 0.02f);
 }
 
 TEST_CASE("noise suppressor clear_pending drops partial capture frames", "[voice][ns]") {

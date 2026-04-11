@@ -9,6 +9,7 @@ All notable changes and achievements for the Grotto project.
 - **Voice engine**: Kept the existing capture -> suppression -> VOX/PTT -> limiter flow, but removed the old 48 kHz -> 16 kHz -> 48 kHz conversion path
 - **Settings/config**: Simplified noise suppression to on/off while keeping legacy `noise_suppression_level` config loading compatible
 - **Tests/docs**: Updated client config tests, noise suppressor tests, example config, and README for the RNNoise-based path
+- **Model tooling**: Added a helper script and docs for exporting RNNoise-compatible `.pth` checkpoints into vendored `rnnoise_data.c/.h`
 
 ## 2026-04-11 - Desktop Client Local Voice Self-Test
 

@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #if defined(GROTTO_HAS_RNNOISE) && GROTTO_HAS_RNNOISE
@@ -14,6 +15,8 @@ extern "C" {
 namespace grotto::voice {
 
 namespace {
+
+constexpr float kRnnoisePcmScale = 32768.0f;
 
 class NoiseSuppressorBackend {
 public:
@@ -46,7 +49,18 @@ public:
         if (state_ == nullptr || input == nullptr || output == nullptr) {
             return;
         }
-        rnnoise_process_frame(state_, output, input);
+
+        std::array<float, NoiseSuppressor::kInputFrameSamples> scaled_input {};
+        std::array<float, NoiseSuppressor::kInputFrameSamples> scaled_output {};
+        for (size_t i = 0; i < scaled_input.size(); ++i) {
+            scaled_input[i] = input[i] * kRnnoisePcmScale;
+        }
+
+        rnnoise_process_frame(state_, scaled_output.data(), scaled_input.data());
+
+        for (size_t i = 0; i < scaled_output.size(); ++i) {
+            output[i] = std::clamp(scaled_output[i] / kRnnoisePcmScale, -1.0f, 1.0f);
+        }
     }
 
 private:
