@@ -10,4 +10,4 @@
 
 ### Bigger later ideas
   [ ] vanity hostnames / friendly server aliases
-  [ ] voice self-test / local loopback preview for microphone setup
+  [x] voice self-test / local loopback preview for microphone setup

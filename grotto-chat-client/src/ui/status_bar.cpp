@@ -38,14 +38,23 @@ Element render_status_bar(const StatusInfo& info) {
     }
     if (info.in_voice) {
         const std::string ptt_text = "PTT: " + (info.ptt_key.empty() ? std::string("F1") : info.ptt_key);
-        std::string voice_text = "\U0001F3A4 " + info.voice_channel +
-            " " + i18n::tr(i18n::I18nKey::USERS_COUNT, std::to_string(info.voice_participants.size()));
-        if (info.muted) voice_text += " " + i18n::tr(i18n::I18nKey::MUTED_INDICATOR);
-        if (info.deafened) voice_text += " " + i18n::tr(i18n::I18nKey::DEAFENED_INDICATOR);
-        voice_text += " [" + std::string(info.voice_mode == "ptt" ? ptt_text : i18n::tr(i18n::I18nKey::VOX)) + "]";
-        voice_text += " RTC " + std::to_string(info.voice_rtc_connected) + "/" + std::to_string(info.voice_participants.size());
-        voice_text += " TX " + std::to_string(info.voice_send_ready) + "/" + std::to_string(info.voice_participants.size());
-        voice_text += " RX " + std::to_string(info.voice_recv_ready) + "/" + std::to_string(info.voice_participants.size());
+        std::string voice_text;
+        if (info.voice_local_test) {
+            voice_text = "\U0001F3A4 mic test";
+            if (info.muted) voice_text += " " + i18n::tr(i18n::I18nKey::MUTED_INDICATOR);
+            if (info.deafened) voice_text += " " + i18n::tr(i18n::I18nKey::DEAFENED_INDICATOR);
+            if (info.local_capture_active) voice_text += " live";
+            voice_text += " [" + std::string(info.voice_mode == "ptt" ? ptt_text : i18n::tr(i18n::I18nKey::VOX)) + "]";
+        } else {
+            voice_text = "\U0001F3A4 " + info.voice_channel +
+                " " + i18n::tr(i18n::I18nKey::USERS_COUNT, std::to_string(info.voice_participants.size()));
+            if (info.muted) voice_text += " " + i18n::tr(i18n::I18nKey::MUTED_INDICATOR);
+            if (info.deafened) voice_text += " " + i18n::tr(i18n::I18nKey::DEAFENED_INDICATOR);
+            voice_text += " [" + std::string(info.voice_mode == "ptt" ? ptt_text : i18n::tr(i18n::I18nKey::VOX)) + "]";
+            voice_text += " RTC " + std::to_string(info.voice_rtc_connected) + "/" + std::to_string(info.voice_participants.size());
+            voice_text += " TX " + std::to_string(info.voice_send_ready) + "/" + std::to_string(info.voice_participants.size());
+            voice_text += " RX " + std::to_string(info.voice_recv_ready) + "/" + std::to_string(info.voice_participants.size());
+        }
 
         left.push_back(text(" | ") | color(palette::fg_dark()));
         left.push_back(text(voice_text) | color(Color::Green));

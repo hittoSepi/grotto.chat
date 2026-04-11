@@ -8,7 +8,7 @@ namespace grotto {
 static const std::vector<std::string> kKnownCommands = {
     "/join", "/part", "/msg", "/me",
     "/call", "/hangup", "/accept",
-    "/voice", "/mute", "/deafen", "/vmode", "/ptt",
+    "/voice", "/voicetest", "/mute", "/deafen", "/vmode", "/ptt",
     "/trust", "/safety",
     "/away", "/afk", "/back", "/dnd",
     "/set", "/clear", "/search",

@@ -14,8 +14,10 @@ struct StatusInfo {
     std::string active_channel;
     std::string connection_summary;
     bool        in_voice       = false;
+    bool        voice_local_test = false;
     bool        muted          = false;
     bool        deafened       = false;
+    bool        local_capture_active = false;
     std::string voice_channel;
     std::string voice_mode     = "ptt";  // "ptt" or "vox"
     std::string ptt_key        = "F1";

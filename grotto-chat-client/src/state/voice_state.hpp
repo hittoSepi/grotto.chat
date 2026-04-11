@@ -6,6 +6,7 @@ namespace grotto {
 
 struct VoiceState {
     bool in_voice        = false;
+    bool local_test      = false;
     bool muted           = false;
     bool deafened        = false;
     bool local_capture_active = false;

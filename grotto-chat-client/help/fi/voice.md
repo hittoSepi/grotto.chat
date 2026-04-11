@@ -4,6 +4,7 @@
 
 `/call <nimi>`       soita käyttäjälle yksityispuhelu  
 `/accept`            vastaa, kun joku soittaa sinulle  
+`/voicetest`         käynnistä tai pysäytä paikallinen mikrofonin loopback-testi  
 
 ## Puhelun aikana
 
@@ -17,6 +18,8 @@ PTT-tilassa paina valittua PTT-näppäintä (`F1` oletuksena) aloittaaksesi tai 
 ## Asetukset
 
 Avaa `/settings` ja valitse oikeat äänilaiteet. Jos et kuule mitään, tarkista että oikea toistolaite on valittu.
+
+`/voicetest` käyttää samaa paikallista capture- ja playback-polkuja kuin puhelut, mutta ei luo WebRTC-istuntoa. `PTT`-tilassa kuuntelet mikrofonia painamalla valittua PTT-näppäintä. `VOX`-tilassa puhu normaalisti ja client toistaa mikrofonin valittuun ulostulolaitteeseen.
 
 ---
 

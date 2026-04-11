@@ -64,6 +64,13 @@ TEST_CASE("parse_command recognizes quota command", "[command-parser]") {
     CHECK(parsed->args.empty());
 }
 
+TEST_CASE("parse_command recognizes voicetest command", "[command-parser]") {
+    const auto parsed = grotto::parse_command("/voicetest");
+    REQUIRE(parsed.has_value());
+    REQUIRE(parsed->name == "/voicetest");
+    CHECK(parsed->args.empty());
+}
+
 TEST_CASE("parse_command recognizes away and dnd commands", "[command-parser]") {
     const auto away = grotto::parse_command("/away lunch");
     REQUIRE(away.has_value());

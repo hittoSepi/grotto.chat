@@ -179,6 +179,27 @@ int find_device_index(const std::vector<std::string>& values,
     return 0;
 }
 
+std::string voice_meter_bar(float level, float threshold, int width = 24) {
+    const int clamped_width = std::max(8, width);
+    const float clamped_level = std::clamp(level, 0.0f, 1.0f);
+    const float clamped_threshold = std::clamp(threshold, 0.0f, 1.0f);
+    const int filled = std::clamp(static_cast<int>(clamped_level * clamped_width + 0.5f), 0, clamped_width);
+    const int threshold_index = std::clamp(static_cast<int>(clamped_threshold * clamped_width), 0, clamped_width - 1);
+
+    std::string bar;
+    bar.reserve(static_cast<size_t>(clamped_width + 2));
+    bar.push_back('[');
+    for (int i = 0; i < clamped_width; ++i) {
+        char ch = (i < filled) ? '=' : ' ';
+        if (i == threshold_index) {
+            ch = (i < filled) ? '!' : '|';
+        }
+        bar.push_back(ch);
+    }
+    bar.push_back(']');
+    return bar;
+}
+
 } // anonymous namespace
 
 const std::vector<std::string>& available_themes() {
@@ -201,19 +222,26 @@ void SettingsScreen::set_active_category(SettingsCategory category) {
 SettingsResult SettingsScreen::show(ClientConfig& cfg,
                                     ftxui::ScreenInteractive& screen,
                                     const std::string& public_key_hex,
-                                    ThemeChangeFn on_theme_change) {
+                                    ThemeChangeFn on_theme_change,
+                                    VoiceTestToggleFn on_voice_test_toggle,
+                                    VoiceTestStateFn voice_test_state,
+                                    VoiceTestMetricsFn voice_test_metrics) {
     saved_ = false;
     cancelled_ = false;
     logout_ = false;
     original_cfg_ = cfg;
     public_key_hex_ = public_key_hex;
     on_theme_change_ = on_theme_change;
+    on_voice_test_toggle_ = on_voice_test_toggle;
+    voice_test_state_ = voice_test_state;
+    voice_test_metrics_ = voice_test_metrics;
     config_path_ = cfg.config_dir / "config.toml";
 
     auto exit_closure = screen.ExitLoopClosure();
     exit_closure_ = exit_closure;
     
     load_settings_from_config(cfg);
+    voice_test_active_ = voice_test_state_ ? voice_test_state_() : false;
     build_ui();
     
 #ifndef _WIN32
@@ -420,6 +448,15 @@ void SettingsScreen::build_ui() {
     voice_limiter_threshold_slider_ = Slider("", &voice_limiter_threshold_percent_, 20, 99, 1);
     voice_input_volume_slider_ = Slider("", &voice_input_volume_value_, 0, 200, 1);
     voice_output_volume_slider_ = Slider("", &voice_output_volume_value_, 0, 200, 1);
+    voice_self_test_button_ = Button(i18n::tr(i18n::I18nKey::VOICE_SELF_TEST_BUTTON), [this] {
+        if (!on_voice_test_toggle_) {
+            voice_test_active_ = false;
+            return;
+        }
+        ClientConfig preview_cfg = original_cfg_;
+        apply_settings_to_config(preview_cfg, false);
+        voice_test_active_ = on_voice_test_toggle_(preview_cfg);
+    });
     reconnect_delay_input_ = Input(&reconnect_delay_sec_text_, "5");
     timeout_input_ = Input(&connection_timeout_sec_text_, "30");
     cert_pin_input_ = Input(&tls_cert_pin_, "");
@@ -495,6 +532,7 @@ void SettingsScreen::build_ui() {
         voice_limiter_threshold_slider_,
         voice_input_volume_slider_,
         voice_output_volume_slider_,
+        voice_self_test_button_,
     });
 
     connection_container_ = Container::Vertical({
@@ -691,6 +729,45 @@ Element SettingsScreen::render_voice() {
         text(" " + std::to_string(voice_limiter_threshold_percent_) + "%") | color(palette::cyan()),
     });
 
+    const auto metrics = voice_test_metrics_ ? voice_test_metrics_() : VoiceTestMetrics{};
+    const auto threshold_ratio =
+        std::clamp(static_cast<float>(voice_vad_threshold_percent_) / 100.0f, 0.0f, 1.0f);
+    const auto current_level_ratio = std::clamp(metrics.input_rms, 0.0f, 1.0f);
+
+    auto self_test_meter_row = hbox({
+        text("Level: ") | color(palette::fg_dark()),
+        text(voice_meter_bar(current_level_ratio, threshold_ratio)) |
+            color(metrics.vad_open ? palette::online() : palette::cyan()),
+        text(" " + std::to_string(static_cast<int>(current_level_ratio * 100.0f + 0.5f)) + "%") |
+            color(palette::cyan()),
+        text("  VAD " + std::to_string(voice_vad_threshold_percent_) + "%") |
+            color(metrics.vad_open ? palette::online() : palette::comment()),
+    });
+
+    auto self_test_stats_row = hbox({
+        text("Peak " + std::to_string(static_cast<int>(std::clamp(metrics.input_peak, 0.0f, 1.0f) * 100.0f + 0.5f)) + "%") |
+            color(palette::cyan()),
+        text("  "),
+        text(std::string("Limiter ") + (metrics.limiter_active ? "active" : "idle")) |
+            color(metrics.limiter_active ? palette::yellow() : palette::comment()),
+        text("  "),
+        text(std::string("Clip ") + (metrics.clipped ? "yes" : "no")) |
+            color(metrics.clipped ? palette::error_c() : palette::comment()),
+        text("  "),
+        text("Buffer " + std::to_string(std::max(metrics.loopback_buffer_ms, 0)) + " ms") |
+            color(palette::comment()),
+    });
+
+    auto self_test_row = hbox({
+        text(i18n::tr(i18n::I18nKey::VOICE_SELF_TEST_LABEL)) | color(palette::fg_dark()),
+        text(i18n::tr(voice_test_active_
+            ? i18n::I18nKey::VOICE_SELF_TEST_ACTIVE
+            : i18n::I18nKey::VOICE_SELF_TEST_INACTIVE)) |
+            color(voice_test_active_ ? palette::online() : palette::comment()),
+        text("  "),
+        voice_self_test_button_->Render(),
+    });
+
     return vbox({
         text(i18n::tr(i18n::I18nKey::VOICE_SETTINGS)) | bold | color(palette::blue()),
         separator(),
@@ -708,6 +785,11 @@ Element SettingsScreen::render_voice() {
         ptt_key_row,
         vad_row,
         jitter_row,
+        text(""),
+        self_test_row,
+        self_test_meter_row,
+        self_test_stats_row,
+        text(i18n::tr(i18n::I18nKey::VOICE_SELF_TEST_HINT)) | color(palette::comment()) | dim,
         text(i18n::tr(i18n::I18nKey::VOICE_SETTINGS_HINT)) | color(palette::comment()) | dim,
     });
 }
@@ -917,7 +999,7 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     nickname_ = cfg.identity.user_id;
 }
 
-void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
+void SettingsScreen::apply_settings_to_config(ClientConfig& cfg, bool notify_theme_change) {
     auto parse_int_or = [](const std::string& value, int fallback) {
         try {
             return std::stoi(value);
@@ -1002,9 +1084,13 @@ void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
     }
     
     // Notify theme change
-    if (on_theme_change_ && theme_ != original_cfg_.ui.theme) {
+    if (notify_theme_change && on_theme_change_ && theme_ != original_cfg_.ui.theme) {
         on_theme_change_(theme_);
     }
+}
+
+void SettingsScreen::save_settings_to_config(ClientConfig& cfg) {
+    apply_settings_to_config(cfg, true);
 }
 
 void SettingsScreen::reset_to_defaults() {

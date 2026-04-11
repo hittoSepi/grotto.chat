@@ -23,6 +23,7 @@
 `/accept`                  vastaa saapuvaan puheluun  
 `/hangup`                  lopeta puhelu  
 `/voice`                   kytke äänikanava päälle/pois  
+`/voicetest`               käynnistä tai pysäytä paikallinen mikrofonin loopback-testi  
 `/mute`                    mykistä mikrofoni  
 `/deafen`                  mykistä kaikki äänet  
 `/vmode`                   vaihda `PTT`- ja `VOX`-tilan v„lill„  

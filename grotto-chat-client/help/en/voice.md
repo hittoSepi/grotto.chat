@@ -4,6 +4,7 @@
 
 `/call <name>`       start a private call with a user  
 `/accept`            answer when someone calls you  
+`/voicetest`         toggle a local microphone loopback test  
 
 ## During a Call
 
@@ -17,6 +18,8 @@ In PTT mode, press your configured PTT key (`F1` by default) to start or stop tr
 ## Settings
 
 Open `/settings` and select the correct audio devices. If you can't hear anything, check that the right output device is selected.
+
+`/voicetest` opens the same local capture/playback path used by calls, but keeps everything on your machine. In `PTT` mode, use your configured PTT key to hear the mic. In `VOX` mode, speak normally and the client will loop your microphone back to the selected output device.
 
 ---
 

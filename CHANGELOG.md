@@ -2,6 +2,14 @@
 
 All notable changes and achievements for the Grotto project.
 
+## 2026-04-11 - Desktop Client Local Voice Self-Test
+
+### Implemented
+- **Desktop client**: Added `/voicetest` to open a local microphone loopback path without creating a WebRTC session
+- **Voice engine**: Reused the existing capture, noise suppression, limiter, and playback chain for local audio monitoring
+- **Status bar**: Added a dedicated mic-test voice indicator so local monitoring is visible without fake RTC peer stats
+- **Docs**: Updated client help, README command list, TODOs, and changelog entries for the new voice workflow
+
 ## 2026-03-15 - Server TUI: Main Layout Wired (Task 9)
 
 ### Implemented

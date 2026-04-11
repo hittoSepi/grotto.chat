@@ -30,6 +30,19 @@ enum class SettingsResult {
 
 // Callback for theme changes (applied immediately)
 using ThemeChangeFn = std::function<void(const std::string& theme_name)>;
+using VoiceTestToggleFn = std::function<bool(const ClientConfig& preview_cfg)>;
+using VoiceTestStateFn = std::function<bool()>;
+
+struct VoiceTestMetrics {
+    float input_rms = 0.0f;
+    float input_peak = 0.0f;
+    bool vad_open = false;
+    bool limiter_active = false;
+    bool clipped = false;
+    int loopback_buffer_ms = 0;
+};
+
+using VoiceTestMetricsFn = std::function<VoiceTestMetrics()>;
 
 // SettingsScreen handles the settings UI with category sidebar.
 // It blocks until the user saves, cancels, or logs out.
@@ -42,11 +55,15 @@ public:
     SettingsResult show(ClientConfig& cfg,
                         ftxui::ScreenInteractive& screen,
                         const std::string& public_key_hex,
-                        ThemeChangeFn on_theme_change = nullptr);
+                        ThemeChangeFn on_theme_change = nullptr,
+                        VoiceTestToggleFn on_voice_test_toggle = nullptr,
+                        VoiceTestStateFn voice_test_state = nullptr,
+                        VoiceTestMetricsFn voice_test_metrics = nullptr);
 
 private:
     void build_ui();
     void set_active_category(SettingsCategory category);
+    void apply_settings_to_config(ClientConfig& cfg, bool notify_theme_change);
     void save_settings_to_config(ClientConfig& cfg);
     void load_settings_from_config(const ClientConfig& cfg);
     void reset_to_defaults();
@@ -74,6 +91,9 @@ private:
     
     // Theme change callback
     ThemeChangeFn on_theme_change_;
+    VoiceTestToggleFn on_voice_test_toggle_;
+    VoiceTestStateFn voice_test_state_;
+    VoiceTestMetricsFn voice_test_metrics_;
     std::function<void()> exit_closure_;
     
     // Config paths for import/export
@@ -120,6 +140,7 @@ private:
     int voice_input_volume_value_ = 100;
     int voice_output_volume_value_ = 100;
     bool voice_key_capture_visible_ = false;
+    bool voice_test_active_ = false;
 
     // === Connection Settings ===
     bool auto_reconnect_;
@@ -186,6 +207,7 @@ private:
     ftxui::Component voice_limiter_threshold_slider_;
     ftxui::Component voice_input_volume_slider_;
     ftxui::Component voice_output_volume_slider_;
+    ftxui::Component voice_self_test_button_;
     ftxui::Component reconnect_delay_input_;
     ftxui::Component timeout_input_;
     ftxui::Component cert_pin_input_;

@@ -123,6 +123,7 @@ verify_peer = true             # Verify server TLS certificate (keep true in pro
 | `Alt+Left` / `Alt+Right` | Cycle channels |
 | `/join #channel` | Join a channel |
 | `/vmode` | Toggle voice mode (`PTT` / `VOX`) |
+| `/voicetest` | Toggle a local microphone loopback self-test |
 | `/part` | Leave current channel |
 | `/msg <user> <text>` | Send a private message |
 | `/call <user>` | Start a voice call |

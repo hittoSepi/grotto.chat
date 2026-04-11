@@ -115,6 +115,19 @@ VoiceEngine::~VoiceEngine() {
     audio_.close();
 }
 
+LocalMonitorSnapshot VoiceEngine::local_monitor_snapshot() const {
+    LocalMonitorSnapshot snapshot;
+    snapshot.input_rms = local_input_rms_.load(std::memory_order_relaxed);
+    snapshot.input_peak = local_input_peak_.load(std::memory_order_relaxed);
+    snapshot.vad_open = local_vad_open_.load(std::memory_order_relaxed);
+    snapshot.limiter_active = local_limiter_active_.load(std::memory_order_relaxed);
+    snapshot.clipped = local_input_clipped_.load(std::memory_order_relaxed);
+    std::lock_guard lk(mu_);
+    snapshot.loopback_buffer_ms = static_cast<int>(
+        (local_test_monitor_fifo_.size() * 1000) / OpusCodec::kSampleRate);
+    return snapshot;
+}
+
 rtc::Configuration VoiceEngine::make_rtc_config() {
     rtc::Configuration config;
     auto runtime_ice = state_.runtime_voice_ice_config();
@@ -212,6 +225,7 @@ void VoiceEngine::set_voice_state_for_session(const std::string& active_channel,
     VoiceState vs = state_.voice_snapshot();
     clear_participant_voice_statuses(vs.participants);
     vs.in_voice = true;
+    vs.local_test = false;
     vs.muted = muted_.load(std::memory_order_relaxed);
     vs.deafened = deafened_.load(std::memory_order_relaxed);
     vs.local_capture_active = false;
@@ -229,10 +243,29 @@ void VoiceEngine::set_voice_state_for_session(const std::string& active_channel,
     }
 }
 
+void VoiceEngine::set_voice_state_for_local_test() {
+    VoiceState vs = state_.voice_snapshot();
+    clear_participant_voice_statuses(vs.participants);
+    vs.in_voice = true;
+    vs.local_test = true;
+    vs.muted = muted_.load(std::memory_order_relaxed);
+    vs.deafened = deafened_.load(std::memory_order_relaxed);
+    vs.local_capture_active = false;
+    vs.active_channel.clear();
+    vs.participants.clear();
+    vs.speaking_peers.clear();
+    vs.voice_mode = voice_mode_;
+    vs.rtc_connected_peers = 0;
+    vs.send_ready_peers = 0;
+    vs.recv_ready_peers = 0;
+    state_.set_voice_state(std::move(vs));
+}
+
 void VoiceEngine::reset_voice_state() {
     VoiceState vs = state_.voice_snapshot();
     clear_participant_voice_statuses(vs.participants);
     vs.in_voice = false;
+    vs.local_test = false;
     vs.muted = false;
     vs.deafened = false;
     vs.local_capture_active = false;
@@ -281,7 +314,13 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
     {
         std::lock_guard lk(mu_);
         peers_.clear();
+        local_test_monitor_fifo_.clear();
     }
+    local_input_rms_.store(0.0f, std::memory_order_relaxed);
+    local_input_peak_.store(0.0f, std::memory_order_relaxed);
+    local_vad_open_.store(false, std::memory_order_relaxed);
+    local_limiter_active_.store(false, std::memory_order_relaxed);
+    local_input_clipped_.store(false, std::memory_order_relaxed);
 
     in_voice_.store(false, std::memory_order_relaxed);
     muted_.store(false, std::memory_order_relaxed);
@@ -464,6 +503,59 @@ void VoiceEngine::hangup() {
         return;
     }
     end_current_session(true, active_channel_);
+}
+
+bool VoiceEngine::start_local_test() {
+    if (in_voice_.load(std::memory_order_relaxed)) {
+        if (session_kind_ == VoiceSessionKind::Direct) {
+            end_current_session(true, active_channel_);
+        } else {
+            end_current_session(false);
+        }
+    }
+
+    in_voice_.store(true, std::memory_order_relaxed);
+    active_channel_.clear();
+    muted_.store(false, std::memory_order_relaxed);
+    deafened_.store(false, std::memory_order_relaxed);
+    ptt_active_.store(false, std::memory_order_relaxed);
+    session_kind_ = VoiceSessionKind::LocalTest;
+
+    {
+        std::lock_guard capture_lk(capture_mu_);
+        capture_fifo_.clear();
+        limiter_.reset();
+        playback_limiter_.reset();
+        noise_suppressor_.reset();
+        logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
+    }
+    {
+        std::lock_guard lk(mu_);
+        local_test_monitor_fifo_.clear();
+    }
+    local_input_rms_.store(0.0f, std::memory_order_relaxed);
+    local_input_peak_.store(0.0f, std::memory_order_relaxed);
+    local_vad_open_.store(false, std::memory_order_relaxed);
+    local_limiter_active_.store(false, std::memory_order_relaxed);
+    local_input_clipped_.store(false, std::memory_order_relaxed);
+
+    if (!open_audio_or_report("local voice test")) {
+        in_voice_.store(false, std::memory_order_relaxed);
+        session_kind_ = VoiceSessionKind::None;
+        return false;
+    }
+
+    set_voice_state_for_local_test();
+    spdlog::info("Started local voice self-test");
+    return true;
+}
+
+void VoiceEngine::stop_local_test() {
+    if (!in_voice_.load(std::memory_order_relaxed) ||
+        session_kind_ != VoiceSessionKind::LocalTest) {
+        return;
+    }
+    end_current_session(false);
 }
 
 // ── Controls ─────────────────────────────────────────────────────────────────
@@ -902,6 +994,13 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
         !in_voice_.load(std::memory_order_relaxed)) {
         noise_suppressor_.clear_pending();
         capture_fifo_.clear();
+        local_input_rms_.store(0.0f, std::memory_order_relaxed);
+        local_input_peak_.store(0.0f, std::memory_order_relaxed);
+        local_vad_open_.store(false, std::memory_order_relaxed);
+        local_limiter_active_.store(false, std::memory_order_relaxed);
+        local_input_clipped_.store(false, std::memory_order_relaxed);
+        std::lock_guard lk(mu_);
+        local_test_monitor_fifo_.clear();
         return;
     }
 
@@ -909,6 +1008,13 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
     if (voice_mode_ == "ptt" && !ptt_active_.load(std::memory_order_relaxed)) {
         noise_suppressor_.clear_pending();
         capture_fifo_.clear();
+        local_input_rms_.store(0.0f, std::memory_order_relaxed);
+        local_input_peak_.store(0.0f, std::memory_order_relaxed);
+        local_vad_open_.store(false, std::memory_order_relaxed);
+        local_limiter_active_.store(false, std::memory_order_relaxed);
+        local_input_clipped_.store(false, std::memory_order_relaxed);
+        std::lock_guard lk(mu_);
+        local_test_monitor_fifo_.clear();
         return;
     }
 
@@ -922,30 +1028,63 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
     }
 
     for (auto& processed_chunk : noise_suppressor_.process_capture_chunk(capture_ptr, frames)) {
+        float chunk_energy = 0.0f;
+        float chunk_peak = 0.0f;
+        for (float sample : processed_chunk) {
+            chunk_energy += sample * sample;
+            chunk_peak = std::max(chunk_peak, std::abs(sample));
+        }
+        const float chunk_rms = processed_chunk.empty()
+            ? 0.0f
+            : std::sqrt(chunk_energy / static_cast<float>(processed_chunk.size()));
+        local_input_rms_.store(chunk_rms, std::memory_order_relaxed);
+        local_input_peak_.store(chunk_peak, std::memory_order_relaxed);
+        local_input_clipped_.store(chunk_peak >= 0.995f, std::memory_order_relaxed);
+
         if (voice_mode_ == "vox") {
-            float energy = 0.0f;
-            for (float sample : processed_chunk) {
-                energy += sample * sample;
-            }
-            energy = std::sqrt(energy / static_cast<float>(processed_chunk.size()));
-            if (energy < cfg_.voice.vad_threshold) {
+            if (chunk_rms < cfg_.voice.vad_threshold) {
+                local_vad_open_.store(false, std::memory_order_relaxed);
                 capture_fifo_.clear();
                 noise_suppressor_.clear_pending();
+                local_limiter_active_.store(false, std::memory_order_relaxed);
+                std::lock_guard lk(mu_);
+                local_test_monitor_fifo_.clear();
                 continue;
             }
+            local_vad_open_.store(true, std::memory_order_relaxed);
             last_local_voice_activity_ms_.store(steady_now_ms(), std::memory_order_relaxed);
+        } else {
+            local_vad_open_.store(ptt_active_.load(std::memory_order_relaxed), std::memory_order_relaxed);
         }
 
         capture_fifo_.push(processed_chunk);
     }
 
     while (auto pcm_vec = capture_fifo_.pop_exact(OpusCodec::kFrameSamples)) {
+        float pre_limiter_peak = 0.0f;
+        for (float sample : *pcm_vec) {
+            pre_limiter_peak = std::max(pre_limiter_peak, std::abs(sample));
+        }
         limiter_.process(*pcm_vec);
+        local_limiter_active_.store(
+            cfg_.voice.limiter_enabled &&
+            pre_limiter_peak > (std::clamp(cfg_.voice.limiter_threshold, 0.20f, 0.99f) * 0.98f),
+            std::memory_order_relaxed);
         float rms = 0.0f;
         for (float sample : *pcm_vec) {
             rms += sample * sample;
         }
         rms = std::sqrt(rms / static_cast<float>(pcm_vec->size()));
+
+        if (session_kind_ == VoiceSessionKind::LocalTest) {
+            std::lock_guard lk(mu_);
+            local_test_monitor_fifo_.push(*pcm_vec);
+            const size_t max_buffered_samples = static_cast<size_t>(OpusCodec::kFrameSamples * 4);
+            if (local_test_monitor_fifo_.size() > max_buffered_samples) {
+                local_test_monitor_fifo_.discard_front(local_test_monitor_fifo_.size() - max_buffered_samples);
+            }
+            continue;
+        }
 
         std::lock_guard lk(mu_);
         for (auto& [pid, peer] : peers_) {
@@ -1000,6 +1139,16 @@ void VoiceEngine::mix_output(float* out, uint32_t frames) {
     if (deafened_.load(std::memory_order_relaxed)) return;
 
     std::lock_guard lk(mu_);
+    if (session_kind_ == VoiceSessionKind::LocalTest) {
+        const size_t target_buffered_samples =
+            std::max<size_t>(frames, static_cast<size_t>(OpusCodec::kFrameSamples));
+        const size_t max_buffered_samples =
+            target_buffered_samples + static_cast<size_t>(OpusCodec::kFrameSamples);
+        if (local_test_monitor_fifo_.size() > max_buffered_samples) {
+            local_test_monitor_fifo_.discard_front(local_test_monitor_fifo_.size() - target_buffered_samples);
+        }
+        local_test_monitor_fifo_.mix_into(out, frames);
+    }
     for (auto& [pid, peer] : peers_) {
         const size_t target_buffered_samples =
             std::max<size_t>(frames, static_cast<size_t>(OpusCodec::kFrameSamples * 2));

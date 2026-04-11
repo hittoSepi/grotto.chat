@@ -959,6 +959,21 @@ void App::handle_command(const ParsedCommand& cmd) {
         ui_->notify();
         return;
     }
+    if (cmd.name == "/voicetest") {
+        if (voice_->is_local_test()) {
+            voice_->stop_local_test();
+            ui_->push_system_msg("Voice self-test stopped.");
+        } else if (voice_->start_local_test()) {
+            ui_->push_system_msg("Voice self-test started. You should hear your microphone locally.");
+            if (voice_->voice_mode() == "ptt") {
+                ui_->push_system_msg("Press your PTT key to monitor the mic, or use /vmode to switch to VOX.");
+            } else {
+                ui_->push_system_msg("VOX mode is active. Speak to hear the local loopback.");
+            }
+        }
+        ui_->notify();
+        return;
+    }
     if (cmd.name == "/names") {
         auto users = state_.online_users();
         std::string list;
@@ -1080,12 +1095,20 @@ void App::handle_command(const ParsedCommand& cmd) {
         voice_->accept_call(cmd.args[0]);
         ui_->push_system_msg(i18n::tr(i18n::I18nKey::ACCEPTED_CALL, cmd.args[0]));
     } else if (cmd.name == "/hangup") {
-        voice_->hangup();
-        ui_->push_system_msg(i18n::tr(i18n::I18nKey::CALL_ENDED));
+        if (voice_->is_local_test()) {
+            voice_->stop_local_test();
+            ui_->push_system_msg("Voice self-test stopped.");
+        } else {
+            voice_->hangup();
+            ui_->push_system_msg(i18n::tr(i18n::I18nKey::CALL_ENDED));
+        }
     } else if (cmd.name == "/voice") {
         if (!cmd.args.empty() && cmd.args[0] == "leave") {
             voice_->leave_room();
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::LEFT_VOICE_ROOM));
+        } else if (voice_->is_local_test()) {
+            voice_->stop_local_test();
+            ui_->push_system_msg("Voice self-test stopped.");
         } else if (voice_->in_voice()) {
             voice_->leave_room();
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::LEFT_VOICE_ROOM));
@@ -1722,10 +1745,48 @@ void App::open_settings() {
     
     // Create a new screen for settings (modal)
     ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
+    const auto original_voice_cfg = cfg_.voice;
     
     ui::SettingsScreen settings_screen;
     auto result = settings_screen.show(cfg_, screen, pubkey_hex,
-        [this](const std::string& theme) { on_theme_changed(theme); });
+        [this](const std::string& theme) { on_theme_changed(theme); },
+        [this, original_voice_cfg](const ClientConfig& preview_cfg) {
+            if (voice_ && voice_->is_local_test()) {
+                voice_->stop_local_test();
+                cfg_.voice = original_voice_cfg;
+                return false;
+            }
+
+            const auto previous_voice_cfg = cfg_.voice;
+            cfg_.voice = preview_cfg.voice;
+            if (voice_ && voice_->start_local_test()) {
+                return true;
+            }
+
+            cfg_.voice = previous_voice_cfg;
+            return false;
+        },
+        [this]() {
+            return voice_ && voice_->is_local_test();
+        },
+        [this]() {
+            ui::VoiceTestMetrics metrics;
+            if (!voice_) {
+                return metrics;
+            }
+            const auto snapshot = voice_->local_monitor_snapshot();
+            metrics.input_rms = snapshot.input_rms;
+            metrics.input_peak = snapshot.input_peak;
+            metrics.vad_open = snapshot.vad_open;
+            metrics.limiter_active = snapshot.limiter_active;
+            metrics.clipped = snapshot.clipped;
+            metrics.loopback_buffer_ms = snapshot.loopback_buffer_ms;
+            return metrics;
+        });
+
+    if (voice_ && voice_->is_local_test()) {
+        voice_->stop_local_test();
+    }
     
     switch (result) {
         case ui::SettingsResult::Saved:

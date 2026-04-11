@@ -1621,8 +1621,10 @@ Element UIManager::build_document(int term_rows) {
     }
     auto vs           = state_.voice_snapshot();
     si.in_voice       = vs.in_voice;
+    si.voice_local_test = vs.local_test;
     si.muted          = vs.muted;
     si.deafened       = vs.deafened;
+    si.local_capture_active = vs.local_capture_active;
     si.voice_channel  = vs.active_channel;
     si.voice_mode     = vs.voice_mode;
     si.ptt_key        = cfg_.voice.ptt_key;

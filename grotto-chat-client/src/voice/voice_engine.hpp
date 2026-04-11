@@ -56,6 +56,16 @@ enum class VoiceSessionKind {
     None,
     Room,
     Direct,
+    LocalTest,
+};
+
+struct LocalMonitorSnapshot {
+    float input_rms = 0.0f;
+    float input_peak = 0.0f;
+    bool vad_open = false;
+    bool limiter_active = false;
+    bool clipped = false;
+    int loopback_buffer_ms = 0;
 };
 
 class VoiceEngine {
@@ -84,6 +94,8 @@ public:
     void call(const std::string& peer_id);
     void accept_call(const std::string& caller_id);
     void hangup();
+    bool start_local_test();
+    void stop_local_test();
 
     // ── Controls ──────────────────────────────────────────────────────────
     void set_muted(bool muted);
@@ -91,6 +103,8 @@ public:
     void set_ptt_active(bool active);
     void toggle_voice_mode();
     const std::string& voice_mode() const { return voice_mode_; }
+    bool is_local_test() const { return in_voice_.load(std::memory_order_relaxed) && session_kind_ == VoiceSessionKind::LocalTest; }
+    LocalMonitorSnapshot local_monitor_snapshot() const;
 
     // ── Signaling (called from MessageHandler) ───────────────────────────
     void on_voice_signal(const VoiceSignal& vs);
@@ -120,6 +134,7 @@ private:
     void reconfigure_noise_suppressor_locked();
     void set_voice_state_for_session(const std::string& active_channel,
                                      const std::vector<std::string>& participants);
+    void set_voice_state_for_local_test();
     void reset_voice_state();
     void clear_participant_voice_statuses(const std::vector<std::string>& participants);
     void push_voice_event_to_channel(const std::string& channel_id, const std::string& text);
@@ -133,6 +148,7 @@ private:
     mutable std::mutex mu_;
     mutable std::mutex capture_mu_;
     std::unordered_map<std::string, std::shared_ptr<PeerConn>> peers_;
+    PcmSampleFifo      local_test_monitor_fifo_;
 
     AudioDevice        audio_;
     Limiter            limiter_;
@@ -142,6 +158,11 @@ private:
     std::atomic_bool   muted_{false};
     std::atomic_bool   deafened_{false};
     std::atomic_bool   ptt_active_{false};
+    std::atomic<float> local_input_rms_{0.0f};
+    std::atomic<float> local_input_peak_{0.0f};
+    std::atomic_bool   local_vad_open_{false};
+    std::atomic_bool   local_limiter_active_{false};
+    std::atomic_bool   local_input_clipped_{false};
     std::atomic_int64_t last_local_voice_activity_ms_{0};
     VoiceSessionKind   session_kind_ = VoiceSessionKind::None;
     std::string        active_channel_;

@@ -12,4 +12,4 @@
 
 ## Isommat myöhemmät ideat
 
-  - [ ] voice input self-test / paikallinen loopback-esikatselu mikrofonin säätöön
+  - [x] voice input self-test / paikallinen loopback-esikatselu mikrofonin säätöön

@@ -23,6 +23,7 @@
 `/accept`                  answer an incoming call  
 `/hangup`                  end call  
 `/voice`                   toggle voice channel on/off  
+`/voicetest`               toggle a local microphone loopback self-test  
 `/mute`                    toggle microphone mute  
 `/deafen`                  mute all incoming audio  
 `/vmode`                   toggle voice mode (`PTT` / `VOX`)  
