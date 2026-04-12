@@ -6,6 +6,7 @@
 #include "voice/limiter.hpp"
 #include "voice/noise_suppressor.hpp"
 #include "voice/pcm_sample_fifo.hpp"
+#include "voice/voice_activity_gate.hpp"
 #include "state/app_state.hpp"
 #include "config.hpp"
 #include "grotto.pb.h"
@@ -176,6 +177,8 @@ private:
     std::string        active_channel_;
     std::string        voice_mode_;
     PcmSampleFifo      capture_fifo_;
+    VoiceActivityGate  vox_gate_;
+    VoiceActivityGate  ptt_gate_;
     std::atomic_bool   logged_first_capture_chunk_{false};
 
     uint16_t           rtp_seq_ = 0;

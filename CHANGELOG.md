@@ -2,6 +2,13 @@
 
 All notable changes and achievements for the Grotto project.
 
+## 2026-04-13 - Desktop Client Voice Gate Smoothing
+
+### Improved
+- **Desktop client**: Added a short VOX hangover and lower close-threshold hysteresis after RNNoise so speech is less likely to get chopped between 10 ms capture frames
+- **Desktop client**: Added a lighter PTT gate after RNNoise so held push-to-talk drops low-level breathing and rustle before encoding
+- **Voice tests**: Added helper coverage for the new voice activity gate behavior to keep regressions visible
+
 ## 2026-04-11 - Desktop Client RNNoise Noise Suppression
 
 ### Implemented

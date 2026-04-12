@@ -28,6 +28,12 @@ float clamped_volume_multiplier(int percent) {
     return std::clamp(static_cast<float>(percent), 0.0f, 200.0f) / 100.0f;
 }
 
+float ptt_gate_threshold(float vad_threshold) {
+    // Keep PTT lighter than VOX so held push-to-talk still captures quiet syllables,
+    // but drops low-level breathing and rustle before encoding.
+    return std::clamp(vad_threshold * 0.5f, 0.005f, 0.015f);
+}
+
 void apply_gain_in_place(std::vector<float>& samples, float gain) {
     if (samples.empty() || gain == 1.0f) {
         return;
@@ -311,6 +317,8 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
         limiter_.reset();
         playback_limiter_.reset();
         noise_suppressor_.reset();
+        vox_gate_.reset();
+        ptt_gate_.reset();
         logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
     }
 
@@ -334,6 +342,8 @@ void VoiceEngine::end_current_session(bool notify_remote_hangup, const std::stri
     deafened_.store(false, std::memory_order_relaxed);
     ptt_active_.store(false, std::memory_order_relaxed);
     last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
+    vox_gate_.reset();
+    ptt_gate_.reset();
     session_kind_ = VoiceSessionKind::None;
     active_channel_.clear();
 
@@ -389,6 +399,8 @@ void VoiceEngine::on_room_joined(const std::string& channel_id,
         limiter_.reset();
         playback_limiter_.reset();
         noise_suppressor_.reset();
+        vox_gate_.reset();
+        ptt_gate_.reset();
         logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
     }
 
@@ -455,6 +467,8 @@ void VoiceEngine::call(const std::string& peer_id) {
     deafened_.store(false, std::memory_order_relaxed);
     ptt_active_.store(false, std::memory_order_relaxed);
     session_kind_   = VoiceSessionKind::Direct;
+    vox_gate_.reset();
+    ptt_gate_.reset();
 
     if (!open_audio_or_report("call")) {
         in_voice_.store(false, std::memory_order_relaxed);
@@ -486,6 +500,8 @@ void VoiceEngine::accept_call(const std::string& caller_id) {
     deafened_.store(false, std::memory_order_relaxed);
     ptt_active_.store(false, std::memory_order_relaxed);
     session_kind_   = VoiceSessionKind::Direct;
+    vox_gate_.reset();
+    ptt_gate_.reset();
 
     if (!open_audio_or_report("accepted call")) {
         in_voice_.store(false, std::memory_order_relaxed);
@@ -534,6 +550,8 @@ bool VoiceEngine::start_local_test() {
         limiter_.reset();
         playback_limiter_.reset();
         noise_suppressor_.reset();
+        vox_gate_.reset();
+        ptt_gate_.reset();
         logged_first_capture_chunk_.store(false, std::memory_order_relaxed);
     }
     {
@@ -574,6 +592,8 @@ void VoiceEngine::stop_local_test() {
 void VoiceEngine::set_muted(bool muted) {
     muted_.store(muted, std::memory_order_relaxed);
     if (muted) {
+        vox_gate_.reset();
+        ptt_gate_.reset();
         last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
     }
     VoiceState vs = state_.voice_snapshot();
@@ -603,6 +623,8 @@ void VoiceEngine::set_ptt_active(bool active) {
         reconfigure_noise_suppressor_locked();
     }
     if (!active) {
+        vox_gate_.reset();
+        ptt_gate_.reset();
         last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
     }
     if (voice_mode_ == "ptt") {
@@ -985,6 +1007,8 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
 
 void VoiceEngine::toggle_voice_mode() {
     voice_mode_ = (voice_mode_ == "ptt") ? "vox" : "ptt";
+    vox_gate_.reset();
+    ptt_gate_.reset();
     last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
     VoiceState vs = state_.voice_snapshot();
     vs.voice_mode = voice_mode_;
@@ -1003,6 +1027,8 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
 
     if (muted_.load(std::memory_order_relaxed) ||
         !in_voice_.load(std::memory_order_relaxed)) {
+        vox_gate_.reset();
+        ptt_gate_.reset();
         noise_suppressor_.clear_pending();
         capture_fifo_.clear();
         local_input_rms_.store(0.0f, std::memory_order_relaxed);
@@ -1019,6 +1045,8 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
 
     // PTT/VOX gate
     if (voice_mode_ == "ptt" && !ptt_active_.load(std::memory_order_relaxed)) {
+        vox_gate_.reset();
+        ptt_gate_.reset();
         noise_suppressor_.clear_pending();
         capture_fifo_.clear();
         local_input_rms_.store(0.0f, std::memory_order_relaxed);
@@ -1063,7 +1091,10 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
         local_input_clipped_.store(chunk_peak >= 0.995f, std::memory_order_relaxed);
 
         if (voice_mode_ == "vox") {
-            if (chunk_rms < cfg_.voice.vad_threshold) {
+            const int64_t now_ms = steady_now_ms();
+            const auto vad_decision =
+                vox_gate_.update(chunk_rms, cfg_.voice.vad_threshold, now_ms);
+            if (!vad_decision.gate_open) {
                 local_vad_open_.store(false, std::memory_order_relaxed);
                 capture_fifo_.clear();
                 noise_suppressor_.clear_pending();
@@ -1075,9 +1106,23 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
                 continue;
             }
             local_vad_open_.store(true, std::memory_order_relaxed);
-            last_local_voice_activity_ms_.store(steady_now_ms(), std::memory_order_relaxed);
+            if (vad_decision.signal_detected) {
+                last_local_voice_activity_ms_.store(now_ms, std::memory_order_relaxed);
+            }
         } else {
-            local_vad_open_.store(ptt_active_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            const auto ptt_decision =
+                ptt_gate_.update(chunk_rms,
+                                 ptt_gate_threshold(cfg_.voice.vad_threshold),
+                                 steady_now_ms());
+            if (!ptt_decision.gate_open) {
+                local_vad_open_.store(false, std::memory_order_relaxed);
+                capture_fifo_.clear();
+                local_limiter_active_.store(false, std::memory_order_relaxed);
+                std::lock_guard lk(mu_);
+                local_test_monitor_fifo_.clear();
+                continue;
+            }
+            local_vad_open_.store(true, std::memory_order_relaxed);
         }
 
         capture_fifo_.push(processed_chunk);

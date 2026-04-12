@@ -1,5 +1,6 @@
 #include "voice/opus_codec.hpp"
 #include "voice/pcm_sample_fifo.hpp"
+#include "voice/voice_activity_gate.hpp"
 #include "voice/voice_peer_role.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -60,4 +61,32 @@ TEST_CASE("playout FIFO returns four 5ms chunks from one opus frame", "[voice]")
 TEST_CASE("room offer role is deterministic", "[voice]") {
     REQUIRE(grotto::voice::should_offer_to_peer("alice", "bob"));
     REQUIRE_FALSE(grotto::voice::should_offer_to_peer("bob", "alice"));
+}
+
+TEST_CASE("voice activity gate keeps vox open briefly across rnnoise dips", "[voice]") {
+    grotto::voice::VoiceActivityGate gate;
+
+    const auto opened = gate.update(0.030f, 0.020f, 1000);
+    REQUIRE(opened.gate_open);
+    REQUIRE(opened.signal_detected);
+
+    const auto held = gate.update(0.010f, 0.020f, 1120);
+    REQUIRE(held.gate_open);
+    REQUIRE_FALSE(held.signal_detected);
+
+    const auto closed = gate.update(0.010f, 0.020f, 1185);
+    REQUIRE_FALSE(closed.gate_open);
+    REQUIRE_FALSE(closed.signal_detected);
+}
+
+TEST_CASE("voice activity gate uses lower close threshold after opening", "[voice]") {
+    grotto::voice::VoiceActivityGate gate;
+
+    const auto opened = gate.update(0.025f, 0.020f, 1000);
+    REQUIRE(opened.gate_open);
+    REQUIRE(opened.signal_detected);
+
+    const auto sustained = gate.update(0.015f, 0.020f, 1040);
+    REQUIRE(sustained.gate_open);
+    REQUIRE(sustained.signal_detected);
 }
