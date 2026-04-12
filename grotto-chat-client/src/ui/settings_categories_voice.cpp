@@ -43,8 +43,8 @@ std::string percent_text(float ratio) {
 Element SettingsScreen::render_voice() {
     using namespace settings_layout;
 
-    const bool is_ptt_mode = voice_mode_selected_ == 0;
-    const bool is_vox_mode = voice_mode_selected_ == 1;
+    const bool uses_talk_key_mode = voice_mode_selected_ == 0 || voice_mode_selected_ == 1;
+    const bool is_vox_mode = voice_mode_selected_ == 2;
 
     auto input_volume_control = voice_input_volume_slider_->Render() | flex;
     auto output_volume_control = voice_output_volume_slider_->Render() | flex;
@@ -147,7 +147,7 @@ Element SettingsScreen::render_voice() {
 
     auto send_rows = std::vector<Element>{
         row(i18n::tr(i18n::I18nKey::VOICE_MODE_LABEL), voice_mode_dropdown_->Render() | border),
-        row(i18n::tr(i18n::I18nKey::VOICE_PTT_HOTKEY_LABEL), std::move(ptt_control), is_ptt_mode),
+        row(i18n::tr(i18n::I18nKey::VOICE_PTT_HOTKEY_LABEL), std::move(ptt_control), uses_talk_key_mode),
         row(i18n::tr(i18n::I18nKey::VOICE_VAD_THRESHOLD_LABEL),
             std::move(vad_control),
             text(std::to_string(voice_vad_threshold_percent_) + "%") | color(palette::cyan()),

@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "i18n/strings.hpp"
+#include "voice/voice_mode.hpp"
 #include <toml.hpp>
 #include <spdlog/spdlog.h>
 #include <cstdlib>
@@ -120,6 +121,7 @@ ClientConfig load_config(const std::filesystem::path& path) {
             if (v.contains("ice_servers"))   cfg.voice.ice_servers   = toml::find<std::vector<std::string>>(v, "ice_servers");
             if (v.contains("turn_username")) cfg.voice.turn_username = toml::find<std::string>(v, "turn_username");
             if (v.contains("turn_password")) cfg.voice.turn_password = toml::find<std::string>(v, "turn_password");
+            cfg.voice.mode = voice::normalize_voice_mode(cfg.voice.mode);
         }
 
         if (data.contains("preview")) {
@@ -316,7 +318,7 @@ void save_config(const ClientConfig& cfg, const std::filesystem::path& path) {
     data["voice"]["noise_suppression_enabled"] = cfg.voice.noise_suppression_enabled;
     data["voice"]["limiter_enabled"] = cfg.voice.limiter_enabled;
     data["voice"]["limiter_threshold"] = cfg.voice.limiter_threshold;
-    data["voice"]["mode"] = cfg.voice.mode;
+    data["voice"]["mode"] = voice::normalize_voice_mode(cfg.voice.mode);
     data["voice"]["ptt_key"] = cfg.voice.ptt_key;
     data["voice"]["vad_threshold"] = cfg.voice.vad_threshold;
     toml::array voice_ice_servers;
@@ -410,7 +412,7 @@ void export_settings(const ClientConfig& cfg, const std::filesystem::path& path)
         data["voice"]["noise_suppression_enabled"] = cfg.voice.noise_suppression_enabled;
         data["voice"]["limiter_enabled"] = cfg.voice.limiter_enabled;
         data["voice"]["limiter_threshold"] = cfg.voice.limiter_threshold;
-        data["voice"]["mode"] = cfg.voice.mode;
+        data["voice"]["mode"] = voice::normalize_voice_mode(cfg.voice.mode);
         data["voice"]["ptt_key"] = cfg.voice.ptt_key;
         data["voice"]["vad_threshold"] = cfg.voice.vad_threshold;
         toml::array voice_ice_servers;
@@ -518,6 +520,7 @@ bool import_settings(ClientConfig& cfg, const std::filesystem::path& path) {
             if (v.contains("ice_servers")) cfg.voice.ice_servers = toml::find<std::vector<std::string>>(v, "ice_servers");
             if (v.contains("turn_username")) cfg.voice.turn_username = toml::find<std::string>(v, "turn_username");
             if (v.contains("turn_password")) cfg.voice.turn_password = toml::find<std::string>(v, "turn_password");
+            cfg.voice.mode = voice::normalize_voice_mode(cfg.voice.mode);
         }
         
         // Import preview settings

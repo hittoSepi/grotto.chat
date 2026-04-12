@@ -16,7 +16,7 @@
 
 ## Voice
 
-configured PTT key (`F1` by default)  toggle PTT transmit on/off
+configured talk key                    toggle talk in Toggle to Talk mode, or hold-to-talk in Push to Talk mode
 
 ## Views
 
@@ -25,4 +25,4 @@ configured PTT key (`F1` by default)  toggle PTT transmit on/off
 
 ---
 
-Tip: In PTT mode, press your configured PTT key again to stop transmitting.
+Tip: `Toggle to Talk` stays live until you press the talk key again. `Push to Talk` stays live only while the key is held.

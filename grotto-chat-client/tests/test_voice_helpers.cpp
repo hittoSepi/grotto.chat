@@ -1,6 +1,7 @@
 #include "voice/opus_codec.hpp"
 #include "voice/pcm_sample_fifo.hpp"
 #include "voice/voice_activity_gate.hpp"
+#include "voice/voice_mode.hpp"
 #include "voice/voice_peer_role.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -89,4 +90,14 @@ TEST_CASE("voice activity gate uses lower close threshold after opening", "[voic
     const auto sustained = gate.update(0.015f, 0.020f, 1040);
     REQUIRE(sustained.gate_open);
     REQUIRE(sustained.signal_detected);
+}
+
+TEST_CASE("voice mode helper normalizes legacy and cycles through all modes", "[voice]") {
+    REQUIRE(grotto::voice::normalize_voice_mode("ptt") == "toggle");
+    REQUIRE(grotto::voice::normalize_voice_mode("hold") == "hold");
+    REQUIRE(grotto::voice::normalize_voice_mode("vox") == "vox");
+
+    REQUIRE(grotto::voice::next_voice_mode("toggle") == "hold");
+    REQUIRE(grotto::voice::next_voice_mode("hold") == "vox");
+    REQUIRE(grotto::voice::next_voice_mode("vox") == "toggle");
 }

@@ -121,3 +121,21 @@ TEST_CASE("legacy noise suppression level still loads from config", "[config]") 
 
     cleanup(dir);
 }
+
+TEST_CASE("legacy ptt voice mode loads as toggle mode", "[config]") {
+    const auto dir = make_temp_dir("config-legacy-voice-mode");
+    const auto path = dir / "client.toml";
+
+    {
+        std::ofstream out(path);
+        out << "[voice]\n";
+        out << "mode = \"ptt\"\n";
+        out << "ptt_key = \"F1\"\n";
+    }
+
+    const auto loaded = grotto::load_config(path);
+    REQUIRE(loaded.voice.mode == "toggle");
+    REQUIRE(loaded.voice.ptt_key == "F1");
+
+    cleanup(dir);
+}

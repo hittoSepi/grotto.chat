@@ -1,11 +1,27 @@
 #include "ui/status_bar.hpp"
 #include "ui/color_scheme.hpp"
 #include "i18n/strings.hpp"
+#include "voice/voice_mode.hpp"
 #include <ftxui/dom/elements.hpp>
 
 using namespace ftxui;
 
 namespace grotto::ui {
+
+namespace {
+
+std::string voice_mode_badge(const StatusInfo& info) {
+    const auto talk_key = info.ptt_key.empty() ? std::string("§") : info.ptt_key;
+    if (voice::is_hold_mode(info.voice_mode)) {
+        return i18n::tr(i18n::I18nKey::VOICE_MODE_PTT) + ": " + talk_key;
+    }
+    if (voice::is_vox_mode(info.voice_mode)) {
+        return i18n::tr(i18n::I18nKey::VOICE_MODE_VOX);
+    }
+    return i18n::tr(i18n::I18nKey::VOICE_MODE_TOGGLE) + ": " + talk_key;
+}
+
+} // namespace
 
 Element render_status_bar(const StatusInfo& info) {
     // Left side
@@ -37,20 +53,20 @@ Element render_status_bar(const StatusInfo& info) {
         left.push_back(text(" | " + info.connection_summary) | color(palette::cyan()));
     }
     if (info.in_voice) {
-        const std::string ptt_text = "PTT: " + (info.ptt_key.empty() ? std::string("§") : info.ptt_key);
+        const std::string mode_text = voice_mode_badge(info);
         std::string voice_text;
         if (info.voice_local_test) {
             voice_text = "\U0001F3A4 mic test";
             if (info.muted) voice_text += " " + i18n::tr(i18n::I18nKey::MUTED_INDICATOR);
             if (info.deafened) voice_text += " " + i18n::tr(i18n::I18nKey::DEAFENED_INDICATOR);
             if (info.local_capture_active) voice_text += " live";
-            voice_text += " [" + std::string(info.voice_mode == "ptt" ? ptt_text : i18n::tr(i18n::I18nKey::VOX)) + "]";
+            voice_text += " [" + mode_text + "]";
         } else {
             voice_text = "\U0001F3A4 " + info.voice_channel +
                 " " + i18n::tr(i18n::I18nKey::USERS_COUNT, std::to_string(info.voice_participants.size()));
             if (info.muted) voice_text += " " + i18n::tr(i18n::I18nKey::MUTED_INDICATOR);
             if (info.deafened) voice_text += " " + i18n::tr(i18n::I18nKey::DEAFENED_INDICATOR);
-            voice_text += " [" + std::string(info.voice_mode == "ptt" ? ptt_text : i18n::tr(i18n::I18nKey::VOX)) + "]";
+            voice_text += " [" + mode_text + "]";
             voice_text += " RTC " + std::to_string(info.voice_rtc_connected) + "/" + std::to_string(info.voice_participants.size());
             voice_text += " TX " + std::to_string(info.voice_send_ready) + "/" + std::to_string(info.voice_participants.size());
             voice_text += " RX " + std::to_string(info.voice_recv_ready) + "/" + std::to_string(info.voice_participants.size());

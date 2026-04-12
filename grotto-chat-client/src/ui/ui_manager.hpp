@@ -171,8 +171,8 @@ private:
 
     ftxui::ScreenInteractive screen_{ftxui::ScreenInteractive::Fullscreen()};
 
-    bool ptt_toggled_ = false;  // F1 toggle state for PTT
-    bool ptt_active_  = false;  // hold-to-talk state
+    bool ptt_toggled_ = false;  // Toggle-to-talk latched state
+    bool ptt_active_  = false;  // Current talk-key active state
     
     // User list panel state
     UserListConfig user_list_config_;

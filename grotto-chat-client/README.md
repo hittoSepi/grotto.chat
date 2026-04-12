@@ -115,13 +115,13 @@ verify_peer = true             # Verify server TLS certificate (keep true in pro
 | `Ctrl+V` | Paste clipboard text into the input line |
 | `Tab` | Autocomplete username / channel |
 | `PgUp` / `PgDn` | Scroll message history |
-| Configured PTT key (`F1` by default) | Toggle PTT transmit on/off |
+| Configured talk key | Toggle transmit in `Toggle to Talk`, or hold transmit in `Push to Talk` |
 | `F2` | Toggle the right-side user list |
 | `F12` | Open settings |
 | `Alt+1..9` | Switch to channel by number |
 | `Alt+Left` / `Alt+Right` | Cycle channels |
 | `/join #channel` | Join a channel |
-| `/vmode` | Toggle voice mode (`PTT` / `VOX`) |
+| `/vmode` | Cycle voice mode (`Toggle to Talk` / `Push to Talk` / `VOX`) |
 | `/voicetest` | Toggle a local microphone loopback self-test |
 | `/part` | Leave current channel |
 | `/msg <user> <text>` | Send a private message |

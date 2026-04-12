@@ -105,7 +105,7 @@ std::string summarize_sdp(std::string_view sdp) {
 } // namespace
 
 VoiceEngine::VoiceEngine(AppState& state, const ClientConfig& cfg)
-    : state_(state), cfg_(cfg), voice_mode_(cfg.voice.mode) {}
+    : state_(state), cfg_(cfg), voice_mode_(normalize_voice_mode(cfg.voice.mode)) {}
 
 VoiceEngine::~VoiceEngine() {
     hangup();
@@ -616,7 +616,7 @@ void VoiceEngine::set_ptt_active(bool active) {
     if (previous == active) {
         return;
     }
-    if (voice_mode_ == "ptt" && in_voice_.load(std::memory_order_relaxed)) {
+    if (!is_vox_mode(voice_mode_) && in_voice_.load(std::memory_order_relaxed)) {
         std::lock_guard capture_lk(capture_mu_);
         noise_suppressor_.clear_pending();
         capture_fifo_.clear();
@@ -627,7 +627,7 @@ void VoiceEngine::set_ptt_active(bool active) {
         ptt_gate_.reset();
         last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
     }
-    if (voice_mode_ == "ptt") {
+    if (!is_vox_mode(voice_mode_)) {
         VoiceState vs = state_.voice_snapshot();
         vs.local_capture_active =
             in_voice_.load(std::memory_order_relaxed) &&
@@ -1006,9 +1006,16 @@ void VoiceEngine::setup_peer_callbacks(std::shared_ptr<PeerConn> peer) {
 // ── Audio I/O ─────────────────────────────────────────────────────────────────
 
 void VoiceEngine::toggle_voice_mode() {
-    voice_mode_ = (voice_mode_ == "ptt") ? "vox" : "ptt";
+    set_voice_mode(next_voice_mode(voice_mode_));
+}
+
+void VoiceEngine::set_voice_mode(std::string mode) {
+    voice_mode_ = normalize_voice_mode(std::move(mode));
     vox_gate_.reset();
     ptt_gate_.reset();
+    if (is_vox_mode(voice_mode_)) {
+        ptt_active_.store(false, std::memory_order_relaxed);
+    }
     last_local_voice_activity_ms_.store(0, std::memory_order_relaxed);
     VoiceState vs = state_.voice_snapshot();
     vs.voice_mode = voice_mode_;
@@ -1043,8 +1050,8 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
         return;
     }
 
-    // PTT/VOX gate
-    if (voice_mode_ == "ptt" && !ptt_active_.load(std::memory_order_relaxed)) {
+    // Talk-key/VOX gate
+    if (!is_vox_mode(voice_mode_) && !ptt_active_.load(std::memory_order_relaxed)) {
         vox_gate_.reset();
         ptt_gate_.reset();
         noise_suppressor_.clear_pending();
@@ -1090,7 +1097,7 @@ void VoiceEngine::on_capture(const float* pcm, uint32_t frames) {
         local_input_peak_.store(chunk_peak, std::memory_order_relaxed);
         local_input_clipped_.store(chunk_peak >= 0.995f, std::memory_order_relaxed);
 
-        if (voice_mode_ == "vox") {
+        if (is_vox_mode(voice_mode_)) {
             const int64_t now_ms = steady_now_ms();
             const auto vad_decision =
                 vox_gate_.update(chunk_rms, cfg_.voice.vad_threshold, now_ms);
@@ -1333,8 +1340,8 @@ void VoiceEngine::refresh_speaking_state() {
     const int64_t now_ms = steady_now_ms();
     const bool local_capture_active =
         !muted_.load(std::memory_order_relaxed) &&
-        ((voice_mode_ == "ptt" && ptt_active_.load(std::memory_order_relaxed)) ||
-         (voice_mode_ == "vox" &&
+        ((!is_vox_mode(voice_mode_) && ptt_active_.load(std::memory_order_relaxed)) ||
+         (is_vox_mode(voice_mode_) &&
           (now_ms - last_local_voice_activity_ms_.load(std::memory_order_relaxed)) < 400));
     VoiceState vs = state_.voice_snapshot();
     if (vs.speaking_peers != speaking ||

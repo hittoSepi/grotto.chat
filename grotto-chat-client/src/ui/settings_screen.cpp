@@ -1,4 +1,5 @@
 #include "ui/settings_screen.hpp"
+#include "voice/voice_mode.hpp"
 #include "ui/color_scheme.hpp"
 #include "ui/key_name.hpp"
 #include "ui/modal_overlay.hpp"
@@ -128,13 +129,24 @@ std::string theme_from_index(const std::vector<std::string>& options, int index)
 }
 
 int voice_mode_to_index(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return value == "vox" ? 1 : 0;
+    const auto normalized = voice::normalize_voice_mode(std::move(value));
+    if (normalized == "hold") {
+        return 1;
+    }
+    if (normalized == "vox") {
+        return 2;
+    }
+    return 0;
 }
 
 std::string voice_mode_from_index(int index) {
-    return index == 1 ? "vox" : "ptt";
+    if (index == 1) {
+        return "hold";
+    }
+    if (index == 2) {
+        return "vox";
+    }
+    return "toggle";
 }
 
 int find_device_index(const std::vector<std::string>& values,
@@ -513,6 +525,7 @@ void SettingsScreen::build_ui() {
     terminal_graphics_selected_ = terminal_graphics_to_index(terminal_graphics_);
     terminal_graphics_toggle_ = Toggle(&terminal_graphics_options_, &terminal_graphics_selected_);
     voice_mode_options_ = {
+        i18n::tr(i18n::I18nKey::VOICE_MODE_TOGGLE),
         i18n::tr(i18n::I18nKey::VOICE_MODE_PTT),
         i18n::tr(i18n::I18nKey::VOICE_MODE_VOX),
     };
@@ -681,6 +694,7 @@ void SettingsScreen::load_settings_from_config(const ClientConfig& cfg) {
     voice_input_device_options_.clear();
     voice_output_device_options_.clear();
     voice_mode_options_ = {
+        i18n::tr(i18n::I18nKey::VOICE_MODE_TOGGLE),
         i18n::tr(i18n::I18nKey::VOICE_MODE_PTT),
         i18n::tr(i18n::I18nKey::VOICE_MODE_VOX),
     };

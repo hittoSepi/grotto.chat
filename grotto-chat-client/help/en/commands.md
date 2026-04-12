@@ -26,7 +26,7 @@
 `/voicetest`               toggle a local microphone loopback self-test  
 `/mute`                    toggle microphone mute  
 `/deafen`                  mute all incoming audio  
-`/vmode`                   toggle voice mode (`PTT` / `VOX`)  
+`/vmode`                   cycle voice mode (`Toggle to Talk` / `Push to Talk` / `VOX`)  
 
 ## Security
 

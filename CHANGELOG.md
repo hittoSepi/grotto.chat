@@ -7,6 +7,7 @@ All notable changes and achievements for the Grotto project.
 ### Improved
 - **Desktop client**: Added a short VOX hangover and lower close-threshold hysteresis after RNNoise so speech is less likely to get chopped between 10 ms capture frames
 - **Desktop client**: Added a lighter PTT gate after RNNoise so held push-to-talk drops low-level breathing and rustle before encoding
+- **Desktop client**: Split the old misnamed `PTT` mode into `Toggle to Talk` and a real `Push to Talk` mode, with updated settings/help text and legacy `mode = "ptt"` configs mapped to `toggle`
 - **Voice tests**: Added helper coverage for the new voice activity gate behavior to keep regressions visible
 
 ## 2026-04-11 - Desktop Client RNNoise Noise Suppression

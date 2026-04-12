@@ -6,6 +6,7 @@
 #include "ui/terminal_image.hpp"
 #include "ui/modal_overlay.hpp"
 #include "ui/layout.hpp"
+#include "voice/voice_mode.hpp"
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
@@ -46,6 +47,9 @@ using namespace ftxui;
 namespace grotto::ui {
 
 namespace {
+
+constexpr auto kHoldTalkPollInterval = std::chrono::milliseconds(30);
+constexpr auto kHoldTalkRepeatGrace = std::chrono::milliseconds(180);
 
 #ifndef _WIN32
 void swallow_interrupt_signal(int) {
@@ -92,6 +96,57 @@ private:
     bool active_ = false;
     termios old_{};
 };
+#endif
+
+#ifdef _WIN32
+std::optional<int> virtual_key_from_name(std::string_view name) {
+    if (name == "Space") return VK_SPACE;
+    if (name == "Enter") return VK_RETURN;
+    if (name == "Tab") return VK_TAB;
+    if (name == "Backspace") return VK_BACK;
+    if (name == "Delete") return VK_DELETE;
+    if (name == "Insert") return VK_INSERT;
+    if (name == "Home") return VK_HOME;
+    if (name == "End") return VK_END;
+    if (name == "PageUp") return VK_PRIOR;
+    if (name == "PageDown") return VK_NEXT;
+    if (name == "ArrowUp") return VK_UP;
+    if (name == "ArrowDown") return VK_DOWN;
+    if (name == "ArrowLeft") return VK_LEFT;
+    if (name == "ArrowRight") return VK_RIGHT;
+
+    if (name.size() == 2 && name[0] == 'F' && std::isdigit(static_cast<unsigned char>(name[1]))) {
+        return VK_F1 + (name[1] - '1');
+    }
+    if (name.size() == 3 && name[0] == 'F' && name[1] == '1' &&
+        (name[2] == '0' || name[2] == '1' || name[2] == '2')) {
+        return VK_F10 + (name[2] - '0');
+    }
+    if (name.size() == 1) {
+        const unsigned char c = static_cast<unsigned char>(name[0]);
+        if (std::isalpha(c)) return std::toupper(c);
+        if (std::isdigit(c)) return c;
+        return static_cast<unsigned char>(name[0]);
+    }
+    return std::nullopt;
+}
+
+bool virtual_key_down(int vk) {
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+bool talk_hotkey_down_windows(std::string_view hotkey) {
+    if (hotkey.rfind("Ctrl+", 0) == 0) {
+        const auto base = virtual_key_from_name(hotkey.substr(5));
+        return base && virtual_key_down(VK_CONTROL) && virtual_key_down(*base);
+    }
+    if (hotkey.rfind("Alt+", 0) == 0) {
+        const auto base = virtual_key_from_name(hotkey.substr(4));
+        return base && virtual_key_down(VK_MENU) && virtual_key_down(*base);
+    }
+    const auto vk = virtual_key_from_name(hotkey);
+    return vk && virtual_key_down(*vk);
+}
 #endif
 
 std::optional<std::string> extract_bracketed_paste(std::string_view input) {
@@ -1879,6 +1934,18 @@ void UIManager::run(SubmitFn on_submit,
     }
 #endif
 
+    std::atomic_bool ptt_poll_running{true};
+    std::atomic_bool ptt_poll_enabled{voice::is_hold_mode(cfg_.voice.mode)};
+    auto last_hold_key_event = std::chrono::steady_clock::time_point{};
+    std::thread ptt_poll_thread([this, &ptt_poll_running, &ptt_poll_enabled]() {
+        while (ptt_poll_running.load(std::memory_order_relaxed)) {
+            std::this_thread::sleep_for(kHoldTalkPollInterval);
+            if (ptt_poll_enabled.load(std::memory_order_relaxed)) {
+                screen_.PostEvent(Event::Custom);
+            }
+        }
+    });
+
     auto renderer = Renderer([&] {
         // Drain cross-thread UI updates before rendering
         state_.drain_ui_queue();
@@ -1917,6 +1984,43 @@ void UIManager::run(SubmitFn on_submit,
             notify_input_changed();
             return true;
         };
+
+        if (event == Event::Custom) {
+            const auto mode = voice::normalize_voice_mode(cfg_.voice.mode);
+            ptt_poll_enabled.store(mode == "hold", std::memory_order_relaxed);
+            if (mode != "toggle") {
+                ptt_toggled_ = false;
+            }
+
+            if (mode == "hold") {
+#ifdef _WIN32
+                const bool should_be_active = talk_hotkey_down_windows(cfg_.voice.ptt_key);
+                if (should_be_active != ptt_active_) {
+                    ptt_active_ = should_be_active;
+                    if (on_ptt_toggle) {
+                        on_ptt_toggle(ptt_active_);
+                    }
+                }
+#else
+                if (ptt_active_ && last_hold_key_event != std::chrono::steady_clock::time_point{} &&
+                    (std::chrono::steady_clock::now() - last_hold_key_event) > kHoldTalkRepeatGrace) {
+                    ptt_active_ = false;
+                    if (on_ptt_toggle) {
+                        on_ptt_toggle(false);
+                    }
+                }
+#endif
+                return true;
+            }
+
+            if (mode == "vox" && ptt_active_) {
+                ptt_active_ = false;
+                if (on_ptt_toggle) {
+                    on_ptt_toggle(false);
+                }
+                return true;
+            }
+        }
 
         if (quit_confirm_visible_) {
             if (event == Event::Custom) {
@@ -2009,10 +2113,24 @@ void UIManager::run(SubmitFn on_submit,
         }
         if (const auto key_name = key_name_from_event(event);
             key_name && *key_name == cfg_.voice.ptt_key) {
-            ptt_toggled_ = !ptt_toggled_;
-            ptt_active_ = ptt_toggled_;
-            if (on_ptt_toggle) on_ptt_toggle(ptt_toggled_);
-            return true;
+            const auto mode = voice::normalize_voice_mode(cfg_.voice.mode);
+            ptt_poll_enabled.store(mode == "hold", std::memory_order_relaxed);
+            if (mode == "toggle") {
+                ptt_toggled_ = !ptt_toggled_;
+                ptt_active_ = ptt_toggled_;
+                if (on_ptt_toggle) on_ptt_toggle(ptt_toggled_);
+                return true;
+            }
+            if (mode == "hold") {
+#ifndef _WIN32
+                last_hold_key_event = std::chrono::steady_clock::now();
+                if (!ptt_active_) {
+                    ptt_active_ = true;
+                    if (on_ptt_toggle) on_ptt_toggle(true);
+                }
+#endif
+                return true;
+            }
         }
         // F12 — Open settings
         if (event == Event::F12) {
@@ -2282,6 +2400,10 @@ void UIManager::run(SubmitFn on_submit,
     });
 
     screen_.Loop(event_handler);
+    ptt_poll_running.store(false, std::memory_order_relaxed);
+    if (ptt_poll_thread.joinable()) {
+        ptt_poll_thread.join();
+    }
 }
 
 } // namespace grotto::ui

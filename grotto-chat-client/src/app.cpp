@@ -6,6 +6,7 @@
 #include "ui/terminal_image.hpp"
 #include "version.hpp"
 #include "i18n/strings.hpp"
+#include "voice/voice_mode.hpp"
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -37,6 +38,16 @@ constexpr auto kTypingRefreshInterval = std::chrono::seconds(2);
 constexpr auto kTypingRemoteTtl = std::chrono::seconds(5);
 constexpr int kAutoAwayMinMinutes = 1;
 constexpr int kAutoAwayMaxMinutes = 240;
+
+std::string voice_mode_label(std::string_view mode) {
+    if (voice::is_hold_mode(mode)) {
+        return i18n::tr(i18n::I18nKey::VOICE_MODE_PTT);
+    }
+    if (voice::is_vox_mode(mode)) {
+        return i18n::tr(i18n::I18nKey::VOICE_MODE_VOX);
+    }
+    return i18n::tr(i18n::I18nKey::VOICE_MODE_TOGGLE);
+}
 
 bool is_server_channel(std::string_view channel_id) {
     if (channel_id.size() != 6) {
@@ -965,8 +976,10 @@ void App::handle_command(const ParsedCommand& cmd) {
             ui_->push_system_msg("Voice self-test stopped.");
         } else if (voice_->start_local_test()) {
             ui_->push_system_msg("Voice self-test started. You should hear your microphone locally.");
-            if (voice_->voice_mode() == "ptt") {
-                ui_->push_system_msg("Press your PTT key to monitor the mic, or use /vmode to switch to VOX.");
+            if (voice::is_toggle_mode(voice_->voice_mode())) {
+                ui_->push_system_msg("Toggle to Talk is active. Press your talk key once to start or stop monitoring.");
+            } else if (voice::is_hold_mode(voice_->voice_mode())) {
+                ui_->push_system_msg("Push to Talk is active. Hold your talk key to monitor the mic.");
             } else {
                 ui_->push_system_msg("VOX mode is active. Speak to hear the local loopback.");
             }
@@ -1133,7 +1146,8 @@ void App::handle_command(const ParsedCommand& cmd) {
         ui_->push_system_msg(i18n::tr(d ? i18n::I18nKey::DEAFENED : i18n::I18nKey::UNDEAFENED));
     } else if (cmd.name == "/vmode" || cmd.name == "/ptt") {
         voice_->toggle_voice_mode();
-        ui_->push_system_msg(i18n::tr(i18n::I18nKey::VOICE_MODE, voice_->voice_mode()));
+        cfg_.voice.mode = voice_->voice_mode();
+        ui_->push_system_msg(i18n::tr(i18n::I18nKey::VOICE_MODE, voice_mode_label(voice_->voice_mode())));
     } else if (cmd.name == "/transfers") {
         if (!file_mgr_) {
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::FILE_TRANSFER_NOT_AVAILABLE));
@@ -1754,16 +1768,23 @@ void App::open_settings() {
             if (voice_ && voice_->is_local_test()) {
                 voice_->stop_local_test();
                 cfg_.voice = original_voice_cfg;
+                voice_->set_voice_mode(cfg_.voice.mode);
                 return false;
             }
 
             const auto previous_voice_cfg = cfg_.voice;
             cfg_.voice = preview_cfg.voice;
+            if (voice_) {
+                voice_->set_voice_mode(cfg_.voice.mode);
+            }
             if (voice_ && voice_->start_local_test()) {
                 return true;
             }
 
             cfg_.voice = previous_voice_cfg;
+            if (voice_) {
+                voice_->set_voice_mode(cfg_.voice.mode);
+            }
             return false;
         },
         [this]() {
@@ -1794,6 +1815,9 @@ void App::open_settings() {
     
     switch (result) {
         case ui::SettingsResult::Saved:
+            if (voice_) {
+                voice_->set_voice_mode(cfg_.voice.mode);
+            }
             save_current_config();
             refresh_runtime_capabilities();
             if (previewer_) {
@@ -1823,6 +1847,9 @@ void App::open_settings() {
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::SETTINGS_SAVED));
             break;
         case ui::SettingsResult::Cancelled:
+            if (voice_) {
+                voice_->set_voice_mode(cfg_.voice.mode);
+            }
             ui_->push_system_msg(i18n::tr(i18n::I18nKey::SETTINGS_CANCELLED));
             break;
         case ui::SettingsResult::Logout:

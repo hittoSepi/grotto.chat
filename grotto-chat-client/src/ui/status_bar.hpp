@@ -19,7 +19,7 @@ struct StatusInfo {
     bool        deafened       = false;
     bool        local_capture_active = false;
     std::string voice_channel;
-    std::string voice_mode     = "ptt";  // "ptt" or "vox"
+    std::string voice_mode     = "toggle";  // "toggle", "hold", or "vox"
     std::string ptt_key        = "§";
     std::size_t voice_rtc_connected = 0;
     std::size_t voice_send_ready = 0;

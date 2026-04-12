@@ -16,7 +16,7 @@
 
 ## Ääni
 
-valittu PTT-näppäin (`F1` oletuksena)  kytke PTT-lähetys päälle/pois
+valittu puhenäppäin                    kytke puhe päälle/pois Toggle to Talk -tilassa tai pidä painettuna PTT-tilassa
 
 ## Näkymät
 
@@ -25,4 +25,4 @@ valittu PTT-näppäin (`F1` oletuksena)  kytke PTT-lähetys päälle/pois
 
 ---
 
-Vihje: PTT-tilassa paina samaa PTT-näppäintä uudelleen lopettaaksesi lähetyksen.
+Vihje: `Toggle to Talk` pysyy päällä kunnes painat puhenäppäintä uudestaan. `PTT` pysyy päällä vain niin kauan kuin pidät näppäintä pohjassa.

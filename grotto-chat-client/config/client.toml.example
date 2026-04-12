@@ -29,7 +29,7 @@ frame_ms = 20
 noise_suppression_enabled = true
 limiter_enabled = true
 limiter_threshold = 0.85
-mode = "ptt"  # "ptt" (push-to-talk) or "vox" (voice-activated)
+mode = "toggle"  # "toggle" (toggle-to-talk), "hold" (push-to-talk), or "vox" (voice-activated)
 ptt_key = "§"
 vad_threshold = 0.02
 

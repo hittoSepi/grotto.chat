@@ -45,7 +45,7 @@ struct VoiceConfig {
     std::string noise_suppression_level = "moderate"; // Legacy load-only field.
     bool        limiter_enabled = true;
     float       limiter_threshold = 0.85f;
-    std::string mode          = "ptt";     // "ptt" or "vox"
+    std::string mode          = "toggle";  // "toggle", "hold", or "vox"
     std::string ptt_key       = "§";
     float       vad_threshold = 0.02f;
     // ICE servers (STUN/TURN) — if empty, uses default Google STUN

@@ -4,6 +4,7 @@
 #include "voice/jitter_buffer.hpp"
 #include "voice/audio_device.hpp"
 #include "voice/limiter.hpp"
+#include "voice/voice_mode.hpp"
 #include "voice/noise_suppressor.hpp"
 #include "voice/pcm_sample_fifo.hpp"
 #include "voice/voice_activity_gate.hpp"
@@ -106,6 +107,7 @@ public:
     void set_muted(bool muted);
     void set_deafened(bool deafened);
     void set_ptt_active(bool active);
+    void set_voice_mode(std::string mode);
     void toggle_voice_mode();
     const std::string& voice_mode() const { return voice_mode_; }
     bool is_local_test() const { return in_voice_.load(std::memory_order_relaxed) && session_kind_ == VoiceSessionKind::LocalTest; }
