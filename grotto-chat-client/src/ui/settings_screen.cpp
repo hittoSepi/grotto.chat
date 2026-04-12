@@ -516,6 +516,10 @@ void SettingsScreen::build_ui() {
         i18n::tr(i18n::I18nKey::VOICE_MODE_PTT),
         i18n::tr(i18n::I18nKey::VOICE_MODE_VOX),
     };
+    language_options_ = {
+        i18n::tr(i18n::I18nKey::LANGUAGE_NAME_FINNISH),
+        i18n::tr(i18n::I18nKey::LANGUAGE_NAME_ENGLISH),
+    };
     voice_input_device_dropdown_ = Dropdown(&voice_input_device_options_, &voice_input_device_selected_);
     voice_output_device_dropdown_ = Dropdown(&voice_output_device_options_, &voice_output_device_selected_);
     voice_mode_dropdown_ = Dropdown(&voice_mode_options_, &voice_mode_selected_);

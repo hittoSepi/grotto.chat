@@ -122,7 +122,7 @@ private:
     int terminal_graphics_selected_ = 0;
     std::vector<std::string> terminal_graphics_options_ = {"auto", "off", "viewer-only"};
     int language_selected_ = 0;
-    std::vector<std::string> language_options_ = {"Suomi", "English"};
+    std::vector<std::string> language_options_;
 
     // === Voice Settings ===
     std::vector<std::string> voice_input_device_values_;
@@ -131,7 +131,7 @@ private:
     std::vector<std::string> voice_output_device_options_;
     int voice_input_device_selected_ = 0;
     int voice_output_device_selected_ = 0;
-    std::vector<std::string> voice_mode_options_ = {"PTT", "Voice Activation"};
+    std::vector<std::string> voice_mode_options_;
     int voice_mode_selected_ = 0;
     bool voice_noise_suppression_enabled_ = true;
     std::string voice_ptt_key_;

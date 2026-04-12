@@ -111,6 +111,25 @@ bool is_shift_insert_paste(std::string_view input) {
     return input == "\x1b[2;2~" || input == "\x1b[2~";
 }
 
+bool is_escape_tail_start(std::string_view input) {
+    return input == "[" || input == "O" ||
+           input.starts_with("\x1b[") || input.starts_with("\x1bO");
+}
+
+bool is_escape_tail_fragment(std::string_view input) {
+    if (input.empty()) {
+        return false;
+    }
+    for (unsigned char c : input) {
+        if (std::isalnum(c) || c == '[' || c == 'O' || c == ';' || c == ':' ||
+            c == '<' || c == '=' || c == '>' || c == '?' || c == '~') {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
 bool is_server_channel(std::string_view channel_id) {
     return channel_id == "server";
 }
@@ -1941,6 +1960,24 @@ void UIManager::run(SubmitFn on_submit,
             // Posted by notify() — just triggers a redraw
             return true;
         }
+        if (std::chrono::steady_clock::now() <= settings_escape_guard_until_ &&
+            event != Event::Escape) {
+            const std::string_view input = event.input();
+            if (input.starts_with("\x1b")) {
+                settings_escape_tail_active_ = true;
+                return true;
+            }
+            if (is_escape_tail_start(input)) {
+                settings_escape_tail_active_ = true;
+                return true;
+            }
+            if (settings_escape_tail_active_ && is_escape_tail_fragment(input)) {
+                return true;
+            }
+            settings_escape_tail_active_ = false;
+        } else if (std::chrono::steady_clock::now() > settings_escape_guard_until_) {
+            settings_escape_tail_active_ = false;
+        }
         if (auto pasted = extract_bracketed_paste(event.input())) {
             return apply_pasted_text(*pasted);
         }
@@ -1979,7 +2016,12 @@ void UIManager::run(SubmitFn on_submit,
         }
         // F12 — Open settings
         if (event == Event::F12) {
-            if (on_open_settings) on_open_settings();
+            if (on_open_settings) {
+                on_open_settings();
+                settings_escape_guard_until_ =
+                    std::chrono::steady_clock::now() + std::chrono::milliseconds(180);
+                settings_escape_tail_active_ = false;
+            }
             return true;
         }
         // F2 — Toggle user list panel

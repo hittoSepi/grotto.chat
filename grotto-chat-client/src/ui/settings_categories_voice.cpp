@@ -176,11 +176,15 @@ Element SettingsScreen::render_voice() {
     return page(
         i18n::tr(i18n::I18nKey::CATEGORY_VOICE),
         {
-            section("Laitteet", std::move(device_rows)),
-            section("Tasot", std::move(level_rows)),
-            section("Lähetys", std::move(send_rows), i18n::tr(i18n::I18nKey::VOICE_SETTINGS_HINT)),
-            section("Käsittely", std::move(processing_rows)),
-            section("Mikrofonitesti", std::move(test_rows), i18n::tr(i18n::I18nKey::VOICE_SELF_TEST_HINT)),
+            section(i18n::tr(i18n::I18nKey::VOICE_SECTION_DEVICES), std::move(device_rows)),
+            section(i18n::tr(i18n::I18nKey::VOICE_SECTION_LEVELS), std::move(level_rows)),
+            section(i18n::tr(i18n::I18nKey::VOICE_SECTION_TRANSMIT),
+                    std::move(send_rows),
+                    i18n::tr(i18n::I18nKey::VOICE_SETTINGS_HINT)),
+            section(i18n::tr(i18n::I18nKey::VOICE_SECTION_PROCESSING), std::move(processing_rows)),
+            section(i18n::tr(i18n::I18nKey::VOICE_SECTION_MIC_TEST),
+                    std::move(test_rows),
+                    i18n::tr(i18n::I18nKey::VOICE_SELF_TEST_HINT)),
         });
 }
 

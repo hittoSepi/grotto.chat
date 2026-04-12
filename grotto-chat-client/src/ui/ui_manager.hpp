@@ -212,6 +212,8 @@ private:
     ActiveChannelChangedFn active_channel_changed_handler_;
     std::string toast_text_;
     std::chrono::steady_clock::time_point toast_until_{};
+    std::chrono::steady_clock::time_point settings_escape_guard_until_{};
+    bool settings_escape_tail_active_ = false;
     bool quit_confirm_visible_ = false;
     UIRegion quit_confirm_yes_button_{};
     UIRegion quit_confirm_no_button_{};
