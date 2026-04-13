@@ -20,6 +20,9 @@ namespace grotto::ui {
 
 namespace {
 
+constexpr int kMinLoginWidth = 95;
+constexpr int kMinLoginHeight = 40;
+
 #ifndef _WIN32
 void swallow_interrupt_signal(int) {
 }
@@ -191,37 +194,92 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
     });
 
     // Build the UI with event handling
-    auto base_renderer = Renderer(container_, [this] {
-        constexpr int kInputWidth = 42;
-        constexpr int kFormWidth = 66;
+    auto base_renderer = Renderer(container_, [this, &screen] {
+        const int term_width = screen.dimx() > 0 ? screen.dimx() : 80;
+        const int term_height = screen.dimy() > 0 ? screen.dimy() : 24;
+        if (term_width < kMinLoginWidth || term_height < kMinLoginHeight) {
+            auto warning_box = vbox({
+                text(i18n::tr(i18n::I18nKey::LOGIN_MIN_SIZE_TITLE)) | bold | center,
+                text(""),
+                paragraphAlignCenter(i18n::tr(
+                    i18n::I18nKey::LOGIN_MIN_SIZE_BODY,
+                    std::vector<std::string>{
+                        std::to_string(kMinLoginWidth),
+                        std::to_string(kMinLoginHeight),
+                        std::to_string(term_width),
+                        std::to_string(term_height),
+                    })) | center,
+                text(""),
+                paragraphAlignCenter(i18n::tr(i18n::I18nKey::LOGIN_MIN_SIZE_HINT)) |
+                    color(palette::comment()) | dim | center,
+            }) | size(WIDTH, LESS_THAN, 42) | border;
+
+            return vbox({
+                filler(),
+                text(std::string("Grotto v. ") + std::string(grotto::VERSION)) |
+                    bold | color(palette::blue()) | center,
+                text(""),
+                warning_box | center,
+                text(""),
+                text(i18n::tr(i18n::I18nKey::BUTTON_QUIT) + " / Esc") |
+                    color(palette::comment()) | dim | center,
+                filler(),
+            }) | bgcolor(palette::bg()) | color(palette::fg());
+        }
+        const bool narrow_layout = term_width < 90;
+        const bool compact_layout = term_height < 24;
+        const bool minimal_layout = term_height < 20;
+        const int form_width = std::clamp(term_width - (narrow_layout ? 2 : 8), 42, 66);
+        const int input_width = narrow_layout
+            ? std::clamp(form_width - 4, 18, 42)
+            : std::clamp(form_width - 16, 18, 42);
+        const auto section_title = [](const std::string& title) {
+            return hbox({
+                text(" " + title + " ") | bold | color(palette::blue()),
+                filler(),
+            });
+        };
+        const auto input_row = [&](const std::string& label, Component input) {
+            auto field = input->Render() | size(WIDTH, EQUAL, input_width) | border;
+            if (narrow_layout) {
+                return vbox({
+                    text(label) | color(palette::comment()),
+                    field,
+                });
+            }
+            return hbox({
+                text(label) | color(palette::comment()),
+                field,
+            });
+        };
 
         // Title
         auto title = text(std::string("Grotto v. ") + std::string(grotto::VERSION)) |
                      bold | color(palette::blue()) | center;
 
-        // Build the form
-        auto form = vbox({
-            hbox({
-                text(i18n::tr(i18n::I18nKey::HOST_LABEL)) | color(palette::comment()),
-                host_input_->Render() | size(WIDTH, EQUAL, kInputWidth) | border,
-            }),
-            text(""),
-            hbox({
-                text(i18n::tr(i18n::I18nKey::PORT_LABEL)) | color(palette::comment()),
-                port_input_->Render() | size(WIDTH, EQUAL, kInputWidth) | border,
-            }),
-            separator(),
-            hbox({
-                text(i18n::tr(i18n::I18nKey::USERNAME_LABEL)) | color(palette::comment()),
-                username_input_->Render() | size(WIDTH, EQUAL, kInputWidth) | border,
-            }),
-            text(""),
-            hbox({
-                text(i18n::tr(i18n::I18nKey::PASSKEY_LABEL)) | color(palette::comment()),
-                passkey_input_->Render() | size(WIDTH, EQUAL, kInputWidth) | border,
-            }),
-            text(""),
-            hbox({
+        Element buttons;
+        if (form_width < 56) {
+            buttons = vbox({
+                remember_checkbox_->Render(),
+                text(""),
+                quit_button_->Render() | hcenter,
+                clear_button_->Render() | hcenter,
+                connect_button_->Render() | (is_loading_ ? dim : nothing) | hcenter,
+            });
+        } else if (narrow_layout) {
+            buttons = vbox({
+                remember_checkbox_->Render(),
+                text(""),
+                hbox({
+                    quit_button_->Render(),
+                    text(" "),
+                    clear_button_->Render(),
+                    text(" "),
+                    connect_button_->Render() | (is_loading_ ? dim : nothing),
+                }) | hcenter,
+            });
+        } else {
+            buttons = hbox({
                 remember_checkbox_->Render(),
                 filler(),
                 quit_button_->Render(),
@@ -229,8 +287,39 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
                 clear_button_->Render(),
                 text(" "),
                 connect_button_->Render() | (is_loading_ ? dim : nothing),
-            }) | hcenter,
-        }) | size(WIDTH, EQUAL, kFormWidth) | border | center;
+            });
+        }
+
+        // Build the form
+        Elements form_rows{
+            section_title(i18n::tr(i18n::I18nKey::LOGIN_SERVER_SECTION)),
+            separator(),
+            input_row(i18n::tr(i18n::I18nKey::HOST_LABEL), host_input_),
+            text(""),
+            input_row(i18n::tr(i18n::I18nKey::PORT_LABEL), port_input_),
+            separator(),
+            section_title(i18n::tr(i18n::I18nKey::LOGIN_IDENTITY_SECTION)),
+            separator(),
+            input_row(i18n::tr(i18n::I18nKey::USERNAME_LABEL), username_input_),
+            text(""),
+            input_row(i18n::tr(i18n::I18nKey::PASSKEY_LABEL), passkey_input_),
+            text(""),
+            buttons,
+        };
+        if (!minimal_layout) {
+            form_rows.push_back(text(""));
+            form_rows.push_back(
+                paragraphAlignLeft(i18n::tr(i18n::I18nKey::LOGIN_HELP_HINT)) |
+                color(palette::comment()) | dim);
+        }
+        if (!compact_layout) {
+            form_rows.push_back(text(""));
+            form_rows.push_back(
+                paragraphAlignLeft(i18n::tr(i18n::I18nKey::LOGIN_CLEAR_CREDS_HINT)) |
+                color(palette::comment()) | dim);
+        }
+
+        auto form = vbox(std::move(form_rows)) | size(WIDTH, EQUAL, form_width) | border | center;
 
         Element status_el;
         if (!status_message_.empty()) {
@@ -250,16 +339,20 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
         }
 
         // Main layout - centered form with title and status
-        return vbox({
-            filler(),
-            title,
-            text("") | size(HEIGHT, EQUAL, 1),
-            form,
-            text("") | size(HEIGHT, EQUAL, 1),
-            status_el,
-            loading_el,
-            filler(),
-        }) | bgcolor(palette::bg()) | color(palette::fg());
+        Elements root_rows;
+        if (!compact_layout) {
+            root_rows.push_back(filler());
+        }
+        root_rows.push_back(title);
+        root_rows.push_back(text("") | size(HEIGHT, EQUAL, compact_layout ? 0 : 1));
+        root_rows.push_back(form);
+        root_rows.push_back(text("") | size(HEIGHT, EQUAL, 1));
+        root_rows.push_back(status_el);
+        root_rows.push_back(loading_el);
+        if (!compact_layout) {
+            root_rows.push_back(filler());
+        }
+        return vbox(std::move(root_rows)) | bgcolor(palette::bg()) | color(palette::fg());
     });
 
     // Event handler for Escape and Enter

@@ -30,6 +30,13 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::USERNAME_REQUIRED, "Username is required"},
     {I18nKey::PASSKEY_REQUIRED, "Passkey is required"},
     {I18nKey::CONNECTING, "Connecting..."},
+    {I18nKey::LOGIN_SERVER_SECTION, "Server"},
+    {I18nKey::LOGIN_IDENTITY_SECTION, "Identity"},
+    {I18nKey::LOGIN_HELP_HINT, "Enter connects. Esc quits. Saved credentials prefill this form when Remember is enabled."},
+    {I18nKey::LOGIN_CLEAR_CREDS_HINT, "CLEAR CREDS removes remembered login and local encrypted identity files for this client."},
+    {I18nKey::LOGIN_MIN_SIZE_TITLE, "Window Too Small"},
+    {I18nKey::LOGIN_MIN_SIZE_BODY, "Login view needs at least {0} columns and {1} rows. Current size: {2} x {3}."},
+    {I18nKey::LOGIN_MIN_SIZE_HINT, "Resize the terminal window larger to enter server and identity details."},
 
     // Settings categories
     {I18nKey::SETTINGS_TITLE, "Settings"},
@@ -277,6 +284,13 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::USERNAME_REQUIRED, "Käyttäjä vaaditaan"},
     {I18nKey::PASSKEY_REQUIRED, "Salasana vaaditaan"},
     {I18nKey::CONNECTING, "Yhdistetään..."},
+    {I18nKey::LOGIN_SERVER_SECTION, "Palvelin"},
+    {I18nKey::LOGIN_IDENTITY_SECTION, "Identiteetti"},
+    {I18nKey::LOGIN_HELP_HINT, "Enter yhdistää. Esc poistuu. Muistetut tunnukset esitäyttävät tämän lomakkeen, kun Muista tunnukset on käytössä."},
+    {I18nKey::LOGIN_CLEAR_CREDS_HINT, "TYHJENNÄ poistaa muistetun kirjautumisen ja tämän clientin paikalliset salatut identiteettitiedostot."},
+    {I18nKey::LOGIN_MIN_SIZE_TITLE, "Ikkuna Liian Pieni"},
+    {I18nKey::LOGIN_MIN_SIZE_BODY, "Kirjautumisnäkymä tarvitsee vähintään {0} saraketta ja {1} riviä. Nykyinen koko: {2} x {3}."},
+    {I18nKey::LOGIN_MIN_SIZE_HINT, "Suurenna terminaali-ikkunaa, jotta palvelin- ja identiteettikentät mahtuvat näkyviin."},
 
     // Settings categories
     {I18nKey::SETTINGS_TITLE, "Asetukset"},
