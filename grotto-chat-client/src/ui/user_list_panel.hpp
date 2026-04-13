@@ -44,6 +44,7 @@ ftxui::Element render_user_list_panel(
     const std::vector<ChannelUserInfo>& users,
     const VoiceSection& voice_section,
     const UserListConfig& config,
+    int panel_width,
     const std::string& local_user_id,
     std::vector<UserHitRegion>& out_user_positions,
     int& out_panel_divider_x,  // x position of the panel divider (for resizing)
@@ -55,10 +56,11 @@ inline ftxui::Element render_user_list_panel(
     const std::vector<ChannelUserInfo>& users,
     const VoiceSection& voice_section,
     const UserListConfig& config,
+    int panel_width,
     const std::string& local_user_id) {
     std::vector<UserHitRegion> dummy;
     int dummy_x;
-    return render_user_list_panel(users, voice_section, config, local_user_id, dummy, dummy_x);
+    return render_user_list_panel(users, voice_section, config, panel_width, local_user_id, dummy, dummy_x);
 }
 
 // Render just the toggle button (<< or >>)

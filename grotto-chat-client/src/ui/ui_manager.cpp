@@ -651,7 +651,16 @@ bool UIManager::handle_mouse_event(const Event& event) {
                 state_.scroll_up(*ch,
                                  MouseConfig::kWheelScrollLines,
                                  current_max_scroll_offset(
-                                     state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx(), side_panel_width_));
+                                     state_,
+                                     mouse_tracker_,
+                                     user_list_config_,
+                                     cfg_,
+                                     screen_.dimx(),
+                                     effective_side_panel_width(
+                                         side_panel_mode_ == SidePanelMode::Files &&
+                                             !is_server_channel(state_.active_channel().value_or("")),
+                                         side_panel_width_,
+                                         screen_.dimx())));
             } else {
                 state_.scroll_down(*ch, MouseConfig::kWheelScrollLines);
             }
@@ -1605,6 +1614,7 @@ Element UIManager::build_main_content(const std::string& active_ch, int msg_rows
 
     int rendered_user_divider_x = panel_divider_x_;
     auto user_list_el = render_user_list_panel(users, voice_sec, user_list_config_,
+                                               user_panel_width,
                                                state_.local_user_id(), user_positions_,
                                                rendered_user_divider_x, user_list_x,
                                                mouse_tracker_.message_region().y);
@@ -2318,7 +2328,16 @@ void UIManager::run(SubmitFn on_submit,
                 state_.scroll_up(*ch,
                                  10,
                                  current_max_scroll_offset(
-                                     state_, mouse_tracker_, user_list_config_, cfg_, screen_.dimx(), side_panel_width_));
+                                     state_,
+                                     mouse_tracker_,
+                                     user_list_config_,
+                                     cfg_,
+                                     screen_.dimx(),
+                                     effective_side_panel_width(
+                                         side_panel_mode_ == SidePanelMode::Files &&
+                                             !is_server_channel(state_.active_channel().value_or("")),
+                                         side_panel_width_,
+                                         screen_.dimx())));
             }
             return true;
         }

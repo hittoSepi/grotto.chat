@@ -48,8 +48,6 @@ Element SettingsScreen::render_appearance() {
         row(i18n::tr(i18n::I18nKey::MAX_MESSAGES_LABEL),
             max_messages_input_->Render() | size(WIDTH, GREATER_THAN, 10) | border),
         row(i18n::tr(i18n::I18nKey::LANGUAGE_LABEL), language_toggle_->Render() | border | flex),
-        row(i18n::tr(i18n::I18nKey::FONT_SCALE_LABEL),
-            text(std::to_string(font_scale_) + "%") | color(palette::cyan())),
     };
 
     return page(

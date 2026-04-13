@@ -16,7 +16,7 @@
 
 ## Ääni
 
-valittu puhenäppäin                    kytke puhe päälle/pois Toggle to Talk -tilassa tai pidä painettuna PTT-tilassa
+valittu puhenäppäin                    kytke puhe päälle/pois Toggle to Talk -tilassa tai pidä painettuna Push to Talk -tilassa
 
 ## Näkymät
 
@@ -25,4 +25,4 @@ valittu puhenäppäin                    kytke puhe päälle/pois Toggle to Talk
 
 ---
 
-Vihje: `Toggle to Talk` pysyy päällä kunnes painat puhenäppäintä uudestaan. `PTT` pysyy päällä vain niin kauan kuin pidät näppäintä pohjassa.
+Vihje: `Toggle to Talk` pysyy päällä kunnes painat puhenäppäintä uudestaan. `Push to Talk` pysyy päällä vain niin kauan kuin pidät näppäintä pohjassa.

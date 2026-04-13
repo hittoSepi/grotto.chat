@@ -164,6 +164,7 @@ Element render_user_list_panel(
     const std::vector<ChannelUserInfo>& users,
     const VoiceSection& voice_section,
     const UserListConfig& config,
+    int panel_width,
     const std::string& local_user_id,
     std::vector<UserHitRegion>& out_user_positions,
     int& out_panel_divider_x,
@@ -201,7 +202,7 @@ Element render_user_list_panel(
     
     // ── Online users ───────────────────────────────────────────────────────
     for (const auto& user : online_users) {
-        out_user_positions.push_back({user.user_id, base_x, current_y, config.width, 1});
+        out_user_positions.push_back({user.user_id, base_x, current_y, panel_width, 1});
         panel_content.push_back(render_user_entry(user, local_user_id));
         current_y++;
     }
@@ -216,7 +217,7 @@ Element render_user_list_panel(
         current_y += 2;
 
         for (const auto& user : offline_users) {
-            out_user_positions.push_back({user.user_id, base_x, current_y, config.width, 1});
+            out_user_positions.push_back({user.user_id, base_x, current_y, panel_width, 1});
             panel_content.push_back(render_user_entry(user, local_user_id) | color(palette::comment()));
             current_y++;
         }
@@ -236,7 +237,7 @@ Element render_user_list_panel(
         
         // Speaking users first (green)
         for (const auto& user_id : voice_section.talking_users) {
-            out_user_positions.push_back({user_id, base_x, current_y, config.width, 1});
+            out_user_positions.push_back({user_id, base_x, current_y, panel_width, 1});
             panel_content.push_back(render_voice_user(user_id, 
                 ChannelUserInfo::VoiceStatus::Talking, local_user_id));
             current_y++;
@@ -244,7 +245,7 @@ Element render_user_list_panel(
         
         // Connected but not speaking (white circle)
         for (const auto& user_id : voice_section.connected_users) {
-            out_user_positions.push_back({user_id, base_x, current_y, config.width, 1});
+            out_user_positions.push_back({user_id, base_x, current_y, panel_width, 1});
             panel_content.push_back(render_voice_user(user_id,
                 ChannelUserInfo::VoiceStatus::Off, local_user_id));
             current_y++;
@@ -252,7 +253,7 @@ Element render_user_list_panel(
         
         // Muted users (yellow)
         for (const auto& user_id : voice_section.muted_users) {
-            out_user_positions.push_back({user_id, base_x, current_y, config.width, 1});
+            out_user_positions.push_back({user_id, base_x, current_y, panel_width, 1});
             panel_content.push_back(render_voice_user(user_id,
                 ChannelUserInfo::VoiceStatus::Muted, local_user_id));
             current_y++;
@@ -261,7 +262,7 @@ Element render_user_list_panel(
     
     // Calculate panel divider position (left edge of the panel)
     // This is set by the caller based on layout
-    out_panel_divider_x = config.width;
+    out_panel_divider_x = panel_width;
     
     // Build the panel — no box border (separator() in the parent hbox already
     // draws the left edge); use a subtle background tint to distinguish the

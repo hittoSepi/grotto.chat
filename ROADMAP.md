@@ -35,6 +35,10 @@ Tarkeys: Kriittinen
 Status: 🚧 Keskenerainen  
 Tarkeys: Kriittinen
 
+- [~] Push to Talk / Toggle to Talk -verifiointi
+  - [x] Windows hold/release smoke test ajettu, vaikutti toimivalta
+  - [ ] Linux / muut terminaaliymparistot tarkistettava erikseen
+  - [ ] Tarkkaile oikeassa kaytossa mahdollisia stuck key / liian hidas release -tapauksia
 - [ ] Windows build testaus (Win 10, Win 11)
 - [ ] Linux build testaus (Ubuntu 22.04+, Arch)
 - [ ] Yhteensopivuustestit Android-clientin kanssa
