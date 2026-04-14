@@ -20,7 +20,7 @@ Tämä dokumentti sisältää ohjeet tekoälyagenteille Grotto-projektissa.
 - **Koodin tyyli**: Noudata projektin olemassa olevaa koodityyliä (4 välilyöntiä, snake_case C++:ssa, PascalCase luokat).
 
 ### 3. Dokumentoi tehtävän jälkeen
-
+- **CHANGELOG-pävitykset**: Lisää lyhyt merkintä mitä olet tehnyt tai muuttanut.
 - **README-päivitykset**: Jos lisäät uusia komentoja tai muutat käyttöliittymää, päivitä relevantit README-tiedostot.
 - **CHANGELOG-merkinnät**: Merkitse merkittävät muutokset CHANGELOG.md-tiedostoon.
 - **AGENTS.md**: Jos muutat työskentelytapoja tai lisäät uusia konventioita, päivitä tämä tiedosto.
