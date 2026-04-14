@@ -4,10 +4,12 @@
 #include "i18n/strings.hpp"
 
 #include <ftxui/component/component.hpp>
+#include <ftxui/component/component_options.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <csignal>
 #include <filesystem>
@@ -81,12 +83,14 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
                               LoginCredentials& out_creds,
                               const std::optional<LoginCredentials>& prefill,
                               const std::string& initial_status,
+                              const std::string& initial_status_hint,
                               bool initial_status_is_error) {
     submitted_ = false;
     cancelled_ = false;
     clear_local_data_ = false;
     is_loading_ = false;
     status_message_ = initial_status;
+    status_hint_ = initial_status_hint;
     status_is_error_ = initial_status_is_error;
 
     // Pre-fill with existing config values
@@ -159,10 +163,32 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
     screen.ForceHandleCtrlC(false);
     auto exit_closure = screen.ExitLoopClosure();
 
-    host_input_ = Input(&host_, "chat.rausku.com");
-    port_input_ = Input(&port_str_, "6697");
-    username_input_ = Input(&username_, "username");
-    passkey_input_ = Input(&passkey_, "passkey");
+    ftxui::InputOption host_option;
+    host_option.content = &host_;
+    host_option.placeholder = "chat.rausku.com";
+    host_option.multiline = false;
+
+    ftxui::InputOption port_option;
+    port_option.content = &port_str_;
+    port_option.placeholder = "6697";
+    port_option.multiline = false;
+
+    ftxui::InputOption username_option;
+    username_option.content = &username_;
+    username_option.placeholder = "username";
+    username_option.multiline = false;
+
+    bool passkey_masked = true;
+    ftxui::InputOption passkey_option;
+    passkey_option.content = &passkey_;
+    passkey_option.placeholder = "passkey";
+    passkey_option.multiline = false;
+    passkey_option.password = &passkey_masked;
+
+    host_input_ = Input(host_option);
+    port_input_ = Input(port_option);
+    username_input_ = Input(username_option);
+    passkey_input_ = Input(passkey_option);
     remember_checkbox_ = Checkbox(i18n::tr(i18n::I18nKey::REMEMBER_CREDENTIALS), &remember_);
 
     // Connect button callback - exits the loop on valid submit
@@ -323,9 +349,23 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
 
         Element status_el;
         if (!status_message_.empty()) {
-            status_el = text(status_message_) |
-                        color(status_is_error_ ? Color::Red : palette::cyan()) |
-                        center;
+            Elements status_rows{
+                text(i18n::tr(status_is_error_
+                              ? i18n::I18nKey::LOGIN_STATUS_ERROR_TITLE
+                              : i18n::I18nKey::LOGIN_STATUS_INFO_TITLE)) |
+                    bold | color(status_is_error_ ? palette::error_c() : palette::cyan()),
+                text(""),
+                paragraphAlignLeft(status_message_),
+            };
+            if (!status_hint_.empty()) {
+                status_rows.push_back(text(""));
+                status_rows.push_back(
+                    paragraphAlignLeft(status_hint_) |
+                    color(palette::comment()) | dim);
+            }
+            status_el = vbox(std::move(status_rows)) |
+                        size(WIDTH, EQUAL, form_width) |
+                        border;
         } else {
             status_el = text("") | center;
         }
@@ -431,6 +471,7 @@ LoginResult LoginScreen::show(const ClientConfig& existing_cfg,
 
 void LoginScreen::set_error(const std::string& error) {
     status_message_ = error;
+    status_hint_.clear();
     status_is_error_ = true;
 }
 
@@ -442,6 +483,7 @@ void LoginScreen::set_loading(bool loading) {
 
 bool LoginScreen::validate_inputs() {
     status_message_.clear();
+    status_hint_.clear();
     status_is_error_ = true;
 
     if (host_.empty()) {

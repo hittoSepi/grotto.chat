@@ -39,6 +39,7 @@ public:
                      LoginCredentials& out_creds,
                      const std::optional<LoginCredentials>& prefill = std::nullopt,
                      const std::string& initial_status = {},
+                     const std::string& initial_status_hint = {},
                      bool initial_status_is_error = true);
 
     // Set an error message to display (call from connection callback)
@@ -59,6 +60,7 @@ private:
 
     // UI state
     std::string status_message_;
+    std::string status_hint_;
     bool        status_is_error_ = true;
     bool        is_loading_ = false;
     bool        submitted_ = false;

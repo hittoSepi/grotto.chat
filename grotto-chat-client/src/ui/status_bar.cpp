@@ -26,6 +26,9 @@ std::string voice_mode_badge(const StatusInfo& info) {
 Element render_status_bar(const StatusInfo& info) {
     // Left side
     Elements left;
+    const bool show_generic_connecting =
+        !info.connected && info.connecting && info.connection_summary.empty();
+
     if (info.connected) {
         auto status_color = palette::online();
         if (info.local_presence == PresenceStatus::Away) {
@@ -43,7 +46,7 @@ Element render_status_bar(const StatusInfo& info) {
     if (!info.local_user_id.empty()) {
         left.push_back(text(info.local_user_id) | color(palette::fg_dark()));
     }
-    if (!info.connected && info.connecting) {
+    if (show_generic_connecting) {
         left.push_back(text(" | " + i18n::tr(i18n::I18nKey::CONNECTING)) | color(palette::yellow()));
     }
     if (!info.active_channel.empty()) {

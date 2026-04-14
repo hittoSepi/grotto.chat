@@ -37,6 +37,10 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     {I18nKey::LOGIN_MIN_SIZE_TITLE, "Window Too Small"},
     {I18nKey::LOGIN_MIN_SIZE_BODY, "Login view needs at least {0} columns and {1} rows. Current size: {2} x {3}."},
     {I18nKey::LOGIN_MIN_SIZE_HINT, "Resize the terminal window larger to enter server and identity details."},
+    {I18nKey::LOGIN_STATUS_ERROR_TITLE, "Login Error"},
+    {I18nKey::LOGIN_STATUS_INFO_TITLE, "Login Status"},
+    {I18nKey::LOGIN_DATA_STORE_HINT, "Check that the config folder is writable and not locked by another running client."},
+    {I18nKey::LOGIN_UNLOCK_HINT, "Use the original passkey for this identity, or choose CLEAR CREDS to reset local encrypted identity data."},
 
     // Settings categories
     {I18nKey::SETTINGS_TITLE, "Settings"},
@@ -250,6 +254,11 @@ const std::unordered_map<I18nKey, std::string> kEnglish = {
     // Voice engine
     {I18nKey::FAILED_OPEN_AUDIO_DEVICE, "Failed to open audio device. Check your audio settings."},
     {I18nKey::VOICE_CONNECTION_FAILED, "Voice connection to {0} failed. Check your network/firewall."},
+    {I18nKey::CONNECTION_SUMMARY_RESOLVING, "resolving"},
+    {I18nKey::CONNECTION_SUMMARY_TLS, "tls handshake"},
+    {I18nKey::CONNECTION_SUMMARY_VERIFYING_CERT, "verifying cert"},
+    {I18nKey::CONNECTION_SUMMARY_AUTHENTICATING, "authenticating"},
+    {I18nKey::CONNECTION_SUMMARY_RETRY_IN, "retry in {0}s"},
 
     // Status values
     {I18nKey::CONNECTED, "connected"},
@@ -291,6 +300,10 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     {I18nKey::LOGIN_MIN_SIZE_TITLE, "Ikkuna Liian Pieni"},
     {I18nKey::LOGIN_MIN_SIZE_BODY, "Kirjautumisnäkymä tarvitsee vähintään {0} saraketta ja {1} riviä. Nykyinen koko: {2} x {3}."},
     {I18nKey::LOGIN_MIN_SIZE_HINT, "Suurenna terminaali-ikkunaa, jotta palvelin- ja identiteettikentät mahtuvat näkyviin."},
+    {I18nKey::LOGIN_STATUS_ERROR_TITLE, "Kirjautumisvirhe"},
+    {I18nKey::LOGIN_STATUS_INFO_TITLE, "Kirjautumistila"},
+    {I18nKey::LOGIN_DATA_STORE_HINT, "Tarkista, että config-kansioon voi kirjoittaa eikä toinen client pidä tiedostoja lukittuna."},
+    {I18nKey::LOGIN_UNLOCK_HINT, "Käytä tämän identiteetin alkuperäistä salasanaa tai valitse TYHJENNÄ nollataksesi paikallisen salatun identiteettidatan."},
 
     // Settings categories
     {I18nKey::SETTINGS_TITLE, "Asetukset"},
@@ -504,6 +517,11 @@ const std::unordered_map<I18nKey, std::string> kFinnish = {
     // Voice engine
     {I18nKey::FAILED_OPEN_AUDIO_DEVICE, "Äänilaitteen avaaminen epäonnistui. Tarkista ääniasetukset."},
     {I18nKey::VOICE_CONNECTION_FAILED, "Ääniyhteys käyttäjään {0} epäonnistui. Tarkista verkko/palomuuri."},
+    {I18nKey::CONNECTION_SUMMARY_RESOLVING, "selvitetään osoitetta"},
+    {I18nKey::CONNECTION_SUMMARY_TLS, "tls-kättely"},
+    {I18nKey::CONNECTION_SUMMARY_VERIFYING_CERT, "tarkistetaan varmennetta"},
+    {I18nKey::CONNECTION_SUMMARY_AUTHENTICATING, "todennetaan"},
+    {I18nKey::CONNECTION_SUMMARY_RETRY_IN, "uusi yritys {0}s"},
 
     // Status values
     {I18nKey::CONNECTED, "yhdistetty"},

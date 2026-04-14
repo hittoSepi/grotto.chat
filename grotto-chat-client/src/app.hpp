@@ -25,6 +25,7 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -150,6 +151,8 @@ private:
     mutable std::mutex connection_trace_mu_;
     std::chrono::steady_clock::time_point connection_attempt_started_{};
     bool has_connection_attempt_ = false;
+    std::string connection_status_summary_;
+    std::string last_disconnect_reason_;
     FileTransferPolicyState file_transfer_policy_;
     mutable std::mutex remote_file_mu_;
     std::unordered_set<std::string> pending_file_list_echo_targets_;

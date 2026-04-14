@@ -7,6 +7,7 @@ All notable changes and achievements for the Grotto project.
 ### Improved
 - **Desktop client**: Polished the login/connect screen with clearer `Server` and `Identity` sections plus inline keyboard and `CLEAR CREDS` guidance
 - **Onboarding UX**: Kept the existing flow intact while making the first screen easier to understand without opening separate help
+- **Desktop client**: Login errors now render in a wrapped status panel with contextual hints, and the status bar surfaces reconnect/auth phases plus clearer disconnect reasons
 
 ## 2026-04-13 - Desktop Client Voice Gate Smoothing
 

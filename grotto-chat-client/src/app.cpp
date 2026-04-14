@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "connection_status.hpp"
 #include "input/command_parser.hpp"
 #include "ui/login_screen.hpp"
 #include "ui/settings_screen.hpp"
@@ -154,40 +155,6 @@ std::string ascii_lower_copy(std::string text) {
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
     return text;
-}
-
-std::string sanitize_disconnect_reason(std::string reason) {
-    reason = trim_ascii_whitespace(reason);
-    if (reason.empty()) {
-        return "connection closed";
-    }
-
-    const std::string lowered = ascii_lower_copy(reason);
-    if (lowered.find("multiple exceptions") != std::string::npos) {
-        return "connection lost";
-    }
-    if (lowered.find("actively refused") != std::string::npos ||
-        lowered.find("system:10061") != std::string::npos) {
-        return "connection refused";
-    }
-    if (lowered.find("end of file") != std::string::npos) {
-        return "connection closed by server";
-    }
-    if (lowered.find("connection reset by peer") != std::string::npos) {
-        return "connection reset by peer";
-    }
-
-    const auto bracket = reason.find(" [");
-    if (bracket != std::string::npos) {
-        reason.erase(bracket);
-    }
-
-    constexpr size_t kMaxReasonLength = 120;
-    if (reason.size() > kMaxReasonLength) {
-        reason.resize(kMaxReasonLength);
-        reason += "...";
-    }
-    return reason;
 }
 
 bool should_log_connection_phase(std::string_view phase) {
@@ -474,6 +441,7 @@ bool App::init(const std::filesystem::path& config_path,
     }
 
     std::string login_status;
+    std::string login_status_hint;
     bool login_status_is_error = true;
 
     while (true) {
@@ -481,7 +449,7 @@ bool App::init(const std::filesystem::path& config_path,
         ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
 
         auto result = login_screen.show(
-            cfg_, screen, login_creds, login_prefill, login_status, login_status_is_error);
+            cfg_, screen, login_creds, login_prefill, login_status, login_status_hint, login_status_is_error);
         
         if (result == ui::LoginResult::Cancelled) {
             spdlog::info("Login cancelled by user");
@@ -492,6 +460,7 @@ bool App::init(const std::filesystem::path& config_path,
             std::string clear_status;
             bool clear_ok = clear_local_client_state(cfg_, config_path, &clear_status);
             login_status = clear_status;
+            login_status_hint.clear();
             login_status_is_error = !clear_ok;
             login_prefill.reset();
             continue;
@@ -509,6 +478,7 @@ bool App::init(const std::filesystem::path& config_path,
             store_ = std::make_unique<db::LocalStore>(cfg_.db_path);
         } catch (const std::exception& e) {
             login_status = i18n::tr(i18n::I18nKey::FAILED_OPEN_DATA_STORE, std::string(e.what()));
+            login_status_hint = i18n::tr(i18n::I18nKey::LOGIN_DATA_STORE_HINT);
             login_status_is_error = true;
             store_.reset();
             continue;
@@ -521,6 +491,7 @@ bool App::init(const std::filesystem::path& config_path,
             crypto_.reset();
             store_.reset();
             login_status = i18n::tr(i18n::I18nKey::FAILED_UNLOCK_IDENTITY);
+            login_status_hint = i18n::tr(i18n::I18nKey::LOGIN_UNLOCK_HINT);
             login_status_is_error = true;
             continue;
         }
@@ -608,6 +579,11 @@ bool App::init(const std::filesystem::path& config_path,
         if (shutdown_started_.load()) {
             return;
         }
+        {
+            std::lock_guard lk(connection_trace_mu_);
+            connection_status_summary_.clear();
+            last_disconnect_reason_.clear();
+        }
         // Send HELLO
         Hello hello;
         hello.set_protocol_version(1);
@@ -623,6 +599,7 @@ bool App::init(const std::filesystem::path& config_path,
         if (shutdown_started_.load()) {
             return;
         }
+        const std::string sanitized_reason = sanitize_disconnect_reason(reason);
         state_.set_connected(false);
         state_.set_connecting(cfg_.connection.auto_reconnect);
         msg_handler_->on_transport_disconnected();
@@ -637,7 +614,12 @@ bool App::init(const std::filesystem::path& config_path,
             std::lock_guard lk(pending_read_receipts_mu_);
             pending_read_receipts_.clear();
         }
-        log_server_event("Disconnected: " + sanitize_disconnect_reason(reason), true);
+        {
+            std::lock_guard lk(connection_trace_mu_);
+            connection_status_summary_.clear();
+            last_disconnect_reason_ = sanitized_reason;
+        }
+        log_server_event("Disconnected: " + sanitized_reason, true);
     };
 
     net_client_ = std::make_shared<net::NetClient>(ioc_, cfg_, std::move(cb));
@@ -1548,10 +1530,6 @@ void App::log_server_event(const std::string& text, bool activate_server) {
 void App::trace_connection_phase(const std::string& phase,
                                  bool reset_attempt_timer,
                                  bool activate_server) {
-    if (!should_log_connection_phase(phase)) {
-        return;
-    }
-
     state_.set_connecting(true);
 
     auto now = std::chrono::steady_clock::now();
@@ -1562,8 +1540,16 @@ void App::trace_connection_phase(const std::string& phase,
             connection_attempt_started_ = now;
             has_connection_attempt_ = true;
         }
+        connection_status_summary_ = connection_summary_for_phase(phase);
+        if (reset_attempt_timer) {
+            last_disconnect_reason_.clear();
+        }
         elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             now - connection_attempt_started_).count();
+    }
+
+    if (!should_log_connection_phase(phase)) {
+        return;
     }
 
     std::ostringstream oss;
@@ -1976,16 +1962,37 @@ std::string App::build_transfer_summary() const {
 }
 
 std::string App::build_connection_summary() const {
-    if (!msg_handler_) {
+    std::vector<std::string> parts;
+    {
+        std::lock_guard lk(connection_trace_mu_);
+        if (state_.connecting()) {
+            if (!connection_status_summary_.empty()) {
+                parts.push_back(connection_status_summary_);
+            }
+        } else if (!state_.connected() && !last_disconnect_reason_.empty()) {
+            parts.push_back(last_disconnect_reason_);
+        }
+    }
+
+    if (msg_handler_) {
+        const auto queued = msg_handler_->pending_delivery_count();
+        if (queued > 0) {
+            parts.push_back("queued " + std::to_string(queued));
+        }
+    }
+
+    if (parts.empty()) {
         return {};
     }
 
-    const auto queued = msg_handler_->pending_delivery_count();
-    if (queued == 0) {
-        return {};
+    std::string summary;
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        if (i > 0) {
+            summary += " | ";
+        }
+        summary += parts[i];
     }
-
-    return "queued " + std::to_string(queued);
+    return summary;
 }
 
 std::vector<std::string> App::format_transfer_lines(std::size_t limit) const {

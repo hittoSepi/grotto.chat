@@ -263,6 +263,7 @@ protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILE})
 set(CLIENT_SOURCES
     src/main.cpp
     src/app.cpp
+    src/connection_status.cpp
     src/config.cpp
     src/runtime/runtime_capabilities.cpp
     src/state/app_state.cpp
@@ -492,6 +493,19 @@ target_link_libraries(test-command-parser PRIVATE
 )
 add_test(NAME command-parser-tests COMMAND test-command-parser)
 
+add_executable(test-connection-status
+    tests/test_connection_status.cpp
+    src/connection_status.cpp
+    src/i18n/strings.cpp
+)
+target_include_directories(test-connection-status PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(test-connection-status PRIVATE
+    Catch2::Catch2WithMain
+)
+add_test(NAME connection-status-tests COMMAND test-connection-status)
+
 set(GROTTO_CLIENT_TEST_TARGETS
     test-input-line
     test-config
@@ -500,6 +514,7 @@ set(GROTTO_CLIENT_TEST_TARGETS
     test-signal-prekey-roundtrip
     test-file-transfer
     test-command-parser
+    test-connection-status
 )
 
 if(CMAKE_CONFIGURATION_TYPES)
