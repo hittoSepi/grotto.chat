@@ -110,4 +110,23 @@ std::string connection_summary_for_phase(std::string_view phase) {
     return {};
 }
 
+std::string normalize_auth_failure_detail(std::string_view detail) {
+    const std::string trimmed = trim_ascii_whitespace(detail);
+    if (trimmed.empty()) {
+        return {};
+    }
+
+    const std::string lowered = ascii_lower_copy(trimmed);
+    if (lowered == "identity key mismatch and password incorrect") {
+        return i18n::tr(i18n::I18nKey::AUTH_FAILED_IDENTITY_PASSWORD_MISMATCH);
+    }
+
+    if (lowered ==
+        "identity key mismatch. set a password with /password to enable key recovery.") {
+        return i18n::tr(i18n::I18nKey::AUTH_FAILED_IDENTITY_RECOVERY_REQUIRED);
+    }
+
+    return trimmed;
+}
+
 } // namespace grotto

@@ -1,4 +1,5 @@
 #include "net/message_handler.hpp"
+#include "connection_status.hpp"
 #include "file/file_transfer.hpp"
 #include "net/net_client.hpp"
 #include "crypto/crypto_engine.hpp"
@@ -157,7 +158,9 @@ void MessageHandler::handle_auth_fail(const Envelope& env) {
     }
 
     if (!detail.empty()) {
-        push_system(i18n::tr(i18n::I18nKey::AUTH_FAILED, detail));
+        push_system(i18n::tr(
+            i18n::I18nKey::AUTH_FAILED,
+            normalize_auth_failure_detail(detail)));
     } else {
         push_system(i18n::tr(i18n::I18nKey::AUTH_FAILED_CHECK_KEY));
     }

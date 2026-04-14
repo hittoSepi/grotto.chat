@@ -33,3 +33,17 @@ TEST_CASE("connection summaries expose user-facing phases", "[connection]") {
                 "reconnect in 8s (attempt 2, total wait so far ~9s)") == "retry in 8s");
     REQUIRE(grotto::connection_summary_for_phase("Server address resolved").empty());
 }
+
+TEST_CASE("auth failure details are normalized for identity recovery cases", "[connection]") {
+    grotto::i18n::set_language("en");
+
+    REQUIRE(
+        grotto::normalize_auth_failure_detail("Identity key mismatch and password incorrect") ==
+        "Local identity does not match the server record, and the recovery passkey was incorrect. Use the original passkey or press CLEAR CREDS.");
+    REQUIRE(
+        grotto::normalize_auth_failure_detail(
+            "Identity key mismatch. Set a password with /password to enable key recovery.") ==
+        "Local identity does not match the server record. Set a recovery password with /password on a successful login before using key recovery.");
+    REQUIRE(grotto::normalize_auth_failure_detail("Nickname 'hitto' is already in use.") ==
+            "Nickname 'hitto' is already in use.");
+}
