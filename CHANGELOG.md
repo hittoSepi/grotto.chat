@@ -2,6 +2,14 @@
 
 All notable changes and achievements for the Grotto project.
 
+## 2026-04-14 - Documentation Path Fixes and Admin Config Validation
+
+### Fixed
+- **Documentation**: Updated root `README.md` component links and quick-start `cd` paths to use the current `grotto-chat-*` repository layout
+- **CLI docs**: Corrected `grotto-chat-cli/README.md` build commands to use `grotto-chat-cli` as source directory
+- **Server admin API**: Hardened `set_config` numeric parsing for `max_connections` and `msg_rate_per_sec` to return validation errors instead of throwing on invalid values
+- **Plugin docs**: Clarified that timer APIs (`setTimeout`/`setInterval`) are currently planned/experimental until runtime support is implemented
+
 ## 2026-04-13 - Desktop Client Login Screen Polish
 
 ### Improved

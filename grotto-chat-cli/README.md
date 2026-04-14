@@ -48,18 +48,20 @@ grotto --socket /path/to/socket status
 ### Windows
 
 ```powershell
-cmake -S grotto -B build/grotto `
+cd grotto-chat-cli
+cmake -S . -B build `
   -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_PREFIX_PATH="grotto-client/vcpkg_installed/x64-windows/share"
+  -DCMAKE_PREFIX_PATH="../grotto-chat-client/vcpkg_installed/x64-windows/share"
   
-cmake --build build/grotto --config Release
+cmake --build build --config Release
 ```
 
 ### Linux
 
 ```bash
-cmake -S grotto -B build/grotto -DCMAKE_BUILD_TYPE=Release
-cmake --build build/grotto
+cd grotto-chat-cli
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
 
 ## Exit Codes

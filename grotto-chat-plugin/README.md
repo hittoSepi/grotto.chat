@@ -155,6 +155,8 @@ grotto.log.error(msg)
 grotto.log.debug(msg)
 
 // Timing
+// NOTE: Timer API is documented but not implemented yet in current runtime.
+// Calls should be considered planned/experimental until js_timers.cpp is implemented.
 grotto.setTimeout(callback, delay_ms)
 grotto.setInterval(callback, interval_ms)
 grotto.clearTimeout(id)
