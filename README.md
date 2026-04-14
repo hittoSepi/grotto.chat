@@ -13,14 +13,14 @@ Minimal, fast, and terminal-first — inspired by irssi, built with modern primi
 
 | Component | Language | Description |
 |-----------|----------|-------------|
-| [grotto-server](./grotto-server) | C++20 | TLS/TCP relay server with Signal Protocol key distribution |
-| [grotto-installer](./grotto-installer) | C++20 | Linux server installer wizard (FTXUI) for prebuilt releases |
-| [grotto-server-tui](./grotto-server-tui) | C++20 | Admin TUI for server management (FTXUI) |
-| [grotto-server-api](./grotto-server-api) | C++20 | HTTP API library (Boost.Beast) |
-| [grotto-client](./grotto-client) | C++20 | Desktop terminal client (FTXUI) with mouse support |
-| [grotto-android](./grotto-android) | Kotlin/C++ | Android mobile client with Jetpack Compose |
-| [grotto-plugin](./grotto-plugin) | C++/QuickJS | Plugin system for bots and extensions |
-| [grotto-infra](./grotto-infra) | Docker/Node.js | Public directory service and landing page |
+| [grotto-chat-server](./grotto-chat-server) | C++20 | TLS/TCP relay server with Signal Protocol key distribution |
+| [grotto-chat-installer](./grotto-chat-installer) | C++20 | Linux server installer wizard (FTXUI) for prebuilt releases |
+| [grotto-chat-server-tui](./grotto-chat-server-tui) | C++20 | Admin TUI for server management (FTXUI) |
+| [grotto-chat-server-api](./grotto-chat-server-api) | C++20 | HTTP API library (Boost.Beast) |
+| [grotto-chat-client](./grotto-chat-client) | C++20 | Desktop terminal client (FTXUI) with mouse support |
+| [grotto-chat-android](./grotto-chat-android) | Kotlin/C++ | Android mobile client with Jetpack Compose |
+| [grotto-chat-plugin](./grotto-chat-plugin) | C++/QuickJS | Plugin system for bots and extensions |
+| [grotto-chat-infra](./grotto-chat-infra) | Docker/Node.js | Public directory service and landing page |
 
 ## Features
 
@@ -44,7 +44,7 @@ Minimal, fast, and terminal-first — inspired by irssi, built with modern primi
 ### Server
 
 ```bash
-cd grotto-server
+cd grotto-chat-server
 mkdir build && cd build
 cmake ..
 cmake --build . --config Release
@@ -61,7 +61,7 @@ Check version:
 ./grotto-server --version
 ```
 
-See [grotto-server/README.md](./grotto-server/README.md) for detailed build instructions.
+See [grotto-chat-server/README.md](./grotto-chat-server/README.md) for detailed build instructions.
 
 Installer flow for Linux servers:
 
@@ -72,7 +72,7 @@ curl -fsSL https://chat.rausku.com/downloads/install.sh | sudo bash
 ### Server Admin TUI
 
 ```bash
-cd grotto-server-tui
+cd grotto-chat-server-tui
 mkdir build && cd build
 cmake ..
 cmake --build . --config Release
@@ -87,7 +87,7 @@ Features: Log viewer (F1), Settings (F2), Bug Reports (F3), User sidebar with ki
 ### Desktop Client
 
 ```bash
-cd grotto-client
+cd grotto-chat-client
 mkdir build && cd build
 cmake ..
 cmake --build . --config Release
@@ -102,7 +102,7 @@ Quick connect via URL:
 ### Android Client
 
 ```bash
-cd grotto-android
+cd grotto-chat-android
 ./gradlew assembleDebug
 ./gradlew installDebug
 ```
@@ -110,7 +110,7 @@ cd grotto-android
 ### Public Infrastructure
 
 ```bash
-cd grotto-infra
+cd grotto-chat-infra
 ./deploy.sh
 ```
 

@@ -10,6 +10,7 @@
 #include <iostream>
 #include <csignal>
 #include <chrono>
+#include <optional>
 
 #ifdef GROTTO_CHAT_HAS_TUI
 #include "version.hpp"
@@ -529,14 +530,34 @@ void Server::handle_admin_command(const nlohmann::json& cmd) {
         std::string key = params.value("key", "");
         std::string value = params.value("value", "");
         if (listener_) {
+            auto parse_positive_int = [&](const std::string& raw, const std::string& label) -> std::optional<int> {
+                try {
+                    int parsed = std::stoi(raw);
+                    if (parsed <= 0) {
+                        send_admin_response("set_config", false, {}, label + " must be > 0");
+                        return std::nullopt;
+                    }
+                    return parsed;
+                } catch (const std::exception&) {
+                    send_admin_response("set_config", false, {}, "Invalid numeric value for " + label);
+                    return std::nullopt;
+                }
+            };
+
             if (key == "max_connections") {
-                int val = std::stoi(value);
-                listener_->set_max_connections(val);
-                spdlog::info("Admin set max_connections = {}", val);
+                auto val = parse_positive_int(value, key);
+                if (!val) {
+                    return;
+                }
+                listener_->set_max_connections(*val);
+                spdlog::info("Admin set max_connections = {}", *val);
             } else if (key == "msg_rate_per_sec") {
-                int val = std::stoi(value);
-                listener_->set_rate_limits(val, -1);
-                spdlog::info("Admin set msg_rate_per_sec = {}", val);
+                auto val = parse_positive_int(value, key);
+                if (!val) {
+                    return;
+                }
+                listener_->set_rate_limits(*val, -1);
+                spdlog::info("Admin set msg_rate_per_sec = {}", *val);
             } else if (key == "motd") {
                 listener_->set_motd(value);
                 spdlog::info("Admin set MOTD = {}", value);
